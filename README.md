@@ -7,7 +7,7 @@ Currently, the only dependency is the python version of
 CTF.
 
 ## To Do List
-* Everything
+* Function to increase bond dimension of PEPS
 
 ## Known Bugs
 * Nothing

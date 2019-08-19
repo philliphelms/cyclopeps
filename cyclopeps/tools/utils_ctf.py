@@ -12,6 +12,7 @@ from numpy import expand_dims as npexpand_dims
 from numpy import prod as npprod
 from numpy import sqrt as npsqrt
 from numpy import log2 as nplog2
+from numpy.linalg import inv as npinv
 from numpy import complex128
 from numpy import complex64
 from numpy import complex_
@@ -68,6 +69,10 @@ def sqrt(a):
             return ctf.from_nparray(npsqrt(ctf.to_nparray(a)))
     else:
         return npsqrt(a)
+def inv(ten):
+    ten = to_nparray(ten)
+    ten = npinv(ten)
+    return from_nparray(ten)
 
 # Tensor Manipulation
 conj       = ctf.conj

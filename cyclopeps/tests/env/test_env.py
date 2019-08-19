@@ -187,14 +187,14 @@ class test_env(unittest.TestCase):
         self.assertTrue(abs(summ(bmpo-_bmpo2)) < 1e-10)
         mpiprint(0,'Passed\n'+'='*50)
 
-    def test_left_right_bmpo(self):
-        mpiprint(0,'\n'+'='*50+'\nTesting left and right boundary mpo\n'+'-'*50)
+    def test_left_right_bmpo_2x2(self):
+        mpiprint(0,'\n'+'='*50+'\nTesting left and right boundary mpo (2x2)\n'+'-'*50)
         from cyclopeps.tools.peps_tools import make_rand_peps, calc_peps_norm
         from cyclopeps.tools.env_tools import calc_left_bound_mpo,calc_right_bound_mpo
         # Calculation Parameters
         Nx = 2
         Ny = 2
-        d = 1
+        d = 2
         D = 2
         # Make a random PEPS
         peps = make_rand_peps(Nx,Ny,d,D)
@@ -203,12 +203,44 @@ class test_env(unittest.TestCase):
                         peps[0][0],peps[0][1],
                         peps[1][0],peps[1][1])
         norm1 = einsum('PQRS,PQRS->',bra,conj(bra))
-        print('exact norm: {}'.format(norm1))
         # Compute the right boundary mpo exactly
         lbmpo = einsum('abPcd,efPgh,idQjk,lhQmn->cgjm',peps[0][0],peps[0][0],peps[0][1],peps[0][1])
         rbmpo = einsum('abPcd,efPgh,idQjk,lhQmn->aeil',peps[1][0],peps[1][0],peps[1][1],peps[1][1])
         norm2 = einsum('abcd,badc->',lbmpo,rbmpo)
-        print('Norm from exact boundary mpos: {}'.format(norm2))
+        # Compute the norm exactly using Boundary MPO
+        norm3 = calc_peps_norm(peps,chi=100)
+        # Check that these are equal
+        self.assertTrue(abs(norm3-norm1)/abs(norm1) < 1e-10)
+        self.assertTrue(abs(norm2-norm1)/abs(norm1) < 1e-10)
+        mpiprint(0,'Passed\n'+'='*50)
+
+    def test_left_right_bmpo_3x3(self):
+        mpiprint(0,'\n'+'='*50+'\nTesting left and right boundary mpo (3x3)\n'+'-'*50)
+        from cyclopeps.tools.peps_tools import make_rand_peps, calc_peps_norm
+        from cyclopeps.tools.env_tools import calc_left_bound_mpo,calc_right_bound_mpo
+        # Calculation Parameters
+        Nx = 3
+        Ny = 3
+        d = 1
+        D = 2
+        # Make a random PEPS
+        print('making peps')
+        peps = make_rand_peps(Nx,Ny,d,D)
+        # Compute the norm exactly
+        print('Trying to contract a monster')
+        row1 = einsum('abAcd,kdDlm,rmGst->AcDlGs',peps[0][0],peps[0][1],peps[0][2])
+        row2 = einsum('ceBfg,lgEno,soHuv->cBflEnsHu',peps[1][0],peps[1][1],peps[1][2])
+        row3 = einsum('fhCij,njFpq,uqIwx->fCnFuI',peps[2][0],peps[2][1],peps[2][2])
+        bra = einsum('AcDlGs,cBflEnsHu,fCnFuI->ABCDEFGHI',row1,row2,row3)
+        print('Trying to contract a 2nd monster')
+        norm1 = einsum('ABCDEFGHI,ABCDEFGHI->',bra,conj(bra))
+        print('Full norm = {}'.format(norm1))
+        # Compute the norm exactly using Boundary MPO
+        print('Calculating peps norm')
+        norm2 = calc_peps_norm(peps,chi=10)
+        print('Norm from routine = {}'.format(norm2))
+        # Check that these are equal
+        self.assertTrue(abs(norm2-norm1)/abs(norm1) < 1e-10)
         mpiprint(0,'Passed\n'+'='*50)
 
 if __name__ == "__main__":

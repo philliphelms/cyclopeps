@@ -81,13 +81,13 @@ def init_left_bmpo_sl(peps_col,chi=4,truncate=True):
     # Top Row ----------------------------------------------------------
     # Add Correct identity first
     I = eye(D)
-    I = einsum('du,lr,DU->dDrulU',I,I,I)
+    I = einsum('du,LR,DU->dDRuLU',I,I,I)
     I = reshape(I,(D*D,D,D*D*D))
     # Append to boundary mpo
     bound_mpo.append(I)
 
     # Add bra-ket contraction
-    res = einsum('ldpru,LDpRU->lLdrDRuU',ket[-1],bra[-1])
+    res = einsum('ldpru,LDpRU->lLdRDruU',ket[Ny-1],bra[Ny-1])
     # Reshape into an MPO
     res = reshape(res,(D*D*D,D,1))
     # Append to boundary mpo
@@ -118,11 +118,11 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
     bound_mpo_new.append(copy.copy(bound_mpo[0]))
 
     # Add ket contraction
-    res = einsum('mLn,LDPRU->mDRPnU',bound_mpo[1],ket[0])
+    res = einsum('mln,ldpru->mdrpnu',bound_mpo[1],ket[0])
     # Reshape it into an MPO
-    (Dm,DL,Dn) = bound_mpo[1].shape
-    (DL,DD,DP,DR,DU) = ket[0].shape
-    res = reshape(res,(Dm*DD,DR*DP,Dn*DU))
+    (Dm,Dl,Dn) = bound_mpo[1].shape
+    (Dl,Dd,Dp,Dr,Du) = ket[0].shape
+    res = reshape(res,(Dm*Dd,Dr*Dp,Dn*Du))
     # Append to new boundary mpo
     bound_mpo_new.append(res)
 
@@ -138,11 +138,11 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
     # Center Rows ----------------------------------
     for row in range(1,Ny-2):
         # Add ket
-        res = einsum('mLn,LDPRU->mDRPnU',bound_mpo[2*row+1],ket[row])
+        res = einsum('mln,ldpru->mdrpnu',bound_mpo[2*row+1],ket[row])
         # Reshape it into an MPO
-        (Dm,DL,Dn) = bound_mpo[2*row+1].shape
-        (DL,DD,DP,DR,DU) = ket[row].shape
-        res = reshape(res,(Dm*DD,DR*DP,Dn*DU))
+        (Dm,Dl,Dn) = bound_mpo[2*row+1].shape
+        (Dl,Dd,Dp,Dr,Du) = ket[row].shape
+        res = reshape(res,(Dm*Dd,Dr*Dp,Dn*Du))
         # Append to new boundary mpo
         bound_mpo_new.append(res)
 
@@ -157,20 +157,20 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
 
     # Top Row -------------------------------------
     # Add ket
-    res = einsum('mLn,LDPRU->mDRPnU',bound_mpo[-3],ket[-2])
+    res = einsum('mln,ldpru->mdrpnu',bound_mpo[-3],ket[-2])
     # Reshape it into an MPO
-    (Dm,DL,Dn) = bound_mpo[-3].shape
-    (DL,DD,DP,DR,DU) = ket[-2].shape
-    res = reshape(res,(Dm*DD,DR*DP,Dn*DU))
+    (Dm,Dl,Dn) = bound_mpo[-3].shape
+    (Dl,Dd,Dp,Dr,Du) = ket[-2].shape
+    res = reshape(res,(Dm*Dd,Dr*Dp,Dn*Du))
     # Append to new boundary mpo
     bound_mpo_new.append(res)
 
     # Add ket again
-    res = einsum('mLn,LDPRU->mDRPnU',bound_mpo[-2],ket[-1])
+    res = einsum('mln,ldpru->mdrpnu',bound_mpo[-2],ket[-1])
     # Reshape it into an MPO
-    (Dm,DL,Dn) = bound_mpo[-2].shape
-    (DL,DD,DP,DR,DU) = ket[-1].shape
-    res = reshape(res,(Dm*DD,DR*DP,Dn*DU))
+    (Dm,Dl,Dn) = bound_mpo[-2].shape
+    (Dl,Dd,Dp,Dr,Du) = ket[-1].shape
+    res = reshape(res,(Dm*Dd,Dr*Dp,Dn*Du))
     # Append to new boundary mpo
     bound_mpo_new.append(res)
 
@@ -379,7 +379,7 @@ def update_left_bound_mpo(peps_col, bound_mpo, chi=4, singleLayer=True,truncate=
     else:
         return left_update(peps_col,bound_mpo,chi=chi,truncate=truncate)
 
-def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True):
+def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all=False):
     """
     Calculate the left boundary MPO
 
@@ -387,7 +387,7 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True):
         peps : List
             A list of lists containing the peps tensors
         col : int
-            The column for which you need the environment
+            The last column for which you need the environment
 
     Kwargs:
         chi : int
@@ -398,6 +398,9 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True):
         truncate : bool
             Whether or not to do an svd and truncate the resulting
             boundary mpo
+        return_all : bool
+            Whether to return a list of boundary mpos upto col or just
+            return the boundary mpo for col.
 
     returns:
         bound_mpo : list
@@ -411,23 +414,29 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True):
     Ny = len(peps[0])
 
     # Loop through the columns, creating a boundary mpo for each
-    bound_mpo = None
+    bound_mpo = [None]*(col-1)
     for colind in range(col-1):
         mpiprint(4,'Updating left boundary mpo')
-        bound_mpo = update_left_bound_mpo(peps[colind][:], bound_mpo, chi=chi, singleLayer=singleLayer,truncate=truncate)
+        if colind == 0:
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], None, chi=chi, singleLayer=singleLayer,truncate=truncate)
+        else:
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], bound_mpo[colind-1], chi=chi, singleLayer=singleLayer,truncate=truncate)
 
     # Return result
-    return bound_mpo
+    if return_all:
+        return bound_mpo
+    else:
+        return bound_mpo[-1]
 
-def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True):
+def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all=False):
     """
     Calculate the right boundary MPO
 
     Args:
         peps : List
             A list of lists containing the peps tensors
-        col : int
-            The column for which you need the environment
+        col : int or list of ints
+            The column(s) for which you need the environment
 
     Kwargs:
         chi : int
@@ -438,6 +447,9 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True):
         truncate : bool
             Whether or not to do an svd and truncate the resulting
             boundary mpo
+        return_all : bool
+            Whether to return a list of boundary mpos upto col or just
+            return the boundary mpo for col.
 
     returns:
         bound_mpo : list
@@ -456,11 +468,16 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True):
     col = Nx-col
 
     # Loop through the columns, creating a boundary mpo for each
-    bound_mpo = None
+    bound_mpo = [None]*(col-1)
     for colind in range(col-1):
         mpiprint(4,'Updating Right boundary mpo')
-        bound_mpo = update_left_bound_mpo(peps[colind][:], bound_mpo, chi=chi, singleLayer=singleLayer, truncate=truncate)
+        if colind == 0:
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], None, chi=chi, singleLayer=singleLayer, truncate=truncate)
+        else:
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], bound_mpo[colind-1], chi=chi, singleLayer=singleLayer, truncate=truncate)
 
-    # Return result
-    return bound_mpo
-
+    # Return results
+    if return_all:
+        return bound_mpo[::-1]
+    else:
+        return bound_mpo[-1]

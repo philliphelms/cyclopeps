@@ -807,6 +807,17 @@ def contract_mps(mps1,mps2=None,mpo=None):
     for opind in range(nOps):
         res += env[opind][0][0,0,0]
     return res
+
+def identity_mps(N,dtype=float_):
+    """
+    Create an identity mps (currently limited to physical and 
+    auxilliary bond dimension = 1).
+    """
+    mps = MPS(d=1,D=1,N=N,dtype=dtype)
+    for site in range(N):
+        mps[site][:,:,:] = 1.
+    return mps
+
 # -----------------------------------------------------------------
 # MPS Class
 class MPS:
@@ -905,7 +916,13 @@ class MPS:
         """
         Returns the MPS tensor at site i
         """
-        return self.tensors[i]
+        if not hasattr(i,'__len__'):
+            return self.tensors[i]
+        else:
+            res = []
+            for ind in range(len(i)):
+                res.append(self.tensors[i[ind]])
+            return res
 
     def __setitem__(self, site, ten):
         # Update tensor
