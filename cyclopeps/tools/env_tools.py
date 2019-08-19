@@ -47,51 +47,23 @@ def init_left_bmpo_sl(peps_col,chi=4,truncate=True):
     # Make list to hold resulting mpo
     bound_mpo = []
 
-    # Bottom row ---------------------------------------------------------
-    # Add bra-ket contraction
-    res = einsum('ldpru,LDpRU->lLdDRurU',ket[0],bra[0])
-    # Reshape so it is an MPO
-    res = reshape(res,(1,D,D*D*D))
-    # Append to boundary_mpo
-    bound_mpo.append(res)
-
-    # Add correct identity
-    I = eye(D)
-    I = einsum('du,DU,lr->dlDruU',I,I,I)
-    I = reshape(I,(D*D*D,D,D*D))
-    # Append to boundary mpo
-    bound_mpo.append(I)
-
-    # Central Rows ------------------------------------------------------
-    for row in range(1,Ny-1):
-        # Add bra-ket contraction
+    for row in range(Ny):
+        # Add Bra-ket contraction
         res = einsum('ldpru,LDpRU->lLdDRurU',ket[row],bra[row])
-        # Reshape it into an MPO
-        res = reshape(res,(D*D,D,D*D*D))
-        # Append to boundary mpo
+        # Reshape so it is an MPO
+        (Dl,Dd,Dp,Dr,Du) = ket[row].shape
+        res = reshape(res,(Dl*Dl*Dd*Dd,Dr,Dr*Du*Du))
+        # Append to boundary_mpo
         bound_mpo.append(res)
 
         # Add correct identity
-        I = eye(D)
-        I = einsum('du,lr,DU->dlDruU',I,I,I)
-        I = reshape(I,(D*D*D,D,D*D))
-        # Append to boundary mpo
+        I1 = eye(Dr)
+        I2 = eye(Du)
+        I3 = eye(Du)
+        I = einsum('du,DU,lr->dlDruU',I1,I2,I3)
+        # Reshape so it is an MPO
+        I = reshape(I,(Du*Dr*Du,Dr,Du*Du))
         bound_mpo.append(I)
-
-    # Top Row ----------------------------------------------------------
-    # Add Correct identity first
-    I = eye(D)
-    I = einsum('du,LR,DU->dDRuLU',I,I,I)
-    I = reshape(I,(D*D,D,D*D*D))
-    # Append to boundary mpo
-    bound_mpo.append(I)
-
-    # Add bra-ket contraction
-    res = einsum('ldpru,LDpRU->lLdRDruU',ket[Ny-1],bra[Ny-1])
-    # Reshape into an MPO
-    res = reshape(res,(D*D*D,D,1))
-    # Append to boundary mpo
-    bound_mpo.append(res)
 
     # Put result into an MPS -------------------------------------------
     bound_mps = MPS()
@@ -110,72 +82,28 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
     Add the ket layer to the boundary mpo
     """
     mpiprint(4,'Adding Ket')
+
     # Make list to hold resulting mpo
     bound_mpo_new = []
 
-    # Bottom row -----------------------------------
-    # Add previous first site
-    bound_mpo_new.append(copy.copy(bound_mpo[0]))
-
-    # Add ket contraction
-    res = einsum('mln,ldpru->mdrpnu',bound_mpo[1],ket[0])
-    # Reshape it into an MPO
-    (Dm,Dl,Dn) = bound_mpo[1].shape
-    (Dl,Dd,Dp,Dr,Du) = ket[0].shape
-    res = reshape(res,(Dm*Dd,Dr*Dp,Dn*Du))
-    # Append to new boundary mpo
-    bound_mpo_new.append(res)
-
-    # Add correct identity
-    I = eye(D)
-    I = einsum('mLn,LR,DU->mDRnU',bound_mpo[2],I,I)
-    # Reshape it into an MPO
-    (Dm,DL,Dn) = bound_mpo[2].shape
-    I = reshape(I,(Dm*D,D,Dn*D))
-    # Append to new boundary mpo
-    bound_mpo_new.append(I)
-    
-    # Center Rows ----------------------------------
-    for row in range(1,Ny-2):
-        # Add ket
-        res = einsum('mln,ldpru->mdrpnu',bound_mpo[2*row+1],ket[row])
-        # Reshape it into an MPO
-        (Dm,Dl,Dn) = bound_mpo[2*row+1].shape
-        (Dl,Dd,Dp,Dr,Du) = ket[row].shape
-        res = reshape(res,(Dm*Dd,Dr*Dp,Dn*Du))
-        # Append to new boundary mpo
-        bound_mpo_new.append(res)
-
+    for row in range(Ny):
         # Add correct identity
-        I = eye(D)
-        I = einsum('mLn,LR,DU->mDRnU',bound_mpo[2*row+2],I,I)
+        (Dl,Dd,Dp,Dr,Du) = ket[row].shape
+        I1 = eye(Dd)
+        I = einsum('mLn,du->mdLnu',bound_mpo[2*row],I1)
         # Reshape it into an MPO
-        (Dm,DL,Dn) = bound_mpo[2*row+2].shape
-        I = reshape(I,(Dm*D,D,Dn*D))
+        (Dm,DL,Dn) = bound_mpo[2*row].shape
+        I = reshape(I,(Dm*Dd,DL,Dn*Dd))
         # Append to new boundary mpo
         bound_mpo_new.append(I)
 
-    # Top Row -------------------------------------
-    # Add ket
-    res = einsum('mln,ldpru->mdrpnu',bound_mpo[-3],ket[-2])
-    # Reshape it into an MPO
-    (Dm,Dl,Dn) = bound_mpo[-3].shape
-    (Dl,Dd,Dp,Dr,Du) = ket[-2].shape
-    res = reshape(res,(Dm*Dd,Dr*Dp,Dn*Du))
-    # Append to new boundary mpo
-    bound_mpo_new.append(res)
-
-    # Add ket again
-    res = einsum('mln,ldpru->mdrpnu',bound_mpo[-2],ket[-1])
-    # Reshape it into an MPO
-    (Dm,Dl,Dn) = bound_mpo[-2].shape
-    (Dl,Dd,Dp,Dr,Du) = ket[-1].shape
-    res = reshape(res,(Dm*Dd,Dr*Dp,Dn*Du))
-    # Append to new boundary mpo
-    bound_mpo_new.append(res)
-
-    # Add previous last site
-    bound_mpo_new.append(copy.copy(bound_mpo[-1]))
+        # Add ket contraction
+        res = einsum('mln,ldpru->mdrpnu',bound_mpo[2*row+1],ket[row])
+        # Reshape it into an MPO
+        (Dm,_,Dn) = bound_mpo[2*row+1].shape
+        res = reshape(res,(Dm*Dd,Dr*Dp,Dn*Du))
+        # Append to new boundary mpo
+        bound_mpo_new.append(res)
 
     # Put result into an MPS -------------------------
     bound_mps = MPS()
@@ -197,72 +125,28 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
     # Make list to hold resulting mpo
     bound_mpo_new = []
 
-    # Bottom row -----------------------------------
-    # Add bra contraction
-    res = einsum('mLn,LDPRU->mDRnUP',bound_mpo[0],bra[0])
-    # Reshape it into an MPO
-    (Dm,DL,Dn) = bound_mpo[0].shape
-    (DL,DD,DP,DR,DU) = bra[0].shape
-    res = reshape(res,(Dm*DD,DR,Dn*DU*DP))
-    # Append to new boundary mpo
-    bound_mpo_new.append(res)
-
-    # Add identity
-    bound_tens = bound_mpo[1]
-    (Dm,Dd,Dn) = bound_tens.shape
-    d = Dd/D
-    bound_tens = reshape(bound_tens,(Dm,D,d,Dn))
-    I = eye(D)
-    res = einsum('mLpn,DU->mDpLnU',bound_tens,I)
-    # Reshape it into an MPO
-    res = reshape(res,(Dm*D*d,D,Dn*D))
-    # Append to new boundary MPO
-    bound_mpo_new.append(res)
-
-    # Center Rows ----------------------------------
-    for row in range(1,Ny-1):
+    for row in range(Ny):
         # Add bra contraction
         res = einsum('mLn,LDPRU->mDRnUP',bound_mpo[2*row],bra[row])
         # Reshape it into an MPO
-        (Dm,DL,Dn) = bound_mpo[2*row].shape
+        (Dm,_,Dn) = bound_mpo[2*row].shape
         (DL,DD,DP,DR,DU) = bra[row].shape
         res = reshape(res,(Dm*DD,DR,Dn*DU*DP))
-        # Append to new boundary mpo
-        bound_mpo_new.append(res)
-
-        # Add identity
-        bound_tens = bound_mpo[2*row+1]
-        (Dm,Dd,Dn) = bound_tens.shape
-        d = Dd/D
-        bound_tens = reshape(bound_tens,(Dm,D,d,Dn))
-        I = eye(D)
-        res = einsum('mLpn,DU->mDpLnU',bound_tens,I)
-        # Reshape it into an MPO
-        res = reshape(res,(Dm*D*d,D,Dn*D))
         # Append to new boundary MPO
         bound_mpo_new.append(res)
 
-    # Top Row -------------------------------------
-    # Add identity
-    bound_tens = bound_mpo[-2]
-    (Dm,Dd,Dn) = bound_tens.shape
-    d = Dd/D
-    bound_tens = reshape(bound_tens,(Dm,D,d,Dn))
-    I = eye(D)
-    res = einsum('mLpn,DU->mDLnUp',bound_tens,I)
-    # Reshape it into an MPO
-    res = reshape(res,(Dm*D,D,Dn*D*d))
-    # Append to new boundary MPO
-    bound_mpo_new.append(res)
-
-    # Add bra contraction
-    res = einsum('mLn,LDPRU->mDPRnU',bound_mpo[-1],bra[-1])
-    # Reshape it into an MPO
-    (Dm,DL,Dn) = bound_mpo[-1].shape
-    (DL,DD,DP,DR,DU) = bra[-1].shape
-    res = reshape(res,(Dm*DD*DP,DR,Dn*DU))
-    # Append to new boundary MPO
-    bound_mpo_new.append(res)
+        # Add correct identity
+        bound_tens = copy.copy(bound_mpo[2*row+1])
+        (Dm,Dp,Dn) = bound_tens.shape
+        d = Dp/D
+        bound_tens = reshape(bound_tens,(Dm,D,d,Dn))
+        I = eye(DU)
+        # Contract with previous bound_mpo tensor
+        res = einsum('mrpn,DU->mDprnU',bound_tens,I)
+        # Reshape it back into an MPO
+        res = reshape(res,(Dm*DU*d,D,Dn*DU))
+        # Append to new boundary MPO
+        bound_mpo_new.append(res)
 
     # Put result into an MPS -------------------------
     bound_mps = MPS()

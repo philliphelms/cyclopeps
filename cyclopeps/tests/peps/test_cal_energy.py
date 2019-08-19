@@ -154,6 +154,5 @@ class test_cal_energy(unittest.TestCase):
         self.assertTrue(abs((E2-E1)/E1) < 1e-10)
         mpiprint(0,'Passed\n'+'='*50)
 
-
 if __name__ == "__main__":
     unittest.main()

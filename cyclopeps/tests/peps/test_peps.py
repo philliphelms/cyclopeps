@@ -23,11 +23,11 @@ class test_peps(unittest.TestCase):
     def test_rotate(self):
         mpiprint(0,'\n'+'='*50+'\nPeps Rotation test\n'+'-'*50)
         from cyclopeps.tools.peps_tools import PEPS
-        Nx = 5
-        Ny = 5
+        Nx = 3
+        Ny = 3
         d = 2
         D = 3
-        chi = 10
+        chi = 100
         peps = PEPS(Nx=Nx,Ny=Ny,d=d,D=D,chi=chi,normalize=False)
         norm0 = peps.calc_norm()
         peps.rotate()
