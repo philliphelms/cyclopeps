@@ -40,8 +40,6 @@ def rotate_peps(peps,clockwise=True):
             The horizontally flipped version of the peps
             tensor. This is flipped such that ...
     """
-    # Make some copies
-    peps = copy.copy(peps)
 
     # Get system size
     Nx = len(peps)
@@ -85,8 +83,6 @@ def flip_peps(peps):
             The horizontally flipped version of the peps
             tensor. This is flipped such that ...
     """
-    # Make some copies
-    peps = copy.copy(peps)
 
     # Get system size
     Nx = len(peps)
@@ -137,8 +133,6 @@ def peps_col_to_mps(peps_col,mk_copy=True):
             The resulting 1D array containing the PEPS column's tensor
 
     """
-    # Make some copies
-    peps_col = copy.copy(peps_col)
 
     # Determine number of rows
     Ny = len(peps_col)
@@ -176,8 +170,6 @@ def calc_peps_col_norm(peps_col):
         norm : float
             The norm of the peps column (reshaped as an MPS)
     """
-    # Make some copies
-    peps_col = copy.copy(peps_col)
 
     # Convert peps column to an mps by lumping indices
     mps = peps_col_to_mps(peps_col)
@@ -244,8 +236,6 @@ def normalize_peps_col(peps_col):
             A normalized version of the input peps_col
 
     """
-    # Make some copies
-    peps_col = copy.copy(peps_col)
 
     # Figure out column height
     Ny = len(peps_col)
@@ -264,8 +254,6 @@ def multiply_peps_elements(peps,const):
     """
     Multiply all elements in a peps by a constant
     """
-    # Make some copies
-    peps = copy.copy(peps)
 
     Nx = len(peps)
     Ny = len(peps[0])
@@ -308,8 +296,6 @@ def normalize_peps(peps,max_iter=100,norm_tol=1e2,change_int=1e-2,chi=4,singleLa
             The renormalized version of the PEPS, stored as a 
             list of lists
     """
-    # Make some copies
-    peps = copy.copy(peps)
 
     # Figure out peps size
     Nx = len(peps)
@@ -385,8 +371,6 @@ def calc_peps_norm(peps,chi=4,singleLayer=True):
         norm : float
             The (approximate) norm of the PEPS
     """
-    # Make some copies
-    peps = copy.copy(peps)
 
     # Get PEPS Dims
     Nx = len(peps)
@@ -453,10 +437,6 @@ def calc_top_envs(peps_col,left_bmpo,right_bmpo):
         "oipq" is the new top environment
 
     """
-    # Make some copies
-    peps_col = copy.copy(peps_col)
-    left_bmpo= copy.copy(left_bmpo)
-    right_bmpo=copy.copy(right_bmpo)
 
     # Figure out height of peps column
     Ny = len(peps_col)
@@ -499,10 +479,6 @@ def calc_bot_envs(peps_col,left_bmpo,right_bmpo):
      +-------+-------+-------+
 
     """
-    # Make some copies
-    peps_col = copy.copy(peps_col)
-    left_bmpo= copy.copy(left_bmpo)
-    right_bmpo=copy.copy(right_bmpo)
 
     # Figure out height of peps column
     Ny = len(peps_col)
@@ -526,9 +502,6 @@ def reduce_tensors(peps1,peps2):
     """
     Reduce the two peps tensors, i.e. pull off physical index
     """
-    # Make some copies
-    peps1 = copy.copy(peps1)
-    peps2 = copy.copy(peps2)
 
     if DEBUG:
         # Figure out combined tensor (for check)
@@ -566,20 +539,19 @@ def pos_sqrt_vec(vec):
 def make_N_positive(N,hermitian=True,positive=True):
     """
     """
-    N = copy.copy(N)
 
     # Get a hermitian approximation of the environment
     if hermitian:
-        N1 = copy.copy(N)
+        N1 = copy.deepcopy(N)
         N1 = einsum('UuDd->UDud',N1) # Could be UduD and uDUd instead
         N = einsum('UuDd->udUD',N)
         N = (N+N1)/2.
-        N1 = copy.copy(N)
+        N1 = copy.deepcopy(N)
         N = einsum('UDab,abud->UuDd',N,N1)
 
         # Check to ensure N is hermitian
         if DEBUG:
-            Ntmp = copy.copy(N)
+            Ntmp = copy.deepcopy(N)
             Ntmp = einsum('UuDd->UDud',Ntmp)
             (n1_,n2_,n3_,n4_) = Ntmp.shape
             Ntmp = reshape(Ntmp,(n1_*n2_,n3_*n4_))
@@ -598,7 +570,7 @@ def make_N_positive(N,hermitian=True,positive=True):
         
         # Check to ensure N is positive
         if DEBUG:
-            Ntmp = copy.copy(N)
+            Ntmp = copy.deepcopy(N)
             Ntmp = einsum('UuDd->UDud',Ntmp)
             (n1_,n2_,n3_,n4_) = Ntmp.shape
             Ntmp = reshape(Ntmp,(n1_*n2_,n3_*n4_))
@@ -639,13 +611,6 @@ def calc_local_env(peps1,peps2,env_top,env_bot,lbmpo,rbmpo,reduced=True,hermitia
             possible positive approximate
 
     """
-    # Make a copy of these
-    peps1 = copy.copy(peps1)
-    peps2 = copy.copy(peps2)
-    env_top = copy.copy(env_top)
-    env_bot = copy.copy(env_bot)
-    lbmpo = copy.copy(lbmpo)
-    rbmpo = copy.copy(rbmpo)
 
     if reduced:
         if DEBUG:
@@ -702,15 +667,9 @@ def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
     """
     # Make some copies
     if phys_t_ket is None:
-        phys_t_ket = conj(copy.copy(phys_t_bra))
+        phys_t_ket = conj(copy.deepcopy(phys_t_bra))
     if phys_b_ket is None:
-        phys_b_ket = conj(copy.copy(phys_b_bra))
-    phys_b_bra = copy.copy(phys_b_bra)
-    phys_t_bra = copy.copy(phys_t_bra)
-    N = copy.copy(N)
-    ham = copy.copy(ham)
-    phys_b_ket = copy.copy(phys_b_ket)
-    phys_t_ket = copy.copy(phys_t_ket)
+        phys_b_ket = conj(copy.deepcopy(phys_b_bra))
 
     # Compute Energy (or op value 
     if reduced:
@@ -734,12 +693,6 @@ def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
         sys.exit()
 
 def calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,positive=True):
-    # Make some copies
-    peps_col = copy.copy(peps_col)
-    left_bmpo = copy.copy(left_bmpo)
-    right_bmpo = copy.copy(right_bmpo)
-    top_envs = copy.copy(top_envs)
-    bot_envs = copy.copy(bot_envs)
 
     if row == 0:
         if len(peps_col) == 2: 
@@ -800,11 +753,6 @@ def calc_single_column_op(peps_col,left_bmpo,right_bmpo,ops_col,normalize=True):
             within the column
 
     """
-    # Make some copies
-    peps_col = copy.copy(peps_col)
-    left_bmpo = copy.copy(left_bmpo)
-    right_bmpo = copy.copy(right_bmpo)
-    ops_col = copy.copy(ops_col)
 
     # Calculate top and bottom environments
     top_envs = calc_top_envs(peps_col,left_bmpo,right_bmpo)
@@ -840,9 +788,6 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True):
             The contribution of the column's interactions to
             the observable's expectation value
     """
-    # Make some copies
-    peps = copy.copy(peps)
-    ops = copy.copy(ops)
 
     # Figure out peps size
     Nx = len(peps)
@@ -887,10 +832,6 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True):
         val : float
             The resulting observable's expectation value
     """
-    # Make some copies
-    peps = copy.copy(peps)
-    ops = copy.copy(ops)
-
     # Calculate contribution from interactions between columns
     col_energy = calc_all_column_op(peps,ops[0],chi=chi,normalize=normalize)
     # Calculate contribution from interactions between rows

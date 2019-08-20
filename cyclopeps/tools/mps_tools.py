@@ -894,7 +894,7 @@ class MPS:
         for site in range(len(mps_list)):
 
             # Copy Tensor
-            self[site] = copy.copy(mps_list[site])
+            self[site] = copy.deepcopy(mps_list[site])
 
             # Update tensor shape
             (DL,d,DR) = self[site].shape
@@ -909,7 +909,7 @@ class MPS:
         """
         mps_copy = MPS(self.d,self.D,self.N)
         for site in range(self.N):
-            mps_copy[site] = copy.copy(self[site])
+            mps_copy[site] = copy.deepcopy(self[site])
         return mps_copy
 
     def __getitem__(self,i):

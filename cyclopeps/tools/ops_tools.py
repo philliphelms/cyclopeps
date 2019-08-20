@@ -22,7 +22,7 @@ def expm(m,a=1.):
     m = from_nparray(m)
     return m
 
-def take_exp(ops,a=1.,make_copy=True):
+def take_exp(ops,a=1.):
     """
     Take the exponential of all operators
     in the ops lists
@@ -34,19 +34,13 @@ def take_exp(ops,a=1.,make_copy=True):
     Kwargs:
         a : float
             A constant, taking exp(a*M)
-        make_copy : bool
-            Whether to make a copy of the ops lists or 
-            to use the original
 
     Returns:
         exp_ops : lost of list of lists
             The resulting exponentiated operators
     """
     # Make a copy if wanted
-    if make_copy:
-        exp_ops = copy.copy(ops)
-    else:
-        exp_ops = ops
+    exp_ops = ops
 
     # Exponentiate all operators
     for i in range(len(exp_ops)):

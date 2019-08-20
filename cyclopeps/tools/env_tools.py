@@ -16,12 +16,12 @@ import copy
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # PEPS ENVIRONMENT FUNCTIONS 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-def init_left_bmpo_sl(peps_col,chi=4,truncate=True):
+def init_left_bmpo_sl(ket, bra=None, chi=4, truncate=True):
     """
     Create the initial boundary mpo for a peps
 
     Args:
-        peps_col : list
+        bra : list
             A list containing the tensors for a single peps column
 
     Kwargs:
@@ -37,12 +37,12 @@ def init_left_bmpo_sl(peps_col,chi=4,truncate=True):
     """
     mpiprint(3,'Initial Layer of left boundary mpo (sl)')
     # Find size of peps column and dims of tensors
-    Ny = len(peps_col)
-    _,_,d,D,_ = peps_col[0].shape
+    Ny = len(ket)
+    _,_,d,D,_ = ket[0].shape
 
-    # get the bra and ket as copies of the peps column
-    bra = [conj(copy.copy(peps_col[i])) for i in range(len(peps_col))]
-    ket = [copy.copy(peps_col[i]) for i in range(len(peps_col))]
+    # Copy the ket column if needed
+    if bra is None:
+        bra = copy.deepcopy(ket)
 
     # Make list to hold resulting mpo
     bound_mpo = []
@@ -136,7 +136,7 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
         bound_mpo_new.append(res)
 
         # Add correct identity
-        bound_tens = copy.copy(bound_mpo[2*row+1])
+        bound_tens = bound_mpo[2*row+1]
         (Dm,Dp,Dn) = bound_tens.shape
         d = Dp/D
         bound_tens = reshape(bound_tens,(Dm,D,d,Dn))
@@ -160,18 +160,21 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
         mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
     return bound_mps
 
-def left_bmpo_sl(peps_col, bound_mpo, chi=4,truncate=True):
+def left_bmpo_sl(ket, bound_mpo, bra=None, chi=4,truncate=True):
     """
     Add two layers to the single layer boundary mpo environment
 
     Args:
-        peps_col : list
+        ket : list
             A list containing the tensors for a single peps column
         bound_mpo : list
             A list containing the tensors for the left neighboring
             boundary mpo
 
     Kwargs:
+        bra : list
+            A list containing the bra tensors for a single peps column. 
+            If None, then the ket col will be used
         chi : int
             The maximum bond dimension for the boundary mpo
         truncate : bool
@@ -184,12 +187,12 @@ def left_bmpo_sl(peps_col, bound_mpo, chi=4,truncate=True):
     """
     mpiprint(5,'Updating boundary mpo (sl)')
     # Find size of peps column and dims of tensors
-    Ny = len(peps_col)
-    _,_,d,D,_ = peps_col[0].shape
+    Ny = len(ket)
+    _,_,d,D,_ = ket[0].shape
     
-    # get the bra and ket as copies of the peps column
-    bra = [conj(copy.copy(peps_col[i])) for i in range(len(peps_col))]
-    ket = [copy.copy(peps_col[i]) for i in range(len(peps_col))]
+    # Copy the ket column if needed
+    if bra is None:
+        bra = copy.deepcopy(ket)
 
     # First Layer (ket) #####################################
     bound_mpo = left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=chi,truncate=truncate)

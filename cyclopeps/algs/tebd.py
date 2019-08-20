@@ -54,14 +54,9 @@ def optimize_bottom(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
         implemented according to Section II.B of
         https://arxiv.org/pdf/1503.05345.pdf
     """
-    # Copy tensors
-    phys_b = copy.copy(phys_b)
-    phys_t = copy.copy(phys_t)
-    phys_b_new = copy.copy(phys_b_new)
-    phys_t_new = copy.copy(phys_t_new)
 
     # Calculate R
-    tmp = einsum('DPU,dPu->DUdu',phys_t_new,conj(copy.copy(phys_t_new)))
+    tmp = einsum('DPU,dPu->DUdu',phys_t_new,conj(copy.deepcopy(phys_t_new)))
     R   = einsum('DUdu,AaUu->ADad',tmp,N)
 
     # Calculate S
@@ -90,14 +85,9 @@ def optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
         implemented according to Section II.B of
         https://arxiv.org/pdf/1503.05345.pdf
     """
-    # Copy tensors
-    phys_b = copy.copy(phys_b)
-    phys_t = copy.copy(phys_t)
-    phys_b_new = copy.copy(phys_b_new)
-    phys_t_new = copy.copy(phys_t_new)
 
     # Calculate R
-    tmp = einsum('DPU,dPu->DUdu',phys_b_new,conj(copy.copy(phys_b_new)))
+    tmp = einsum('DPU,dPu->DUdu',phys_b_new,conj(copy.deepcopy(phys_b_new)))
     R = einsum('DUdu,DdAa->UAua',tmp,N)
 
     # Calculate S
@@ -124,8 +114,8 @@ def alternating_least_squares(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
     """
     """
     # Copy tensors (we never change phys_b or phys_t)
-    phys_b_new = copy.copy(phys_b)
-    phys_t_new = copy.copy(phys_t)
+    phys_b_new = copy.deepcopy(phys_b)
+    phys_t_new = copy.deepcopy(phys_t)
 
     # Initialize cost function
     cost_prev = cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
@@ -155,7 +145,7 @@ def exp_ham(ham,a=1.):
     """
     Take the exponential of the Hamiltonian
     """
-    ham = copy.copy(ham)
+    ham = copy.deepcopy(ham)
     d = ham.shape[0]
     ham = reshape(ham,(d**2,d**2))
     eH = expm(ham,a)
