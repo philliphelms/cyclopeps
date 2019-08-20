@@ -11,7 +11,7 @@ class test_cal_energy(unittest.TestCase):
         mpiprint(0,'\n'+'='*50+'\nPeps Normalization test\n'+'-'*50)
         # Create PEPS
         Nx = 3
-        Ny = 5
+        Ny = 3
         d = 2
         D = 3
         chi = 10

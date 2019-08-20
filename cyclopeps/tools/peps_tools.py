@@ -553,7 +553,60 @@ def reduce_tensors(peps1,peps2):
     # Return result
     return ub,phys_b,phys_t,vt
 
-def calc_local_env(peps1,peps2,env_top,env_bot,lbmpo,rbmpo,reduced=True):
+def pos_sqrt_vec(vec):
+    """
+    """
+    for i in range(len(vec)):
+        if vec[i] > 0.:
+            vec[i] = vec[i]**(1./2.)
+        else:
+            vec[i] = 0.
+    return vec
+
+def make_N_positive(N,hermitian=True,positive=True):
+    """
+    """
+    N = copy.copy(N)
+
+    # Get a hermitian approximation of the environment
+    if hermitian:
+        N1 = copy.copy(N)
+        N1 = einsum('UuDd->UDud',N1) # Could be UduD and uDUd instead
+        N = einsum('UuDd->udUD',N)
+        N = (N+N1)/2.
+        N1 = copy.copy(N)
+        N = einsum('UDab,abud->UuDd',N,N1)
+
+        # Check to ensure N is hermitian
+        if DEBUG:
+            Ntmp = copy.copy(N)
+            Ntmp = einsum('UuDd->UDud',Ntmp)
+            (n1_,n2_,n3_,n4_) = Ntmp.shape
+            Ntmp = reshape(Ntmp,(n1_*n2_,n3_*n4_))
+            print('Check if this N is hermitian:\n{}'.format(Ntmp))
+
+    # Get a positive approximation of the environment
+    if positive:
+        N = einsum('UuDd->UDud',N)
+        (n1,n2,n3,n4) = N.shape
+        Nmat = reshape(N,(n1*n2,n3*n4))
+        u,v = eigh(Nmat)
+        u = pos_sqrt_vec(u)
+        Nmat = einsum('ij,j,kj->ik',v,u,v)
+        N = reshape(Nmat,(n1,n2,n3,n4))
+        N = einsum('UDud->UuDd',N)
+        
+        # Check to ensure N is positive
+        if DEBUG:
+            Ntmp = copy.copy(N)
+            Ntmp = einsum('UuDd->UDud',Ntmp)
+            (n1_,n2_,n3_,n4_) = Ntmp.shape
+            Ntmp = reshape(Ntmp,(n1_*n2_,n3_*n4_))
+            print('This makes N positive, but not every element of N positive??:\n{}'.format(Ntmp))
+
+    return N
+
+def calc_local_env(peps1,peps2,env_top,env_bot,lbmpo,rbmpo,reduced=True,hermitian=True,positive=True):
     """
     Calculate the local environment around two peps tensors
 
@@ -578,6 +631,12 @@ def calc_local_env(peps1,peps2,env_top,env_bot,lbmpo,rbmpo,reduced=True):
             If true, then this function returns the reduced
             environment. Currently, this is the only option
             available.
+        hermitian : bool
+            Approximate the environment with its nearest 
+            hermitian approximate
+        positive : bool
+            Approximate the environment with its nearest
+            possible positive approximate
 
     """
     # Make a copy of these
@@ -627,6 +686,7 @@ def calc_local_env(peps1,peps2,env_top,env_bot,lbmpo,rbmpo,reduced=True):
 
         # Compute Environment
         N = einsum('AUua,ADda->UuDd',envt,envb)
+        N = make_N_positive(N,hermitian=hermitian,positive=positive)
 
         return ub,phys_b,phys_t,vt,N
     else:
@@ -673,7 +733,7 @@ def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
         import sys
         sys.exit()
 
-def calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs):
+def calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,positive=True):
     # Make some copies
     peps_col = copy.copy(peps_col)
     left_bmpo = copy.copy(left_bmpo)
@@ -689,7 +749,9 @@ def calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs):
                                              ones((1,1,1,1),dtype=top_envs[0].dtype),
                                              ones((1,1,1,1),dtype=top_envs[0].dtype),
                                              left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                             right_bmpo[row*2,row*2+1,row*2+2,row*2+3])
+                                             right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
+                                             hermitian=hermitian,
+                                             positive=positive)
         else:
             # Get the local environment tensor
             ub,phys_b,phys_t,vt,N = calc_local_env(peps_col[row],
@@ -697,14 +759,18 @@ def calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs):
                                              top_envs[row+2],
                                              ones((1,1,1,1),dtype=top_envs[0].dtype),
                                              left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                             right_bmpo[row*2,row*2+1,row*2+2,row*2+3])
+                                             right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
+                                             hermitian=hermitian,
+                                             positive=positive)
     elif row == len(peps_col)-2:
         ub,phys_b,phys_t,vt,N = calc_local_env(peps_col[row],
                                          peps_col[row+1],
                                          ones((1,1,1,1),dtype=top_envs[0].dtype),
                                          bot_envs[row-1],
                                          left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                         right_bmpo[row*2,row*2+1,row*2+2,row*2+3])
+                                         right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
+                                         hermitian=hermitian,
+                                         positive=positive)
     else:
         # Get the local environment tensor
         ub,phys_b,phys_t,vt,N = calc_local_env(peps_col[row],
@@ -712,7 +778,9 @@ def calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs):
                                          top_envs[row+2],
                                          bot_envs[row-1],
                                          left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                         right_bmpo[row*2,row*2+1,row*2+2,row*2+3])
+                                         right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
+                                         hermitian=hermitian,
+                                         positive=positive)
     return ub,phys_b,phys_t,vt,N
 
 def calc_single_column_op(peps_col,left_bmpo,right_bmpo,ops_col,normalize=True):
@@ -745,7 +813,7 @@ def calc_single_column_op(peps_col,left_bmpo,right_bmpo,ops_col,normalize=True):
     # Calculate Energy
     E = zeros(len(ops_col))
     for row in range(len(ops_col)):
-        _,phys_b,phys_t,_,N = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs)
+        _,phys_b,phys_t,_,N = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=False,positive=False)
         E[row] = calc_local_op(phys_b,phys_t,N,ops_col[row],normalize=normalize)
     return E
 

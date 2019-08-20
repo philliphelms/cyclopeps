@@ -61,3 +61,4 @@ transpose  = np.transpose
 expand_dims= np.expand_dims
 take       = np.take
 argsort    = np.argsort
+maxx       = np.amax

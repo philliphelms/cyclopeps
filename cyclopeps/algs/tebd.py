@@ -45,6 +45,7 @@ def cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,U):
     # Calculate S^+ * a
     # (currently just using a copy)
     aS  = Sa
+    
     return aRa-aS-Sa
 
 def optimize_bottom(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
@@ -191,6 +192,10 @@ def make_equal_distance(peps1,peps2,D=None):
     peps1 = einsum('LDRa,aPU->LDPRU',ub,phys_b)
     peps2 = einsum('DPa,LaRU->LDPRU',phys_t,vt)
 
+    # Try to shrink norm by multiplying peps1 and peps2 by constants
+    peps1 /= maxx(peps1)
+    peps2 /= maxx(peps2)
+
     # Return results
     return peps1,peps2
 
@@ -221,11 +226,9 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,als_iter=10
         peps_col[row]   = einsum('LDRa,aPU->LDPRU',peps_b,phys_b)
         peps_col[row+1] = einsum('DPa,LaRU->LDPRU',phys_t,peps_t)
 
-        # Whatever equall_dis_V does
+        # Combine and equally split the two tensors
+        # Also, add a normalization factor if needed
         peps_col[row],peps_col[row+1] = make_equal_distance(peps_col[row],peps_col[row+1])
-
-        # Whatever max_ten does (just shrink an entry so the norm isn't too large)
-        # PH - Implement this later
 
         # Update top and bottom environments
         # PH - Very lazy and expensive way to do this...
@@ -281,16 +284,17 @@ def tebd_step(peps,ham,step_size,chi=None,als_iter=100,als_tol=1e-10):
 def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None,als_iter=100,als_tol=1e-10):
     """
     """
+    nSite = len(peps)*len(peps[0])
+
     # Compute Initial Energy
     Eprev = peps.calc_op(ham,chi=chi)
-    #print('Initial Energy = {}'.format(Eprev))
+    mpiprint(0,'Initial Energy/site = {}'.format(Eprev/nSite))
 
     # Do a single tebd step
     for iter_cnt in range(n_step):
 
         # Do TEBD Step
         E,peps = tebd_step(peps,ham,step_size,chi=chi,als_iter=als_iter,als_tol=als_tol)
-        print(E)
 
         # Normalize just in case
         peps.normalize()
@@ -299,7 +303,7 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None,als_iter=100,als_tol=
         E2 = peps.calc_op(ham,chi=chi)
         
         # Check for convergence
-        mpiprint(1,'Energy = {} ({})'.format(E,E2))
+        mpiprint(0,'Energy/site = {} ({})'.format(E/nSite,E2/nSite))
         if abs((E-Eprev)/E) < conv_tol:
             mpiprint(3,'Converged E = {} to an accuracy of ~{}'.format(E,abs(E-Eprev)))
             converged = True
@@ -314,7 +318,7 @@ def run_tebd(Nx,Ny,d,ham,
              norm_tol=1e-5,singleLayer=True,
              max_norm_iter=100,norm_change_int=3e-2,
              dtype=float_,
-             step_size=0.1,n_step=10,conv_tol=1e-8,
+             step_size=0.2,n_step=10,conv_tol=1e-8,
              als_iter=5,als_tol=1e-10):
     """
     Run the TEBD algorithm for a PEPS

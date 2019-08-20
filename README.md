@@ -10,4 +10,4 @@ CTF.
 * Function to increase bond dimension of PEPS
 
 ## Known Bugs
-* Nothing
+* TEBD converges to nearly the correct energies for ITF model
