@@ -151,8 +151,7 @@ def peps_col_to_mps(peps_col,mk_copy=True):
 
     # Convert PEPS column into an MPS
     mps = MPS()
-    for row in range(Ny):
-        mps[row] = peps_col[row]
+    mps.input_mps_list(peps_col)
 
     # Return resulting mps
     return mps
@@ -529,7 +528,7 @@ def reduce_tensors(peps1,peps2):
 def pos_sqrt_vec(vec):
     """
     """
-    for i in range(len(vec)):
+    for i in range(vec.shape[0]):
         if vec[i] > 0.:
             vec[i] = vec[i]**(1./2.)
         else:

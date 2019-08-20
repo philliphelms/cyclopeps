@@ -306,9 +306,9 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None,als_iter=100,als_tol=
 def run_tebd(Nx,Ny,d,ham,
              D=3,chi=10,
              norm_tol=1e-5,singleLayer=True,
-             max_norm_iter=100,norm_change_int=3e-2,
+             max_norm_iter=20,norm_change_int=3e-2,
              dtype=float_,
-             step_size=0.2,n_step=10,conv_tol=1e-8,
+             step_size=0.2,n_step=5,conv_tol=1e-8,
              als_iter=5,als_tol=1e-10):
     """
     Run the TEBD algorithm for a PEPS
@@ -414,6 +414,13 @@ def run_tebd(Nx,Ny,d,ham,
         # Increase MBD if needed
         if len(D)-1 > Dind:
             peps.increase_mbd(D[Dind+1],chi=chi[Dind+1])
+
+    # Print out results
+    mpiprint(0,'\n\n'+'#'*50)
+    mpiprint(0,'TEBD Complete')
+    mpiprint(0,'-------------')
+    mpiprint(0,'Total time = {} s'.format(time.time()-t0))
+    mpiprint(0,'Per Site Energy = {}'.format(E/(Nx*Ny)))
 
     return E
 

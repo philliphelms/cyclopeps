@@ -951,8 +951,8 @@ class MPS:
         norm_env = ones((1,1),dtype=self.dtype)
         # Move to the left, contracting env with bra and ket tensors
         for site in range(self.N):
-            norm_env = einsum('Aa,apb->Apb',norm_env,self[site])
-            norm_env = einsum('Apb,ApB->Bb',norm_env,conj(self.tensors[site]))
+            tmp1 = einsum('Aa,apb->Apb',copy.deepcopy(norm_env),self[site])
+            norm_env = einsum('Apb,ApB->Bb',tmp1,conj(self.tensors[site]))
         # Extract and return result
         norm = norm_env[0,0]
         return norm

@@ -31,7 +31,7 @@ else:
     CALCDIR = dic['dir']
 
 # Use ctf or numpy
-USE_CTF = False
+USE_CTF = True
 USE_SPARSE = False
 
 # Printing Global Variables

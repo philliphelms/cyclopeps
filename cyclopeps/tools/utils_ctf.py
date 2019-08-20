@@ -19,6 +19,8 @@ from numpy import complex_
 from numpy import float_
 from numpy import real as npreal
 from numpy import imag as npimag
+from numpy.linalg import eigh as npeigh
+from numpy import amax as npamax
 
 # Tensor Allocation
 def array(tens,dtype=None,copy=True,subok=False,ndimin=0):
@@ -48,9 +50,21 @@ abss       = ctf.abs
 dot        = ctf.dot
 einsum     = ctf.einsum
 qr         = ctf.qr
-summ       = ctf.sum
+#summ       = ctf.sum
+def summ(vec):
+    try:
+        return ctf.sum(vec)
+    except:
+        return vec
 svd        = ctf.svd
-eigh       = ctf.eigh
+#eigh       = ctf.eigh
+def eigh(mat):
+    mat = to_nparray(mat)
+    u,v = npeigh(mat)
+    u = from_nparray(u)
+    v = from_nparray(v)
+    return u,v
+
 #def dot(a,b):
 #    res = ctf.dot(a,b)
 #    if (prod(res.shape) == 1) or (len(res.shape) == 0):
@@ -73,6 +87,10 @@ def inv(ten):
     ten = to_nparray(ten)
     ten = npinv(ten)
     return from_nparray(ten)
+def maxx(ten):
+    ten = to_nparray(ten)
+    val = npamax(ten)
+    return val
 
 # Tensor Manipulation
 conj       = ctf.conj

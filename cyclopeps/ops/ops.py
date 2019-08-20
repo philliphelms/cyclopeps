@@ -1,31 +1,31 @@
-from numpy import array as nparray
+from cyclopeps.tools.utils import array
 
 # A bunch of operators that are useful in other files
-Sp = nparray([[0.,1.],
+Sp = array([[0.,1.],
             [0.,0.]])
 
-Sm = nparray([[0.,0.],
+Sm = array([[0.,0.],
             [1.,0.]])
 
-n = nparray([[0.,0.], 
+n = array([[0.,0.], 
            [0.,1.]])
 
-v = nparray([[1.,0.],
+v = array([[1.,0.],
            [0.,0.]])
 
-I = nparray([[1.,0.],
+I = array([[1.,0.],
            [0.,1.]])
 
-z = nparray([[0.,0.],
+z = array([[0.,0.],
            [0.,0.]])
 
-Sx = 1./2.*nparray([[0.,1.],
+Sx = 1./2.*array([[0.,1.],
                      [1.,0.]])
 
-Sy = 1./(2.j)*nparray([[0.,1.],
+Sy = 1./(2.j)*array([[0.,1.],
                         [-1.,0.]])
 
-Sz = 1./2.*nparray([[1.,0.],
+Sz = 1./2.*array([[1.,0.],
                      [0.,-1.]])
 
 X = 2.*Sx

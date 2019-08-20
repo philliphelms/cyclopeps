@@ -13,7 +13,7 @@ class test_cal_energy(unittest.TestCase):
         Nx = 3
         Ny = 3
         d = 2
-        D = 3
+        D = 2
         chi = 10
         norm_tol = 1e-5
         # Get mpo
