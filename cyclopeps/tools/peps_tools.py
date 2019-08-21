@@ -807,6 +807,7 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True):
             E[col,:] = calc_single_column_op(peps[col],left_bmpo[col-1],ident_bmpo,ops[col],normalize=normalize)
         else:
             E[col,:] = calc_single_column_op(peps[col],left_bmpo[col-1],right_bmpo[col],ops[col],normalize=normalize)
+    mpiprint(8,'Energy [:,:] = \n{}'.format(E))
         
     if return_sum:
         return summ(E)

@@ -16,8 +16,8 @@ def return_op(Nx,Ny,params):
         params : 1D Array
             The parameters for the hamiltonian.
             Here,
-                params[0] = 
-                params[1] = 
+                params[0] = spin-spin interaction
+                params[1] = Magnetic Field
 
     Returns:
         op
@@ -54,8 +54,9 @@ def op(params):
     """
     Operator for sites in center of lattice
     """
+    print('In Central')
     # Interaction with field
-    op = -0.5*params[0]*einsum('io,IO->iIoO',X,I)
+    op = -0.25*params[0]*einsum('io,IO->iIoO',X,I)
     op += -0.25*params[0]*einsum('io,IO->iIoO',I,X)
     # Interaction between spins
     op += -params[1]*einsum('io,IO->iIoO',Z,Z)
@@ -66,8 +67,9 @@ def op0(params):
     """
     Operator for sites (0,1)
     """
+    print('In 0')
     # Interaction with field
-    op = -0.25*params[0]*einsum('io,IO->iIoO',X,I)
+    op = -0.5*params[0]*einsum('io,IO->iIoO',X,I)
     op += -0.25*params[0]*einsum('io,IO->iIoO',I,X)
     # Interaction between spins
     op += -params[1]*einsum('io,IO->iIoO',Z,Z)
@@ -78,6 +80,7 @@ def opN(params):
     """
     Operator for site (N-1,N)
     """
+    print('we are here')
     # Interaction with field
     op = -0.25*params[0]*einsum('io,IO->iIoO',X,I)
     op += -0.5*params[0]*einsum('io,IO->iIoO',I,X)
