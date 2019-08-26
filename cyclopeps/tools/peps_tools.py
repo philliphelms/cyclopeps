@@ -312,7 +312,9 @@ def normalize_peps(peps,max_iter=20,norm_tol=20,chi=4,up=1.0,
     Nx = peps.Nx
     Ny = peps.Ny
 
-    pwr = -1.0 / (2*Nx*Ny)
+    pwr = -1.0 / (2*Nx*Ny) # NOTE: if trying to use this procedure to 
+                           # normalize a partition function, remove
+                           # the factor of 2 in this denominator
     mpiprint(2, '\n[binarySearch] shape=({},{}), chi={}'.format(Nx,Ny,chi))
 
     # get initial scale factor
