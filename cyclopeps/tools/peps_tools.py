@@ -19,7 +19,7 @@ from cyclopeps.tools.utils import *
 from cyclopeps.tools.mps_tools import MPS,contract_mps
 from cyclopeps.tools.env_tools import *
 from numpy import float_
-from numpy import isnan, power, allclose
+from numpy import isnan, power
 import copy
 import mps_tools
 
