@@ -274,6 +274,7 @@ def tebd_step(peps,ham,step_size,chi=None,als_iter=100,als_tol=1e-10):
 def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None,als_iter=100,als_tol=1e-10):
     """
     """
+    mpiprint(0,'\nStarting Calculation for (D,chi,dt) = (?,{},{})'.format(chi,step_size))
     nSite = len(peps)*len(peps[0])
 
     # Compute Initial Energy
@@ -364,33 +365,32 @@ def run_tebd(Nx,Ny,d,ham,
     # Ensure the optimization parameters, namely the
     # bond dimension, trotter step size, and number
     # of trotter steps are compatable.
-    # PH - Should add conv_tol and chi to this so it can be a list
-    if not hasattr(D,'__len__'): 
-        if (not hasattr(step_size,'__len__')) and (not hasattr(n_step,'__len__')):
-            D = [D]
-        elif hasattr(step_size,'__len__'):
-            D = [D]*len(step_size)
-            n_step = [n_step]*len(step_size)
-        elif hasattr(n_step,'__len__'):
-            D = [D]*len(n_step)
-            step_size = [step_size]*len(n_step)
-        else:
-            D = [D]
-            n_step = [n_step]
-            step_size = [step_size]
+    if hasattr(D,'__len__'):
+        n_calcs = len(D)
+    elif hasattr(step_size,'__len__'):
+        n_calcs = len(step_size)
+    elif hasattr(n_step,'__len__'):
+        n_calcs = len(n_step)
+    elif hasattr(conv_tol,'__len__'):
+        n_calcs = len(conv_tol)
+    elif hasattr(chi,'__len__'):
+        n_calcs = len(chi)
     else:
-        if hasattr(step_size,'__len__'):
-            assert(len(step_size) == len(D))
-        else:
-            step_size = [step_size]*len(D)
-        if hasattr(n_step,'__len__'):
-            assert(len(n_step) == len(D))
-        else:
-            n_step = [n_step]*len(D)
-    chi = [chi]*len(D)
-    conv_tol = [conv_tol]*len(D)
-    step_size = [step_size]*len(D)
-    n_step = [n_step]*len(D)
+        D = [D]
+        step_size = [step_size]
+        n_step = [n_step]
+        conv_tol = [conv_tol]
+        chi = [chi]
+    if not hasattr(D,'__len__'):
+        D = [D]*n_calcs
+    if not hasattr(step_size,'__len__'):
+        step_size = [step_size]*n_calcs
+    if not hasattr(n_step,'__len__'):
+        n_step = [n_step]*n_calcs
+    if not hasattr(conv_tol,'__len__'):
+        conv_tol = [conv_tol]*n_calcs
+    if not hasattr(chi,'__len__'):
+        chi = [chi]*n_calcs
     
     # Create a random peps
     peps = PEPS(Nx=Nx,Ny=Ny,d=d,D=D[0],
@@ -412,7 +412,7 @@ def run_tebd(Nx,Ny,d,ham,
                             als_tol=als_tol)
 
         # Increase MBD if needed
-        if len(D)-1 > Dind:
+        if (len(D)-1 > Dind) and (D[Dind+1] > D[Dind]):
             peps.increase_mbd(D[Dind+1],chi=chi[Dind+1])
 
     # Print out results

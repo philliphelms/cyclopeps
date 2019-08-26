@@ -10,8 +10,8 @@ class test_cal_energy(unittest.TestCase):
         from cyclopeps.algs.tebd import run_tebd
         mpiprint(0,'\n'+'='*50+'\nPeps Normalization test\n'+'-'*50)
         # Create PEPS
-        Nx = 3
-        Ny = 3
+        Nx = 5
+        Ny = 5
         d = 2
         D = 2
         chi = 10
@@ -19,7 +19,7 @@ class test_cal_energy(unittest.TestCase):
         # Get mpo
         ham = return_op(Nx,Ny,(1.,2.))
         # Run TEBD
-        Ef = run_tebd(Nx,Ny,d,ham,D=D,chi=chi)
+        Ef = run_tebd(Nx,Ny,d,ham,D=D,chi=chi,n_step=100)
         print('Final  E = {}'.format(Ef))
 
         mpiprint(0,'Passed\n'+'='*50)

@@ -54,7 +54,6 @@ def op(params):
     """
     Operator for sites in center of lattice
     """
-    print('In Central')
     # Interaction with field
     op = -0.25*params[0]*einsum('io,IO->iIoO',X,I)
     op += -0.25*params[0]*einsum('io,IO->iIoO',I,X)
@@ -67,7 +66,6 @@ def op0(params):
     """
     Operator for sites (0,1)
     """
-    print('In 0')
     # Interaction with field
     op = -0.5*params[0]*einsum('io,IO->iIoO',X,I)
     op += -0.25*params[0]*einsum('io,IO->iIoO',I,X)
@@ -80,7 +78,6 @@ def opN(params):
     """
     Operator for site (N-1,N)
     """
-    print('we are here')
     # Interaction with field
     op = -0.25*params[0]*einsum('io,IO->iIoO',X,I)
     op += -0.5*params[0]*einsum('io,IO->iIoO',I,X)

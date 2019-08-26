@@ -12,6 +12,13 @@ from cyclopeps.tools.mps_tools import MPS
 from scipy.linalg import expm as sla_expm
 import copy
 
+def quick_op(op1,op2):
+    """
+    Convert two local operators (2 legs each)
+    into an operator between sites (4 legs)
+    """
+    return einsum('io,IO->iIoO',op1,op2)
+
 def expm(m,a=1.):
     """
     Take the exponential of a matrix
