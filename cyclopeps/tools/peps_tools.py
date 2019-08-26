@@ -19,7 +19,7 @@ from cyclopeps.tools.utils import *
 from cyclopeps.tools.mps_tools import MPS,contract_mps
 from cyclopeps.tools.env_tools import *
 from numpy import float_
-from numpy import isnan, power
+from numpy import isnan, power, allclose
 import copy
 import mps_tools
 
@@ -263,7 +263,7 @@ def multiply_peps_elements(peps,const):
     return peps
 
 def normalize_peps(peps,max_iter=20,norm_tol=20,chi=4,up=1.0,
-                    down=0.0,singleLayer=True,iprt=1):
+                    down=0.0,singleLayer=True):
     """
     Normalize the full PEPS by doing a binary search on the
     interval [down, up] for the factor which, when multiplying
@@ -272,7 +272,7 @@ def normalize_peps(peps,max_iter=20,norm_tol=20,chi=4,up=1.0,
 
     Args:
         peps : List
-            The PEPS to be normalized, stored as a list of lists
+            The PEPS to be normalized, given as a PEPS object
 
     Kwargs:
         max_iter : int
@@ -288,7 +288,7 @@ def normalize_peps(peps,max_iter=20,norm_tol=20,chi=4,up=1.0,
         up : float
             The upper bound for the binary search factor. Default is 1.0,
             which assumes that the norm of the initial PEPS is greater
-            than 1 (this is almost always true).
+            than 10^(-norm_tol) (this is almost always true).
         down : float
             The lower bound for the binary search factor. Default is 0.0.
             The intial guess for the scale factor is the midpoint
@@ -298,9 +298,6 @@ def normalize_peps(peps,max_iter=20,norm_tol=20,chi=4,up=1.0,
         single_layer : bool
             Indicates whether to use a single layer environment
             (currently it is the only option...)
-        iprt : boolean
-             Set to True if you want output messages as the function runs,
-             else set it to False.
 
     Returns:
         norm : float
@@ -312,18 +309,17 @@ def normalize_peps(peps,max_iter=20,norm_tol=20,chi=4,up=1.0,
     """
 
     # Figure out peps size
-    Nx = len(peps)
-    Ny = len(peps[0])
+    Nx = peps.Nx
+    Ny = peps.Ny
 
-    pwr = -1.0 / (Nx*Ny)
-    if iprt:
-        mpiprint(2, '\n[binarySearch] shape=({},{}), chi={}'.format(Nx,Ny,chi))
+    pwr = -1.0 / (2*Nx*Ny)
+    mpiprint(2, '\n[binarySearch] shape=({},{}), chi={}'.format(Nx,Ny,chi))
 
     # get initial scale factor
     scale = (up+down)/2.0
 
     # begin search
-    peps_try = multiply_peps_elements(peps,scale)
+    peps_try = multiply_peps_elements(peps.copy().tensors,scale)
 
     istep = 0
     while True:
@@ -333,18 +329,16 @@ def normalize_peps(peps,max_iter=20,norm_tol=20,chi=4,up=1.0,
             z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer)
         except:
             pass
-        if iprt:
-            mpiprint(2, 'step={}, (down,up)=({},{}), scale={}, norm={}'.format(
+        mpiprint(2, 'step={}, (down,up)=({},{}), scale={}, norm={}'.format(
                                                         istep,down,up,scale,z))
         # if an exception is thrown in calc_peps_norm because scale is too large
         if z == None:
             up = scale
             scale = scale / 2.0
-        # adjsut scale to make z into target region
+        # adjust scale to make z into target region
         else:
             if abs(z-1.0) < 1e-6:
-                if iprt:
-                    mpiprint(2, 'converged scale = {}, norm = {}'.format(scale,z))
+                mpiprint(2, 'converged scale = {}, norm = {}'.format(scale,z))
                 break
             if z < 10.0**(-1*norm_tol) or z > 10.0**(norm_tol) or isnan(z):
                 if z > 1.0 or isnan(z):
@@ -357,14 +351,13 @@ def normalize_peps(peps,max_iter=20,norm_tol=20,chi=4,up=1.0,
             else:
                 sfac = power(z,pwr)
                 scale = sfac*scale
-                if iprt:
-                    mpiprint(2, 'apply exact scale: {}'.format(scale))
+                mpiprint(2, 'apply exact scale: {}'.format(scale))
 
         if istep == max_iter:
-            mpiprint(2, 'binarySearch exceeds max_iter... terminating')
+            mpiprint(0, 'binarySearch normalization exceeds max_iter... terminating')
             break
 
-        peps_try = multiply_peps_elements(peps,scale)
+        peps_try = multiply_peps_elements(peps.copy().tensors,scale)
 
     return z, peps_try
 
@@ -1036,7 +1029,7 @@ class PEPS:
         return calc_peps_norm(self.tensors,chi=chi,singleLayer=singleLayer)
 
     def normalize(self,max_iter=None,norm_tol=None,chi=None,up=None,down=None,
-                    singleLayer=None,iprt=None):
+                    singleLayer=None):
         """
         Normalize the full PEPS
 
@@ -1068,9 +1061,6 @@ class PEPS:
             single_layer : bool
                 Indicates whether to use a single layer environment
                 (currently it is the only option...)
-            iprt : boolean
-                 Set to True if you want output messages as the function runs,
-                 else set it to False.
 
         Returns:
             norm : float
@@ -1084,16 +1074,14 @@ class PEPS:
         if up is None: up = self.norm_BS_upper
         if down is None: down = self.norm_BS_lower
         if singleLayer is None: singleLayer = self.singleLayer
-        if iprt is None: iprt = self.norm_BS_print
         # Run the normalization procedure
-        norm, self.tensors = normalize_peps(self.tensors,
+        norm, self.tensors = normalize_peps(self,
                                       max_iter = max_iter,
                                       norm_tol = norm_tol,
                                       chi = chi,
                                       up = up,
                                       down = down,
-                                      singleLayer=singleLayer,
-                                      iprt = iprt)
+                                      singleLayer=singleLayer)
 
         return norm
 
@@ -1144,6 +1132,19 @@ class PEPS:
 
     def __setitem__(self,ind,item):
         self.tensors[ind] = item
+
+    def copy(self):
+        peps_copy = PEPS(Nx=self.Nx,Ny=self.Ny,d=self.d,D=self.D,
+                         chi=self.chi,norm_tol=self.norm_tol,
+                         singleLayer=self.singleLayer,
+                         max_norm_iter=self.max_norm_iter,
+                         norm_BS_upper=self.norm_BS_upper,
+                         norm_BS_lower=self.norm_BS_lower,
+                         dtype=self.dtype,normalize=False)
+        for i in range(self.Nx):
+            for j in range(self.Ny):
+                peps_copy.tensors[i][j] = copy.deepcopy(self.tensors[i][j])
+        return peps_copy
 
     def rotate(self,clockwise=True):
         """

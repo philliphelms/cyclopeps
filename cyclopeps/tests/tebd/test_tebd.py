@@ -15,7 +15,6 @@ class test_cal_energy(unittest.TestCase):
         d = 2
         D = 2
         chi = 10
-        norm_tol = 1e-5
         # Get mpo
         ham = return_op(Nx,Ny,(1.,2.))
         # Run TEBD
