@@ -14,8 +14,7 @@ class test_cal_energy(unittest.TestCase):
         d = 2
         D = 3
         chi = 10
-        norm_tol = 1e-5
-        peps = PEPS(Nx=Nx,Ny=Ny,d=d,D=D,chi=chi,norm_tol=norm_tol)
+        peps = PEPS(Nx=Nx,Ny=Ny,d=d,D=D,chi=chi)
         # Get ops
         ham = return_op(Nx,Ny,(1.,2.))
         norm = peps.calc_norm(chi=20) 

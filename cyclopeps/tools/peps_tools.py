@@ -9,8 +9,8 @@ Date: July 2019
           (5) top
              |
 (1) left  ___|___ (4) right
-             |\ 
-             | \ 
+             |\
+             | \
     (2) bottom  (3) physical
 """
 
@@ -19,6 +19,7 @@ from cyclopeps.tools.utils import *
 from cyclopeps.tools.mps_tools import MPS,contract_mps
 from cyclopeps.tools.env_tools import *
 from numpy import float_
+from numpy import isnan, power
 import copy
 import mps_tools
 
@@ -26,7 +27,7 @@ def rotate_peps(peps,clockwise=True):
     """
     Rotate a peps
 
-    Args: 
+    Args:
         peps : a list of a list containing peps tensors
             The initial peps tensor
 
@@ -69,7 +70,7 @@ def rotate_peps(peps,clockwise=True):
 
     # Return Rotated peps
     return rpeps
-        
+
 def flip_peps(peps):
     """
     Flip a peps horizontally
@@ -108,7 +109,7 @@ def flip_peps(peps):
     return fpeps
 
 def peps_col_to_mps(peps_col,mk_copy=True):
-    """ 
+    """
     Convert a PEPS column into an MPS.
     The structure of the resulting MPS tensors is:
 
@@ -126,8 +127,8 @@ def peps_col_to_mps(peps_col,mk_copy=True):
         mk_copy : bool
             Specify whether a copy of the peps col should be made
             and put into the MPS. Default is True, meaning a copy
-            is made. 
-    
+            is made.
+
     Returns:
         mps : 1D Array
             The resulting 1D array containing the PEPS column's tensor
@@ -172,7 +173,7 @@ def calc_peps_col_norm(peps_col):
 
     # Convert peps column to an mps by lumping indices
     mps = peps_col_to_mps(peps_col)
-    
+
     # Compute the norm of that mps
     norm = 0.5*mps.norm()
 
@@ -200,7 +201,7 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,dtype=float_):
 
     Returns:
         ten : ndarray
-            A random tensor with the correct dimensions 
+            A random tensor with the correct dimensions
             for the given site
     """
     # Determine the correct left bond dimension
@@ -261,28 +262,39 @@ def multiply_peps_elements(peps,const):
             peps[xind][yind] *= const
     return peps
 
-def normalize_peps(peps,max_iter=100,norm_tol=1e2,change_int=1e-2,chi=4,singleLayer=True):
+def normalize_peps(peps,max_iter=20,norm_tol=20,chi=4,up=1.0,
+                    down=0.0,singleLayer=True):
     """
-    Normalize the full PEPS
+    Normalize the full PEPS by doing a binary search on the
+    interval [down, up] for the factor which, when multiplying
+    every element of the PEPS tensors, yields a rescaled PEPS
+    with norm equal to 1.0.
 
     Args:
         peps : List
-            The PEPS to be normalized, stored as a list of lists
+            The PEPS to be normalized, given as a PEPS object
 
     Kwargs:
         max_iter : int
-            The maximum number of iterations of the normalization 
-            procedure. Default is 100.
-        norm_tol : float
-            How near 1. the norm must be for the normalization 
-            procedure to be considered to be converged. Default
-            is 100.
-        change_int : float
-            The magnitude with which we change entries in the 
-            PEPS tensor to try to get it closer to 1. The default
-            is 1e-2.
+            The maximum number of iterations of the normalization
+            procedure. Default is 20.
+        norm_tol : int
+            We require the measured norm to be within the bounds
+            10^(-norm_tol) < norm < 10^(norm_tol) before we do
+            exact arithmetic to get the norm very close to 1. Default
+            is 20.
         chi : int
             Boundary MPO maximum bond dimension
+        up : float
+            The upper bound for the binary search factor. Default is 1.0,
+            which assumes that the norm of the initial PEPS is greater
+            than 10^(-norm_tol) (this is almost always true).
+        down : float
+            The lower bound for the binary search factor. Default is 0.0.
+            The intial guess for the scale factor is the midpoint
+            between up and down. It's not recommended to adjust the
+            up and down parameters unless you really understand what
+            they are doing.
         single_layer : bool
             Indicates whether to use a single layer environment
             (currently it is the only option...)
@@ -292,63 +304,64 @@ def normalize_peps(peps,max_iter=100,norm_tol=1e2,change_int=1e-2,chi=4,singleLa
             The approximate norm of the PEPS after the normalization
             procedure
         peps : list
-            The renormalized version of the PEPS, stored as a 
+            The normalized version of the PEPS, stored as a
             list of lists
     """
 
     # Figure out peps size
-    Nx = len(peps)
-    Ny = len(peps[0])
+    Nx = peps.Nx
+    Ny = peps.Ny
 
-    # Calculate the norm
-    norm = calc_peps_norm(peps,chi=chi,singleLayer=singleLayer)
-    too_high = (abs(norm) > 1.+norm_tol)
-    mpiprint(2,'Initial Norm = {}'.format(norm))
+    pwr = -1.0 / (2*Nx*Ny) # NOTE: if trying to use this procedure to 
+                           # normalize a partition function, remove
+                           # the factor of 2 in this denominator
+    mpiprint(2, '\n[binarySearch] shape=({},{}), chi={}'.format(Nx,Ny,chi))
 
-    if not too_high:
-        mpiprint(2,'Making norm greater than 1.')
+    # get initial scale factor
+    scale = (up+down)/2.0
 
-    while not too_high:
-        # increase tensor values
-        peps = multiply_peps_elements(peps,(1.+change_int))
-        # Recalculate norm
-        norm = calc_peps_norm(peps,chi=chi,singleLayer=singleLayer)
+    # begin search
+    peps_try = multiply_peps_elements(peps.copy().tensors,scale)
 
-        # Check if we should keep the change
-        if (abs(norm) < 1.):
-            # Need to increase further
-            change_int *= 2.
-            mpiprint(2,'Norm ({}) below 1'.format(norm))
+    istep = 0
+    while True:
+        try:
+            istep += 1
+            z = None
+            z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer)
+        except:
+            pass
+        mpiprint(2, 'step={}, (down,up)=({},{}), scale={}, norm={}'.format(
+                                                        istep,down,up,scale,z))
+        # if an exception is thrown in calc_peps_norm because scale is too large
+        if z == None:
+            up = scale
+            scale = scale / 2.0
+        # adjust scale to make z into target region
         else:
-            mpiprint(2,'Norm ({}) above 1.'.format(norm))
-            too_high = True
+            if abs(z-1.0) < 1e-6:
+                mpiprint(2, 'converged scale = {}, norm = {}'.format(scale,z))
+                break
+            if z < 10.0**(-1*norm_tol) or z > 10.0**(norm_tol) or isnan(z):
+                if z > 1.0 or isnan(z):
+                    up = scale
+                    scale = (up+down)/2.0
+                else:
+                    down = scale
+                    scale = (up+down)/2.0
+            # close to convergence, apply "exact" scale
+            else:
+                sfac = power(z,pwr)
+                scale = sfac*scale
+                mpiprint(2, 'apply exact scale: {}'.format(scale))
 
-    converged = False
-    nIter = 0
-    mpiprint(2,'Decreasing norm towards 1')
-    while not converged:
-        # Check for convergence
-        if (abs(norm) < 1.+norm_tol) and (abs(norm) > 1.-norm_tol):
-            converged = True
+        if istep == max_iter:
+            mpiprint(0, 'binarySearch normalization exceeds max_iter... terminating')
             break
-        else:
-            nIter += 1
-       
-        # Try to decrease tensor values
-        peps = multiply_peps_elements(peps,1./(1.+change_int))
-        # Recalculate norm
-        norm = calc_peps_norm(peps,chi=chi,singleLayer=singleLayer)
 
-        # Check if we should keep the change
-        if (abs(norm) < 1.):
-            # We have gone too far
-            peps = multiply_peps_elements(peps,(1.+change_int))
-            change_int /= 2.
-            mpiprint(2,'\tNorm unchanged ({})'.format(norm))
-        else:
-            mpiprint(2,'New Norm = {}'.format(norm))
+        peps_try = multiply_peps_elements(peps.copy().tensors,scale)
 
-    return peps
+    return z, peps_try
 
 def calc_peps_norm(peps,chi=4,singleLayer=True):
     """
@@ -356,7 +369,7 @@ def calc_peps_norm(peps,chi=4,singleLayer=True):
 
     Args:
         peps : List
-            A list of a list of tensors, corresponding to 
+            A list of a list of tensors, corresponding to
             the PEPS for which we will compute the norm
 
     Kwargs:
@@ -439,7 +452,7 @@ def calc_top_envs(peps_col,left_bmpo,right_bmpo):
 
     # Figure out height of peps column
     Ny = len(peps_col)
-    
+
     # Compute top environment
     top_env = [None]*Ny
     for row in reversed(range(Ny)):
@@ -566,7 +579,7 @@ def make_N_positive(N,hermitian=True,positive=True):
         Nmat = einsum('ij,j,kj->ik',v,u,v)
         N = reshape(Nmat,(n1,n2,n3,n4))
         N = einsum('UDud->UuDd',N)
-        
+
         # Check to ensure N is positive
         if DEBUG:
             Ntmp = copy.deepcopy(N)
@@ -603,7 +616,7 @@ def calc_local_env(peps1,peps2,env_top,env_bot,lbmpo,rbmpo,reduced=True,hermitia
             environment. Currently, this is the only option
             available.
         hermitian : bool
-            Approximate the environment with its nearest 
+            Approximate the environment with its nearest
             hermitian approximate
         positive : bool
             Approximate the environment with its nearest
@@ -628,7 +641,7 @@ def calc_local_env(peps1,peps2,env_top,env_bot,lbmpo,rbmpo,reduced=True,hermitia
             tmp = einsum('wyxtu,uxz->wytz',tmp,rbmpo[3])
             norm =einsum('wytz,wytz->',tmp,env_top)
             print('Tedious norm = {}'.format(norm))
-            
+
         # Get reduced tensors
         ub,phys_b,phys_t,vt = reduce_tensors(peps1,peps2)
 
@@ -670,7 +683,7 @@ def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
     if phys_b_ket is None:
         phys_b_ket = conj(copy.deepcopy(phys_b_bra))
 
-    # Compute Energy (or op value 
+    # Compute Energy (or op value
     if reduced:
         tmp1= einsum('APU,UQB->APQB',phys_b_bra,phys_t_bra)
         tmp1 = einsum('APQB,AaBb->aPQb',tmp1,N)
@@ -678,7 +691,7 @@ def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
         tmp = einsum('aPQb,apqb->PQpq',tmp1,tmp2)
         if ham is not None:
             E = einsum('PQpq,PQpq->',tmp,ham)
-        else: 
+        else:
             E = einsum('PQPQ->',tmp)
         norm = einsum('PQPQ->',tmp)
         mpiprint(7,'E = {}/{} = {}'.format(E,norm,E/norm))
@@ -694,7 +707,7 @@ def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
 def calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,positive=True):
 
     if row == 0:
-        if len(peps_col) == 2: 
+        if len(peps_col) == 2:
             # Only two sites in column, use identity at both ends
             ub,phys_b,phys_t,vt,N = calc_local_env(peps_col[row],
                                              peps_col[row+1],
@@ -737,9 +750,9 @@ def calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,po
 
 def calc_single_column_op(peps_col,left_bmpo,right_bmpo,ops_col,normalize=True):
     """
-    Calculate contribution to operator from interactions within 
+    Calculate contribution to operator from interactions within
     a single column.
-    
+
     Args:
         peps_col:
             A single column of the peps
@@ -768,20 +781,20 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True):
     """
     Calculate contribution to operator from interactions within all columns,
     ignoring interactions between columns
-    
+
     Args:
         peps : A list of lists of peps tensors
             The PEPS to be normalized
-        ops : 
+        ops :
             The operator to be contracted with the peps
-        
+
     Kwargs:
         chi : int
             The maximum bond dimension for the boundary mpo
         return_sum : bool
-            Whether to return the summation of all energies or 
+            Whether to return the summation of all energies or
             a 2D array showing the energy contribution from each bond.
-        
+
     Returns:
         val : float
             The contribution of the column's interactions to
@@ -808,7 +821,7 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True):
         else:
             E[col,:] = calc_single_column_op(peps[col],left_bmpo[col-1],right_bmpo[col],ops[col],normalize=normalize)
     mpiprint(8,'Energy [:,:] = \n{}'.format(E))
-        
+
     if return_sum:
         return summ(E)
     else:
@@ -821,13 +834,13 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True):
     Args:
         peps : A list of lists of peps tensors
             The PEPS to be normalized
-        ops : 
+        ops :
             The operator to be contracted with the peps
 
     Kwargs:
         chi : int
             The maximum bond dimension for the boundary mpo
-        
+
     Returns:
         val : float
             The resulting observable's expectation value
@@ -853,10 +866,10 @@ class PEPS:
     """
 
     def __init__(self,Nx=10,Ny=10,d=2,D=2,
-                 chi=None,norm_tol=1e-5,
-                 singleLayer=True,max_norm_iter=100,
-                 norm_change_int=3e-2,dtype=float_,
-                 normalize=True):
+                 chi=None,norm_tol=20,
+                 singleLayer=True,max_norm_iter=20,
+                 norm_BS_upper=1.0,norm_BS_lower=0.0,
+                 norm_BS_print=1,dtype=float_,normalize=True):
         """
         Create a random PEPS object
 
@@ -866,7 +879,7 @@ class PEPS:
         Kwargs:
             Nx : int
                 The length of the lattice in the x-direction
-            Ny : int 
+            Ny : int
                 The length of the lattice in the y-direction
             d : int
                 The local bond dimension
@@ -875,15 +888,24 @@ class PEPS:
             chi : int
                 The boundary mpo maximum bond dimension
             norm_tol : float
-                How close to 1. the norm should be
+                How close to 1. the norm should be before exact
+                artihmetic is used in the normalization procedure.
+                See documentation of normalize_peps() function
+                for more details.
             singleLayer : bool
                 Whether to use a single layer environment
                 (currently only option implemented)
             max_norm_iter : int
                 The maximum number of normalization iterations
-            norm_change_int : float
-                Constant to multiply peps tensor entries to 
-                approach norm = 1.
+            norm_BS_upper : float
+                The upper bound for the binary search factor
+                during normalization.
+            norm_BS_lower : float
+                The lower bound for the binary search factor
+                during normalization.
+            norm_BS_print : boolean
+                Controls output of binary search normalization
+                procedure.
             dtype : dtype
                 The data type for the PEPS
             normalize : bool
@@ -905,8 +927,10 @@ class PEPS:
         self.norm_tol    = norm_tol
         self.singleLayer = singleLayer
         self.max_norm_iter = max_norm_iter
-        self.norm_change_int = norm_change_int
         self.dtype       = dtype
+        self.norm_BS_upper = norm_BS_upper
+        self.norm_BS_lower = norm_BS_lower
+        self.norm_BS_print = norm_BS_print
 
         # Make a random PEPS
         self.tensors = make_rand_peps(self.Nx,self.Ny,self.d,self.D,dtype=self.dtype)
@@ -940,7 +964,7 @@ class PEPS:
 
         returns:
             bound_mpo : list
-                An mpo stored as a list, corresponding to the 
+                An mpo stored as a list, corresponding to the
                 resulting boundary mpo.
         """
         if chi is None:
@@ -974,7 +998,7 @@ class PEPS:
 
         returns:
             bound_mpo : list
-                An mpo stored as a list, corresponding to the 
+                An mpo stored as a list, corresponding to the
                 resulting boundary mpo.
 
         """
@@ -1006,7 +1030,8 @@ class PEPS:
         if singleLayer is None: singleLayer = self.singleLayer
         return calc_peps_norm(self.tensors,chi=chi,singleLayer=singleLayer)
 
-    def normalize(self,max_iter=None,norm_tol=None,change_int=None,chi=None,singleLayer=None):
+    def normalize(self,max_iter=None,norm_tol=None,chi=None,up=None,down=None,
+                    singleLayer=None):
         """
         Normalize the full PEPS
 
@@ -1016,19 +1041,25 @@ class PEPS:
 
         Kwargs:
             max_iter : int
-                The maximum number of iterations of the normalization 
-                procedure. Default is 100.
-            norm_tol : float
-                How near 1. the norm must be for the normalization 
-                procedure to be considered to be converged. Default
-                is 100.
-            change_int : float
-                The magnitude with which we change entries in the 
-                PEPS tensor to try to get it closer to 1. The default
-                is 1e-2.
+                The maximum number of iterations of the normalization
+                procedure. Default is 20.
+            norm_tol : int
+                We require the measured norm to be within the bounds
+                10^(-norm_tol) < norm < 10^(norm_tol) before we do
+                exact arithmetic to get the norm very close to 1. Default
+                is 20.
             chi : int
-                The boundary MPO's maximum bond dimension, current default
-                is the current bond dimension squared.
+                Boundary MPO maximum bond dimension
+            up : float
+                The upper bound for the binary search factor. Default is 1.0,
+                which assumes that the norm of the initial PEPS is greater
+                than 1 (this is almost always true).
+            down : float
+                The lower bound for the binary search factor. Default is 0.0.
+                The intial guess for the scale factor is the midpoint
+                between up and down. It's not recommended to adjust the
+                up and down parameters unless you really understand what
+                they are doing.
             single_layer : bool
                 Indicates whether to use a single layer environment
                 (currently it is the only option...)
@@ -1042,19 +1073,18 @@ class PEPS:
         if chi is None: chi = self.chi
         if max_iter is None: max_iter = self.max_norm_iter
         if norm_tol is None: norm_tol = self.norm_tol
-        if change_int is None: change_int = self.norm_change_int
+        if up is None: up = self.norm_BS_upper
+        if down is None: down = self.norm_BS_lower
         if singleLayer is None: singleLayer = self.singleLayer
         # Run the normalization procedure
-        self.tensors = normalize_peps(self.tensors,
+        norm, self.tensors = normalize_peps(self,
                                       max_iter = max_iter,
                                       norm_tol = norm_tol,
-                                      change_int = change_int,
                                       chi = chi,
+                                      up = up,
+                                      down = down,
                                       singleLayer=singleLayer)
-        
-        # Calculate the norm
-        norm = self.calc_norm(chi=chi,singleLayer=singleLayer)
-        # Once complete, return norm
+
         return norm
 
     def calc_op(self,ops,chi=None,normalize=True):
@@ -1064,13 +1094,13 @@ class PEPS:
         Args:
             self : PEPS Object
                 The PEPS to be normalized
-            ops : 
+            ops :
                 The operator to be contracted with the peps
 
         Kwargs:
             chi : int
                 The maximum bond dimension for the boundary mpo
-            
+
         Returns:
             val : float
                 The resulting observable's expectation value
@@ -1105,11 +1135,24 @@ class PEPS:
     def __setitem__(self,ind,item):
         self.tensors[ind] = item
 
+    def copy(self):
+        peps_copy = PEPS(Nx=self.Nx,Ny=self.Ny,d=self.d,D=self.D,
+                         chi=self.chi,norm_tol=self.norm_tol,
+                         singleLayer=self.singleLayer,
+                         max_norm_iter=self.max_norm_iter,
+                         norm_BS_upper=self.norm_BS_upper,
+                         norm_BS_lower=self.norm_BS_lower,
+                         dtype=self.dtype,normalize=False)
+        for i in range(self.Nx):
+            for j in range(self.Ny):
+                peps_copy.tensors[i][j] = copy.deepcopy(self.tensors[i][j])
+        return peps_copy
+
     def rotate(self,clockwise=True):
         """
         Rotate the peps
 
-        Args: 
+        Args:
             peps : a list of a list containing peps tensors
                 The initial peps tensor
 

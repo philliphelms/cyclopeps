@@ -306,8 +306,8 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None,als_iter=100,als_tol=
 
 def run_tebd(Nx,Ny,d,ham,
              D=3,chi=10,
-             norm_tol=1e-5,singleLayer=True,
-             max_norm_iter=20,norm_change_int=3e-2,
+             norm_tol=20,singleLayer=True,
+             max_norm_iter=20,
              dtype=float_,
              step_size=0.2,n_step=5,conv_tol=1e-8,
              als_iter=5,als_tol=1e-10):
@@ -335,15 +335,15 @@ def run_tebd(Nx,Ny,d,ham,
         chi : int
             The boundary mpo maximum bond dimension
         norm_tol : float
-            How close to 1. the norm should be
+            How close to 1. the norm should be before
+            exact arithmetic is used in the normalization
+            procedure. See documentation of 
+            peps_tool.normalize_peps() function for more details.
         singleLayer : bool
             Whether to use a single layer environment
             (currently only option implemented)
         max_norm_iter : int
             The maximum number of normalization iterations
-        norm_change_int : float
-            Constant to multiply peps tensor entries to 
-            approach norm = 1.
         dtype : dtype
             The data type for the PEPS
         step_size : float
@@ -396,7 +396,7 @@ def run_tebd(Nx,Ny,d,ham,
     peps = PEPS(Nx=Nx,Ny=Ny,d=d,D=D[0],
                 chi=chi[0],norm_tol=norm_tol,
                 singleLayer=singleLayer,max_norm_iter=max_norm_iter,
-                norm_change_int=norm_change_int,dtype=dtype)
+                dtype=dtype)
     
     # Loop over all (bond dims/step sizes/number of steps)
     for Dind in range(len(D)):
@@ -431,14 +431,13 @@ if __name__ == "__main__":
     d = 2
     D = 3
     chi = 10
-    norm_tol = 1e-5
     # Get Hamiltonian
     from cyclopeps.ops.itf import return_op
     ham = return_op(Nx,Ny,(1.,2.))
     # Run TEBD
     E = run_tebd(Nx,Ny,d,ham,
                  D=D,chi=chi,
-                 norm_tol=norm_tol,singleLayer=True,
-                 max_norm_iter=100,norm_change_int=3e-2,
+                 singleLayer=True,
+                 max_norm_iter=20,
                  dtype=float_,
                  step_size=0.1,n_step=10)

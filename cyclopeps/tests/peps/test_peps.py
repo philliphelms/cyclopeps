@@ -12,12 +12,10 @@ class test_peps(unittest.TestCase):
         d = 2
         D = 3
         chi = 10
-        norm_tol = 1e-5
-        peps = PEPS(Nx=Nx,Ny=Ny,d=d,D=D,chi=chi,norm_tol=norm_tol)
-        norm = peps.calc_norm(chi=20) 
+        peps = PEPS(Nx=Nx,Ny=Ny,d=d,D=D,chi=chi)
+        norm = peps.calc_norm(chi=chi) 
         print('Norm = {}'.format(norm))
-        self.assertTrue(norm < 1./norm_tol)
-        self.assertTrue(norm > norm_tol)
+        self.assertTrue(abs(1.0-norm) < 1e-3)
         mpiprint(0,'Passed\n'+'='*50)
 
     def test_rotate(self):
