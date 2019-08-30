@@ -533,7 +533,7 @@ def reduce_tensors(peps1,peps2):
     if DEBUG:
         # Check to make sure initial and reduced peps tensors are identical
         final = einsum('LDRa,aPb,bpc,lcru->lLDPRpru',ub,phys_b,phys_t,vt)
-        print('Reduced Difference = {}'.format(summ(abss(original-final))))
+        mpiprint(0,'Reduced Difference = {}'.format(summ(abss(original-final))))
 
     # Return result
     return ub,phys_b,phys_t,vt
@@ -567,7 +567,7 @@ def make_N_positive(N,hermitian=True,positive=True):
             Ntmp = einsum('UuDd->UDud',Ntmp)
             (n1_,n2_,n3_,n4_) = Ntmp.shape
             Ntmp = reshape(Ntmp,(n1_*n2_,n3_*n4_))
-            print('Check if this N is hermitian:\n{}'.format(Ntmp))
+            mpiprint(0,'Check if this N is hermitian:\n{}'.format(Ntmp))
 
     # Get a positive approximation of the environment
     if positive:
@@ -586,7 +586,7 @@ def make_N_positive(N,hermitian=True,positive=True):
             Ntmp = einsum('UuDd->UDud',Ntmp)
             (n1_,n2_,n3_,n4_) = Ntmp.shape
             Ntmp = reshape(Ntmp,(n1_*n2_,n3_*n4_))
-            print('This makes N positive, but not every element of N positive??:\n{}'.format(Ntmp))
+            mpiprint(0,'This makes N positive, but not every element of N positive??:\n{}'.format(Ntmp))
 
     return N
 
@@ -640,7 +640,7 @@ def calc_local_env(peps1,peps2,env_top,env_bot,lbmpo,rbmpo,reduced=True,hermitia
             tmp = einsum('wvnrtu,vnrxy->wyxtu',tmp,peps2)
             tmp = einsum('wyxtu,uxz->wytz',tmp,rbmpo[3])
             norm =einsum('wytz,wytz->',tmp,env_top)
-            print('Tedious norm = {}'.format(norm))
+            mpiprint(0,'Tedious norm = {}'.format(norm))
 
         # Get reduced tensors
         ub,phys_b,phys_t,vt = reduce_tensors(peps1,peps2)

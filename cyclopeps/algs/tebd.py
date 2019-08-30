@@ -268,6 +268,8 @@ def tebd_step(peps,ham,step_size,chi=None,als_iter=100,als_tol=1e-10):
     Erow,peps = tebd_step_col(peps,ham[1],step_size,chi=chi,als_iter=als_iter,als_tol=als_tol)
     peps.rotate(clockwise=False)
     # Return results ---------------------------
+    mpiprint(5,'Column energies =\n{}'.format(Ecol))
+    mpiprint(5,'Row energies =\n{}'.format(Erow))
     E = summ(Ecol)+summ(Erow)
     return E,peps
 

@@ -13,7 +13,7 @@ chi= int(argv[5])
 
 
 # TEBD Parameters
-step_sizes = [0.05, 0.01, 0.001, 0.0001]
+step_sizes = [0.1, 0.05, 0.01, 0.001, 0.0001]
 n_step = 200
 
 # ---------------------------------------------------------
@@ -31,7 +31,7 @@ dr = 2./3.
 dl = 0.
 du = 0.
 dd = 0.
-sx = 10
+sx = -.1
 sy = 0.
 params = (jr,jl,ju,jd,cr,cl,cu,cd,dr,dl,du,dd,sx,sy)
 

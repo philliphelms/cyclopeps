@@ -99,9 +99,11 @@ def make_op(row,ju,jd,cu,cd,du,dd,sy):
     # Hopping between sites
 
     # Hop up
+    if DEBUG: mpiprint(0,'{} Sp_{}*Sm_{} - {} n_{}*v_{}'.format(ju[row]*exp(sy[row]),row,row+1,ju[row],row,row+1))
     op  = ju[row]*exp(sy[row])*quick_op(Sp,Sm)
     op -= ju[row]*quick_op(n,v)
     # Hop down
+    if DEBUG: mpiprint(0,'{} Sm_{}*Sp_{} - {} v_{}*n_{}'.format(jd[row]*exp(-sy[row]),row,row+1,jd[row],row,row+1))
     op += jd[row+1]*exp(-sy[row+1])*quick_op(Sm,Sp)
     op -= jd[row+1]*quick_op(v,n)
 
@@ -109,15 +111,19 @@ def make_op(row,ju,jd,cu,cd,du,dd,sy):
     # Top Site creation/Annihilation
 
     # Destroy upwards
-    op  = du[row+1]*exp(sy[row+1])*quick_op(I,Sp)
+    if DEBUG: mpiprint(0,'{} Sp_{} - {} n_{}'.format(du[row+1]*exp(sy[row+1]),row+1,du[row+1],row+1))
+    op += du[row+1]*exp(sy[row+1])*quick_op(I,Sp)
     op -= du[row+1]*quick_op(I,n)
     # Destroy downwards
+    if DEBUG: mpiprint(0,'{} Sp_{} - {} n_{}'.format(dd[row+1]*exp(-sy[row+1]),row+1,dd[row+1],row+1))
     op += dd[row+1]*exp(-sy[row+1])*quick_op(I,Sp)
     op -= dd[row+1]*quick_op(I,n)
     # Create upwards
+    if DEBUG: mpiprint(0,'{} Sm_{} - {} v_{}'.format(cu[row+1]*exp(sy[row+1]),row+1,cu[row+1],row+1))
     op += cu[row+1]*exp(sy[row+1])*quick_op(I,Sm)
     op -= cu[row+1]*quick_op(I,v)
     # Create Downwards
+    if DEBUG: mpiprint(0,'{} Sm_{} - {} v_{}'.format(cd[row+1]*exp(-sy[row+1]),row+1,cd[row+1],row+1))
     op += cd[row+1]*exp(-sy[row+1])*quick_op(I,Sm)
     op -= cd[row+1]*quick_op(I,v)
 
@@ -126,15 +132,19 @@ def make_op(row,ju,jd,cu,cd,du,dd,sy):
         # Bottom Site Creation/Annihilation
 
         # Destroy upwards
+        if DEBUG: mpiprint(0,'{} Sp_{} - {} n_{}'.format(du[row]*exp(sy[row]),row,du[row],row))
         op += du[row]*exp(sy[row])*quick_op(Sp,I)
         op -= du[row]*quick_op(n,I)
         # Destroy downwards
+        if DEBUG: mpiprint(0,'{} Sp_{} - {} n_{}'.format(dd[row]*exp(-sy[row]),row,dd[row],row))
         op += dd[row]*exp(-sy[row])*quick_op(Sp,I)
         op -= dd[row]*quick_op(n,I)
         # Create upwards
+        if DEBUG: mpiprint(0,'{} Sm_{} - {} v_{}'.format(cu[row]*exp(sy[row]),row,cu[row],row))
         op += cu[row]*exp(sy[row])*quick_op(Sm,I)
         op -= cu[row]*quick_op(v,I)
         # Create Downwards
+        if DEBUG: mpiprint(0,'{} Sm_{} - {} v_{}'.format(cd[row]*exp(-sy[row]),row,cd[row],row))
         op += cd[row]*exp(-sy[row])*quick_op(Sm,I)
         op -= cd[row]*quick_op(v,I)
 

@@ -224,21 +224,21 @@ class test_env(unittest.TestCase):
         d = 1
         D = 2
         # Make a random PEPS
-        print('making peps')
+        mpiprint(0,'making peps')
         peps = make_rand_peps(Nx,Ny,d,D)
         # Compute the norm exactly
-        print('Trying to contract a monster')
+        mpiprint(0,'Trying to contract a monster')
         row1 = einsum('abAcd,kdDlm,rmGst->AcDlGs',peps[0][0],peps[0][1],peps[0][2])
         row2 = einsum('ceBfg,lgEno,soHuv->cBflEnsHu',peps[1][0],peps[1][1],peps[1][2])
         row3 = einsum('fhCij,njFpq,uqIwx->fCnFuI',peps[2][0],peps[2][1],peps[2][2])
         bra = einsum('AcDlGs,cBflEnsHu,fCnFuI->ABCDEFGHI',row1,row2,row3)
-        print('Trying to contract a 2nd monster')
+        mpiprint(0,'Trying to contract a 2nd monster')
         norm1 = einsum('ABCDEFGHI,ABCDEFGHI->',bra,conj(bra))
-        print('Full norm = {}'.format(norm1))
+        mpiprint(0,'Full norm = {}'.format(norm1))
         # Compute the norm exactly using Boundary MPO
-        print('Calculating peps norm')
+        mpiprint(0,'Calculating peps norm')
         norm2 = calc_peps_norm(peps,chi=10)
-        print('Norm from routine = {}'.format(norm2))
+        mpiprint(0,'Norm from routine = {}'.format(norm2))
         # Check that these are equal
         self.assertTrue(abs(norm2-norm1)/abs(norm1) < 1e-10)
         mpiprint(0,'Passed\n'+'='*50)
