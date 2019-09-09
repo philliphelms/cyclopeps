@@ -5,7 +5,7 @@ from mpi4py import MPI
 COMM = MPI.COMM_WORLD
 RANK = COMM.Get_rank()
 SIZE = COMM.size
-print('Rank = {}'.format(RANK))
+#print('Rank = {}'.format(RANK))
 
 # Temporary directories for calculation
 TMPDIR = os.environ.get('TMPDIR','.')
@@ -36,7 +36,7 @@ USE_SPARSE = False
 
 # Printing Global Variables
 DEBUG = False
-VERBOSE = 0
+VERBOSE = 4
 VERBOSE_TIME = 3
 VERBOSE_MEM = 2
 OUTPUT_DIGITS = 5

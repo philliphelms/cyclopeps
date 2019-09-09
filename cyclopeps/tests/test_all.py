@@ -14,9 +14,9 @@ if __name__ == "__main__":
     loader = unittest.TestLoader()
     test_dir = os.path.dirname(os.path.realpath(__file__))
     
-    mpiprint(0,'#'*50)
-    mpiprint(0,'Running unittests in: {}'.format(test_dir))
-    mpiprint(0,'-'*50)
+    #mpiprint(0,'#'*50)
+    #mpiprint(0,'Running unittests in: {}'.format(test_dir))
+    #mpiprint(0,'-'*50)
 
     # Find all available tests
     test_suite = loader.discover(test_dir)

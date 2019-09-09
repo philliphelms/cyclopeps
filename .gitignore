@@ -4,3 +4,4 @@
 *.prof
 *.out
 *.job
+/cyclopeps/scripts/jobs

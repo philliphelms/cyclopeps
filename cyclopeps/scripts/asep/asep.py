@@ -5,16 +5,15 @@ from cyclopeps.algs.tebd import run_tebd
 from sys import argv
 
 # Get input values
-Ny = int(argv[1])
-Nx = int(argv[2])
-d  = int(argv[3])
-D  = int(argv[4])
-chi= int(argv[5])
-
+Nx = int(argv[1])
+Ny = int(argv[2])
+D  = int(argv[3])
+chi= int(argv[4])
+d  = 2
 
 # TEBD Parameters
-step_sizes = [0.1, 0.05, 0.01, 0.001, 0.0001]
-n_step = 200
+step_sizes = 0.1 #[0.1, 0.05, 0.01, 0.001, 0.0001]
+n_step = 10 #200
 
 # ---------------------------------------------------------
 # Hop to the right
@@ -41,6 +40,7 @@ ops = return_op(Nx,Ny,params)
 # Run TEBD
 Ef = run_tebd(Nx,Ny,d,ops,D=D,chi=chi,n_step=n_step,step_size=step_sizes)
 
+"""
 # ---------------------------------------------------------
 # Hop to the left:
 # ASEP params
@@ -115,7 +115,4 @@ ops = return_op(Ny,Nx,params)
 
 # Run TEBD
 Ef = run_tebd(Ny,Nx,d,ops,D=D,chi=chi,n_step=n_step,step_size=step_sizes)
-
-
-
-
+"""

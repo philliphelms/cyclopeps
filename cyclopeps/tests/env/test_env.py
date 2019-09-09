@@ -22,7 +22,6 @@ class test_env(unittest.TestCase):
         self.assertTrue(abs(norm-norm2)/abs(norm) < 1e-10)
         mpiprint(0,'Passed\n'+'='*50)
 
-
     def test_d1D1N2(self):
         mpiprint(0,'\n'+'='*50+'\nTesting d=1, D=1, (Nx,Ny) = (2,2)\n'+'-'*50)
         from cyclopeps.tools.peps_tools import make_rand_peps, calc_peps_norm
