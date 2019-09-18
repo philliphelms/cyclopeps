@@ -19,6 +19,7 @@ peps = PEPS(Nx=Nx,Ny=Ny,d=d,D=D,chi=chi,singleLayer=True,normalize=False)
 # contract the norm
 fname = argv[6]+'_norm_stats_Nx'+str(Nx)+'_Ny'+str(Ny)+'_d'+str(d)+'_D'+str(D)+'_chi'+str(chi)
 t0 = time.time()
+#norm = peps.calc_norm()
 cProfile.run('norm = peps.calc_norm()',fname)
 tf = time.time()
 

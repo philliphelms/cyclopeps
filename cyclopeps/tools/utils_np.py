@@ -36,7 +36,10 @@ def to_nparray(arr):
 # Linear Algebra
 abss       = np.abs
 dot        = np.dot
-einsum     = np.einsum
+try:
+    from pyscf.lib import einsum
+except:
+    einsum = np.einsum
 qr         = np.linalg.qr
 summ       = np.sum
 prod       = np.prod

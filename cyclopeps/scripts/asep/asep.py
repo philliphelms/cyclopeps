@@ -5,15 +5,16 @@ from cyclopeps.algs.tebd import run_tebd
 from sys import argv
 
 # Get input values
-Nx = int(argv[1])
-Ny = int(argv[2])
-D  = int(argv[3])
-chi= int(argv[4])
+Nx = 4#int(argv[1])
+Ny = 4#int(argv[2])
+D  = 2#int(argv[3])
+chi= 10#int(argv[4])
 d  = 2
 
 # TEBD Parameters
-step_sizes = 0.1 #[0.1, 0.05, 0.01, 0.001, 0.0001]
-n_step = 10 #200
+step_sizes = [1.0,0.1,0.05, 0.01]
+n_step =     [100,100, 100,  100]
+chi        = [  2, 10,  20,   10]
 
 # ---------------------------------------------------------
 # Hop to the right
@@ -30,7 +31,7 @@ dr = 2./3.
 dl = 0.
 du = 0.
 dd = 0.
-sx = -.1
+sx = 0.2
 sy = 0.
 params = (jr,jl,ju,jd,cr,cl,cu,cd,dr,dl,du,dd,sx,sy)
 

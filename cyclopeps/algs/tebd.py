@@ -221,9 +221,12 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,als_iter=10
         peps_col[row],peps_col[row+1] = make_equal_distance(peps_col[row],peps_col[row+1])
 
         # Update top and bottom environments
-        # PH - Very lazy and expensive way to do this...
-        top_envs = calc_top_envs(peps_col,left_bmpo,right_bmpo)
-        bot_envs = calc_bot_envs(peps_col,left_bmpo,right_bmpo)
+        bot_envs[row] = update_bot_env(peps_col[row],
+                                       left_bmpo[2*row],
+                                       left_bmpo[2*row+1],
+                                       right_bmpo[2*row],
+                                       right_bmpo[2*row+1],
+                                       bot_envs[row-1])
 
     # Return the result
     return E,peps_col
@@ -250,10 +253,11 @@ def tebd_step_col(peps,ham,step_size,chi=None,als_iter=100,als_tol=1e-10):
         else:
             E[col,:],peps[col] = tebd_step_single_col(peps[col],step_size,left_bmpo[col-1],right_bmpo[col],ham[col],als_iter=als_iter,als_tol=als_tol)
 
-        # Update boundary tensors
-        # PH - Very lazy and expensive way to do this...
-        right_bmpo = calc_right_bound_mpo(peps, 0,chi=chi,return_all=True)
-        left_bmpo  = calc_left_bound_mpo (peps,Nx,chi=chi,return_all=True)
+        # Update left boundary tensors
+        if col == 0:
+            left_bmpo[col] = update_left_bound_mpo(peps[col], None, chi=chi)
+        elif col != Nx-1:
+            left_bmpo[col] = update_left_bound_mpo(peps[col], left_bmpo[col-1], chi=chi)
 
     # Return result
     return E,peps
@@ -276,7 +280,6 @@ def tebd_step(peps,ham,step_size,chi=None,als_iter=100,als_tol=1e-10):
 def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None,als_iter=100,als_tol=1e-10):
     """
     """
-    mpiprint(0,'\nStarting Calculation for (D,chi,dt) = (?,{},{})'.format(chi,step_size))
     nSite = len(peps)*len(peps[0])
 
     # Compute Initial Energy
@@ -307,6 +310,7 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None,als_iter=100,als_tol=
     return E,peps
 
 def run_tebd(Nx,Ny,d,ham,
+             peps=None,
              D=3,chi=10,
              norm_tol=20,singleLayer=True,
              max_norm_iter=20,
@@ -330,6 +334,13 @@ def run_tebd(Nx,Ny,d,ham,
             is found in /mpo/itf.py 
 
     Kwargs:
+        peps : PEPS object
+            The initial guess for the PEPS. If this is not 
+            provided, then a random peps will be used. 
+            Note that the bond dimension D should be the same
+            as the initial calculation bond dimension, since
+            no bond reduction or initial increase of bond dimension
+            is currently implemented.
         D : int
             The maximum bond dimension (may be a list of
             maximum bond dimensions, and a loop will be
@@ -394,14 +405,17 @@ def run_tebd(Nx,Ny,d,ham,
     if not hasattr(chi,'__len__'):
         chi = [chi]*n_calcs
     
-    # Create a random peps
-    peps = PEPS(Nx=Nx,Ny=Ny,d=d,D=D[0],
-                chi=chi[0],norm_tol=norm_tol,
-                singleLayer=singleLayer,max_norm_iter=max_norm_iter,
-                dtype=dtype)
+    # Create a random peps (if one is not provided)
+    if peps is None:
+        peps = PEPS(Nx=Nx,Ny=Ny,d=d,D=D[0],
+                    chi=chi[0],norm_tol=norm_tol,
+                    singleLayer=singleLayer,max_norm_iter=max_norm_iter,
+                    dtype=dtype)
     
     # Loop over all (bond dims/step sizes/number of steps)
     for Dind in range(len(D)):
+
+        mpiprint(0,'\nStarting Calculation for (D,chi,dt) = ({},{},{})'.format(D[Dind],chi[Dind],step_size[Dind]))
         
         # Do a tebd evolution for given step size
         E,peps = tebd_steps(peps,
@@ -424,7 +438,7 @@ def run_tebd(Nx,Ny,d,ham,
     mpiprint(0,'Total time = {} s'.format(time.time()-t0))
     mpiprint(0,'Per Site Energy = {}'.format(E/(Nx*Ny)))
 
-    return E
+    return E,peps
 
 if __name__ == "__main__":
     # PEPS parameters

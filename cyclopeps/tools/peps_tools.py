@@ -262,7 +262,7 @@ def multiply_peps_elements(peps,const):
             peps[xind][yind] *= const
     return peps
 
-def normalize_peps(peps,max_iter=20,norm_tol=20,chi=4,up=1.0,
+def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
                     down=0.0,singleLayer=True):
     """
     Normalize the full PEPS by doing a binary search on the
@@ -421,6 +421,44 @@ def make_rand_peps(Nx,Ny,d,D,dtype=float_):
 
     return tensors
 
+def update_top_env(peps,left1,left2,right1,right2,prev_env):
+    """
+    Doing the following contraction:
+
+     +-------+-------+-------+
+     |       |       |       |
+     O       U       |       o
+     |       |       |       |
+     +---L---+---R---^-------+
+     |       |\      |       |
+     |       | \     |       |
+     N       D   P   u       n
+     |             \ |       |
+     |              \|       |
+     +-------l-------+---r---+
+     |               |       |
+     M               d       m
+
+
+     Where the tensor with legs :
+        "aehmo" is the left boundary tensor
+        "eijfb" is the peps tensor
+        "mpjnk" is the conj of the peps tensor
+        "dglnq" is the right boundary tensor
+        "abcd" is the previous top enviromnent
+        "oipq" is the new top environment
+
+    """
+    if prev_env is None:
+        prev_env = ones((1,1,1,1),dtype=peps.dtype)
+    tmp = einsum('LDPRU,OUuo->OLDPRuo',peps,prev_env)
+    tmp = einsum('OLDPRuo,NLO->NDPRuo',tmp,left2)
+    tmp = einsum('NDPRuo,nRo->NDPun',tmp,right2)
+    tmp = einsum('NDPun,ldPru->NDldrn',tmp,conj(peps))
+    tmp = einsum('NDldrn,MlN->MDdrn',tmp,left1)
+    top_env = einsum('MDdrn,mrn->MDdm',tmp,right1)
+    return top_env
+
 def calc_top_envs(peps_col,left_bmpo,right_bmpo):
     """
     Doing the following contraction:
@@ -456,17 +494,48 @@ def calc_top_envs(peps_col,left_bmpo,right_bmpo):
     # Compute top environment
     top_env = [None]*Ny
     for row in reversed(range(Ny)):
-        if row == Ny-1:
-            prev_env = ones((1,1,1,1),dtype=peps_col[0].dtype)
-        else:
-            prev_env = top_env[row+1]
-        tmp = einsum('LDPRU,OUuo->OLDPRuo',peps_col[row],prev_env)
-        tmp = einsum('OLDPRuo,NLO->NDPRuo',tmp,left_bmpo[2*row+1])
-        tmp = einsum('NDPRuo,nRo->NDPun',tmp,right_bmpo[2*row+1])
-        tmp = einsum('NDPun,ldPru->NDldrn',tmp,conj(peps_col[row]))
-        tmp = einsum('NDldrn,MlN->MDdrn',tmp,left_bmpo[2*row])
-        top_env[row] = einsum('MDdrn,mrn->MDdm',tmp,right_bmpo[2*row])
+        if row == Ny-1: prev_env = None
+        else: prev_env = top_env[row+1]
+        top_env[row] = update_top_env(peps_col[row],
+                                      left_bmpo[2*row],
+                                      left_bmpo[2*row+1],
+                                      right_bmpo[2*row],
+                                      right_bmpo[2*row+1],
+                                      prev_env)
     return top_env
+
+def update_bot_env(peps,left1,left2,right1,right2,prev_env):
+    """
+    Doing the following contraction:
+
+     +-------+-------+-------+
+     |       |       |       |
+     O       u       |       o
+     |       |       |       |
+     |       |       |       |
+     +---l---+---r---^-------+
+     |       |\      |       |
+     |       | \     |       |
+     N       d   P   U       n
+     |       |    \  |       |
+     |       |     \ |       |
+     +-------^---L---+---R---+
+     |       |       |       |
+     |       |       |       |
+     M       |       D       m
+     |       |       |       |
+     +-------+-------+-------+
+
+    """
+    if prev_env is None:
+        prev_env = ones((1,1,1,1),dtype=peps.dtype)
+    tmp = einsum('LDPRU,MdDm->MdLPURm',peps,prev_env)
+    tmp = einsum('MdLPURm,MLN->NdPURm',tmp,left1)
+    tmp = einsum('NdPURm,mRn->NdPUn',tmp,right1)
+    tmp = einsum('NdPUn,ldPru->NlurUn',tmp,conj(peps))
+    tmp = einsum('NlurUn,NlO->OurUn',tmp,left2)
+    bot_env = einsum('OurUn,nro->OuUo',tmp,right2)
+    return bot_env
 
 def calc_bot_envs(peps_col,left_bmpo,right_bmpo):
     """
@@ -498,16 +567,14 @@ def calc_bot_envs(peps_col,left_bmpo,right_bmpo):
     # Compute the bottom environment
     bot_env = [None]*Ny
     for row in range(Ny):
-        if row == 0:
-            prev_env = ones((1,1,1,1),dtype=peps_col[0].dtype)
-        else:
-            prev_env = bot_env[row-1]
-        tmp = einsum('LDPRU,MdDm->MdLPURm',peps_col[row],prev_env)
-        tmp = einsum('MdLPURm,MLN->NdPURm',tmp,left_bmpo[2*row])
-        tmp = einsum('NdPURm,mRn->NdPUn',tmp,right_bmpo[2*row])
-        tmp = einsum('NdPUn,ldPru->NlurUn',tmp,conj(peps_col[row]))
-        tmp = einsum('NlurUn,NlO->OurUn',tmp,left_bmpo[2*row+1])
-        bot_env[row] = einsum('OurUn,nro->OuUo',tmp,right_bmpo[2*row+1])
+        if row == 0: prev_env = None
+        else: prev_env = bot_env[row-1]
+        bot_env[row] = update_bot_env(peps_col[row],
+                                      left_bmpo[2*row],
+                                      left_bmpo[2*row+1],
+                                      right_bmpo[2*row],
+                                      right_bmpo[2*row+1],
+                                      prev_env)
     return bot_env
 
 def reduce_tensors(peps1,peps2):
@@ -857,6 +924,48 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True):
     else:
         return col_energy,row_energy
 
+def increase_peps_mbd(peps,Dnew):
+    """
+    Increase the bond dimension of a peps
+
+    Args:
+        peps : 2D Array
+            The peps tensors in a list of lists
+        Dnew : int
+            The new bond dimension
+
+    Returns:
+        peps : 2D Array
+            The new peps tensors with increased bond dimensions
+    """
+    # Figure out peps size
+    Nx = len(peps)
+    Ny = len(peps[0])
+    Dold = peps[0][0].shape[3]
+
+    # Get unitary tensor for insertion
+    identity = zeros((Dnew,Dold),dtype=peps[0][0].dtype)
+    identity[:Dold,:] = eye(Dold,dtype=peps[0][0].dtype)
+    mat = identity + 0.01*rand((Dnew,Dold),dtype=peps[0][0].dtype)
+    mat = svd(mat)[0]
+
+    # Loop through all peps tensors
+    for col in range(Nx):
+        for row in range(Ny):
+            # Increase left bond
+            if row != 0:
+                peps[row][col] = einsum('Ll,ldpru->Ldpru',mat,peps[row][col])
+            # Increase down bond
+            if col != 0:
+                peps[row][col] = einsum('Dd,ldpru->lDpru',mat,peps[row][col])
+            # Increase right bond
+            if row != Nx-1:
+                peps[row][col] = einsum('Rr,ldpru->ldpRu',mat,peps[row][col])
+            # Increase up bond
+            if col != Ny-1:
+                peps[row][col] = einsum('Uu,ldpru->ldprU',mat,peps[row][col])
+    return peps
+
 # -----------------------------------------------------------------
 # PEPS Class
 
@@ -867,7 +976,7 @@ class PEPS:
 
     def __init__(self,Nx=10,Ny=10,d=2,D=2,
                  chi=None,norm_tol=20,
-                 singleLayer=True,max_norm_iter=20,
+                 singleLayer=True,max_norm_iter=100,
                  norm_BS_upper=1.0,norm_BS_lower=0.0,
                  norm_BS_print=1,dtype=float_,normalize=True):
         """
@@ -1121,7 +1230,7 @@ class PEPS:
                 The new bond dimension for the boundary mpo
 
         """
-        if new_chi is not None:
+        if newD is not None:
             self.chi = chi
 
         self.tensors = increase_peps_mbd(self.tensors,newD)

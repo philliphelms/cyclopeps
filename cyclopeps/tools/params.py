@@ -36,7 +36,7 @@ USE_SPARSE = False
 
 # Printing Global Variables
 DEBUG = False
-VERBOSE = 4
+VERBOSE = 1
 VERBOSE_TIME = 3
 VERBOSE_MEM = 2
 OUTPUT_DIGITS = 5
