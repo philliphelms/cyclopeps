@@ -2,6 +2,7 @@ from cyclopeps.tools.utils import *
 from cyclopeps.tools.peps_tools import PEPS
 from cyclopeps.ops.asep import return_op
 from cyclopeps.algs.tebd import run_tebd
+from cyclopeps.algs.tebd import run_tebd
 from sys import argv
 
 # Get input values
@@ -39,7 +40,7 @@ params = (jr,jl,ju,jd,cr,cl,cu,cd,dr,dl,du,dd,sx,sy)
 ops = return_op(Nx,Ny,params)
 
 # Run TEBD
-Ef = run_tebd(Nx,Ny,d,ops,D=D,chi=chi,n_step=n_step,step_size=step_sizes)
+Ef,_ = run_tebd(Nx,Ny,d,ops,D=D,chi=chi,n_step=n_step,step_size=step_sizes)
 
 """
 # ---------------------------------------------------------
@@ -65,7 +66,7 @@ params = (jrn,jln,jun,jdn,crn,cln,cun,cdn,drn,dln,dun,ddn,sxn,syn)
 ops = return_op(Nx,Ny,params)
 
 # Run TEBD
-Ef = run_tebd(Nx,Ny,d,ops,D=D,chi=chi,n_step=n_step,step_size=step_sizes)
+Ef,_ = run_tebd(Nx,Ny,d,ops,D=D,chi=chi,n_step=n_step,step_size=step_sizes)
 
 # ---------------------------------------------------------
 # Hop upwards:
@@ -90,7 +91,7 @@ params = (jrn,jln,jun,jdn,crn,cln,cun,cdn,drn,dln,dun,ddn,sxn,syn)
 ops = return_op(Ny,Nx,params)
 
 # Run TEBD
-Ef = run_tebd(Ny,Nx,d,ops,D=D,chi=chi,n_step=n_step,step_size=step_sizes)
+Ef,_ = run_tebd(Ny,Nx,d,ops,D=D,chi=chi,n_step=n_step,step_size=step_sizes)
 
 # ---------------------------------------------------------
 # Hop downwards
@@ -115,5 +116,5 @@ params = (jrn,jln,jun,jdn,crn,cln,cun,cdn,drn,dln,dun,ddn,sxn,syn)
 ops = return_op(Ny,Nx,params)
 
 # Run TEBD
-Ef = run_tebd(Ny,Nx,d,ops,D=D,chi=chi,n_step=n_step,step_size=step_sizes)
+Ef,_ = run_tebd(Ny,Nx,d,ops,D=D,chi=chi,n_step=n_step,step_size=step_sizes)
 """

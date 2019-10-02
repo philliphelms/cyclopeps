@@ -71,6 +71,44 @@ def rotate_peps(peps,clockwise=True):
     # Return Rotated peps
     return rpeps
 
+def rotate_lambda(Lambda,clockwise=True):
+    """
+    Rotate the Lambda tensors for the canonical PEPS representation
+    """
+    if Lambda is not None:
+
+        # Get system size (of rotated lambda)
+        Ny = len(Lambda[0])
+        Nx = len(Lambda[1][0])
+
+        # Lambda tensors along vertical bonds
+        vert = []
+        for x in range(Nx):
+            tmp = []
+            for y in range(Ny-1):
+                if clockwise:
+                    tmp += [copy.deepcopy(Lambda[1][Ny-2-y][x])]
+                else:
+                    tmp += [copy.deepcopy(Lambda[1][y][Nx-1-x])]
+            vert += [tmp]
+
+        # Lambda tensors along horizontal bonds
+        horz = []
+        for x in range(Nx-1):
+            tmp = []
+            for y in range(Ny):
+                if clockwise:
+                    tmp += [copy.deepcopy(Lambda[0][Ny-1-y][x])]
+                else:
+                    tmp += [copy.deepcopy(Lambda[0][y][Nx-2-x])]
+            horz += [tmp]
+
+        # Combine vertical and horizontal lambdas
+        rLambda = [vert,horz]
+        return rLambda
+    else:
+        return None
+
 def flip_peps(peps):
     """
     Flip a peps horizontally
@@ -107,6 +145,47 @@ def flip_peps(peps):
 
     # Return Flipped peps
     return fpeps
+
+def flip_lambda(Lambda):
+    """
+    Flip the lambda tensors (part of the canonical peps) horizontally
+
+    Args:
+        Lambda : 
+
+    Returns:
+        Lambda : 
+            The horizontally flipped version of the lambda
+            tensor. This is flipped such that ...
+    """
+
+    if Lambda is not None:
+        # Get system size
+        Nx = len(Lambda[0])
+        Ny = len(Lambda[1][0])
+
+        # Lambda tensors along vertical bonds
+        vert = []
+        for x in range(Nx):
+            tmp = []
+            for y in range(Ny-1):
+                tmp += [copy.deepcopy(Lambda[0][(Nx-1)-x][y])]
+            vert += [tmp]
+        # Lambda tensors along horizontal bonds
+        horz = []
+        for x in range(Nx-1):
+            tmp = []
+            for y in range(Ny):
+                tmp += [copy.deepcopy(Lambda[1][(Nx-2)-x][y])]
+            horz += [tmp]
+
+        # Add to tensors
+        fLambda = [vert,horz]
+
+        # Return Flipped peps
+        return fLambda
+    else:
+        return None
 
 def peps_col_to_mps(peps_col,mk_copy=True):
     """
@@ -321,7 +400,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
     scale = (up+down)/2.0
 
     # begin search
-    peps_try = multiply_peps_elements(peps.copy().tensors,scale)
+    peps_try = multiply_peps_elements(peps.copy(),scale)
 
     istep = 0
     while True:
@@ -359,7 +438,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
             mpiprint(0, 'binarySearch normalization exceeds max_iter... terminating')
             break
 
-        peps_try = multiply_peps_elements(peps.copy().tensors,scale)
+        peps_try = multiply_peps_elements(peps.copy(),scale)
 
     return z, peps_try
 
@@ -383,6 +462,11 @@ def calc_peps_norm(peps,chi=4,singleLayer=True):
         norm : float
             The (approximate) norm of the PEPS
     """
+    # Absorb Lambda tensors if needed
+    try:
+        peps = peps_absorb_lambdas(peps.tensors,peps.ltensors,mk_copy=True)
+    except:
+        pass
 
     # Get PEPS Dims
     Nx = len(peps)
@@ -400,7 +484,7 @@ def calc_peps_norm(peps,chi=4,singleLayer=True):
     # Return result
     return norm
 
-def make_rand_peps(Nx,Ny,d,D,dtype=float_):
+def make_rand_peps(Nx,Ny,d,D,canonical=False,dtype=float_):
     """
     Make a random PEPS
     """
@@ -419,6 +503,36 @@ def make_rand_peps(Nx,Ny,d,D,dtype=float_):
         # At the end of each column, make the norm smaller
         tensors[x][:] = normalize_peps_col(tensors[x][:])
 
+    return tensors
+
+def make_rand_lambdas(Nx,Ny,D,dtype=float_):
+    """
+    Make random diagonal matrices to serve as the
+    singular values for the Gamma-Lambda canonical
+    form of the PEPS
+
+    Note:
+    Used primarily for the simple update contraction scheme
+    """
+
+    # Lambda tensors along vertical bonds
+    vert = []
+    for x in range(Nx):
+        tmp = []
+        for y in range(Ny-1):
+            tmp += [rand((D),dtype=dtype)]
+        vert += [tmp]
+
+    # Lambda tensors along horizontal bonds
+    horz = []
+    for x in range(Nx-1):
+        tmp = []
+        for x in range(Ny):
+            tmp += [rand((D),dtype=dtype)]
+        horz += [tmp]
+
+    # Add horizontal and vertical lambdas to tensor list
+    tensors = [vert,horz]
     return tensors
 
 def update_top_env(peps,left1,left2,right1,right2,prev_env):
@@ -550,8 +664,8 @@ def calc_bot_envs(peps_col,left_bmpo,right_bmpo):
      |       |\      |       |
      |       | \     |       |
      N       d   P   U       n
-     |       |    \  |       |
      |       |     \ |       |
+     |       |      \|       |
      +-------^---L---+---R---+
      |       |       |       |
      |       |       |       |
@@ -912,19 +1026,70 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True):
         val : float
             The resulting observable's expectation value
     """
+    # Absorb Lambda tensors if needed
+    try:
+        peps = peps_absorb_lambdas(peps.tensors,peps.ltensors,mk_copy=True)
+    except:
+        pass
+
     # Calculate contribution from interactions between columns
     col_energy = calc_all_column_op(peps,ops[0],chi=chi,normalize=normalize)
+
     # Calculate contribution from interactions between rows
     peps = rotate_peps(peps,clockwise=True)
     row_energy = calc_all_column_op(peps,ops[1],chi=chi,normalize=normalize)
     peps = rotate_peps(peps,clockwise=False)
-
+    
+    # Return Result
     if return_sum:
         return summ(col_energy)+summ(row_energy)
     else:
         return col_energy,row_energy
 
-def increase_peps_mbd(peps,Dnew):
+def increase_peps_mbd_lambda(Lambda,Dnew,noise=0.01):
+    """
+    Increase the bond dimension of lambda tensors in a 
+    canonical peps
+
+    Args:
+        Lambda : 3D array
+            Lists of lambda tensors for the canonical peps
+        Dnew : int
+            The new bond dimension
+
+    Kwargs:
+        noise : float
+            The maximum magnitude of random noise to be incorporated
+            in increasing the bond dimension
+    
+    Returns:
+        Lambda : 3D array
+            Lists of lambda tensors with increased bond dimensions
+    """
+    if Lambda is not None:
+        # Figure out peps size
+        Nx = len(Lambda[0])
+        Ny = len(Lambda[0][0])
+        Dold = Lambda[0][0][0].shape[0]
+
+        # Get unitary tensor for insertion
+        identity = zeros((Dnew,Dold),dtype=Lambda[0][0][0].dtype)
+        identity[:Dold,:] = eye(Dold,dtype=Lambda[0][0][0].dtype)
+        mat = identity + noise*rand((Dnew,Dold),dtype=Lambda[0][0][0].dtype)
+        mat = svd(mat)[0]
+
+        # Loop through all possible tensors and increase their sizes
+        for ind in range(len(Lambda)):
+            for x in range(len(Lambda[ind])):
+                for y in range(len(Lambda[ind][x])):
+                    Lambda[ind][x][y] = einsum('Ll,l->L',mat,Lambda[ind][x][y])
+
+        # Return result
+        return Lambda
+    else: 
+        return None
+
+def increase_peps_mbd(peps,Dnew,noise=0.01):
     """
     Increase the bond dimension of a peps
 
@@ -934,6 +1099,11 @@ def increase_peps_mbd(peps,Dnew):
         Dnew : int
             The new bond dimension
 
+    Kwargs:
+        noise : float
+            The maximum magnitude of random noise to be incorporated
+            in increasing the bond dimension
+    
     Returns:
         peps : 2D Array
             The new peps tensors with increased bond dimensions
@@ -946,7 +1116,7 @@ def increase_peps_mbd(peps,Dnew):
     # Get unitary tensor for insertion
     identity = zeros((Dnew,Dold),dtype=peps[0][0].dtype)
     identity[:Dold,:] = eye(Dold,dtype=peps[0][0].dtype)
-    mat = identity + 0.01*rand((Dnew,Dold),dtype=peps[0][0].dtype)
+    mat = identity + noise*rand((Dnew,Dold),dtype=peps[0][0].dtype)
     mat = svd(mat)[0]
 
     # Loop through all peps tensors
@@ -966,6 +1136,65 @@ def increase_peps_mbd(peps,Dnew):
                 peps[row][col] = einsum('Uu,ldpru->ldprU',mat,peps[row][col])
     return peps
 
+def copy_peps_tensors(peps):
+    """
+    Create a copy of the PEPS tensors
+    """
+    copy = []
+    for x in range(len(peps)):
+        tmp = []
+        for y in range(len(peps[0])):
+            tmp += [copy.deepcopy(peps[x][y])]
+        copy += [tmp]
+    return copy
+
+def peps_absorb_lambdas(Gamma,Lambda,mk_copy=False):
+    """
+    Absorb the lambda tensors into the gamma tensors,
+    transforming the peps representations from the canonical
+    Gamma-Lambda form into the standard representation.
+
+    Args:
+        Gamma : list of lists
+            A list of a list of the peps gamma tensors
+        Lambda : list of lists of lists
+            The lambda tensors (singular value vectors)
+            with Lambda[0] being the lambda vecs on the vertical bonds and 
+            Lambda[1] being the lambda vecs on the horizontal bonds. 
+
+    Returns:
+        peps : list of lists
+            The peps tensors
+    """
+
+    if Lambda is not None:
+        # Create a copy of Gamma (if needed)
+        if mk_copy:
+            Gamma = copy_peps_tensors(Gamma)
+
+        # Figure out peps lattice size
+        Nx = len(Gamma)
+        Ny = len(Gamma[0])
+
+        # loop through all sites, absorbing the "singular values"
+        for x in range(Nx):
+            for y in range(Ny):
+                # Absorb left lambda
+                if x is not 0:
+                    Gamma[x][y] = einsum('ldpru,l->ldpru',Gamma[x][y],sqrt(Lambda[1][x-1][y]))
+                # Absorb down lambda
+                if y is not 0:
+                    Gamma[x][y] = einsum('ldpru,d->ldpru',Gamma[x][y],sqrt(Lambda[0][x][y-1]))
+                # Absorb right lambda
+                if x is not (Nx-1):
+                    Gamma[x][y] = einsum('ldpru,r->ldpru',Gamma[x][y],sqrt(Lambda[1][x][y]))
+                # Absorb up lambda
+                if y is not (Ny-1):
+                    Gamma[x][y] = einsum('ldpru,u->ldpru',Gamma[x][y],sqrt(Lambda[0][x][y]))
+
+    # Return results
+    return Gamma
+
 # -----------------------------------------------------------------
 # PEPS Class
 
@@ -975,7 +1204,7 @@ class PEPS:
     """
 
     def __init__(self,Nx=10,Ny=10,d=2,D=2,
-                 chi=None,norm_tol=20,
+                 chi=None,norm_tol=20,canonical=False,
                  singleLayer=True,max_norm_iter=100,
                  norm_BS_upper=1.0,norm_BS_lower=0.0,
                  norm_BS_print=1,dtype=float_,normalize=True):
@@ -1001,6 +1230,9 @@ class PEPS:
                 artihmetic is used in the normalization procedure.
                 See documentation of normalize_peps() function
                 for more details.
+            canonical : bool
+                A PEPS in the Gamma Lambda formalism, with diagonal
+                matrices between each set of PEPS tensors
             singleLayer : bool
                 Whether to use a single layer environment
                 (currently only option implemented)
@@ -1034,6 +1266,7 @@ class PEPS:
         if chi is None: chi = D**2
         self.chi         = chi
         self.norm_tol    = norm_tol
+        self.canonical   = canonical
         self.singleLayer = singleLayer
         self.max_norm_iter = max_norm_iter
         self.dtype       = dtype
@@ -1042,7 +1275,20 @@ class PEPS:
         self.norm_BS_print = norm_BS_print
 
         # Make a random PEPS
-        self.tensors = make_rand_peps(self.Nx,self.Ny,self.d,self.D,dtype=self.dtype)
+        self.tensors = make_rand_peps(self.Nx,
+                                      self.Ny,
+                                      self.d,
+                                      self.D,
+                                      dtype=self.dtype)
+
+        # Add in lambda "singular value" matrices
+        if self.canonical:
+            self.ltensors = make_rand_lambdas(self.Nx,
+                                              self.Ny,
+                                              self.D,
+                                              self.dtype)
+        else:
+            self.ltensors = None
 
         # Normalize the PEPS
         if normalize:
@@ -1137,7 +1383,7 @@ class PEPS:
         """
         if chi is None: chi = self.chi
         if singleLayer is None: singleLayer = self.singleLayer
-        return calc_peps_norm(self.tensors,chi=chi,singleLayer=singleLayer)
+        return calc_peps_norm(self,chi=chi,singleLayer=singleLayer)
 
     def normalize(self,max_iter=None,norm_tol=None,chi=None,up=None,down=None,
                     singleLayer=None):
@@ -1215,9 +1461,10 @@ class PEPS:
                 The resulting observable's expectation value
         """
         if chi is None: chi = self.chi
-        return calc_peps_op(self.tensors,ops,chi=chi,normalize=normalize)
+        # Calculate the operator's value
+        return calc_peps_op(self,ops,chi=chi,normalize=normalize)
 
-    def increase_mbd(self,newD,chi=None):
+    def increase_mbd(self,newD,chi=None,noise=0.01):
         """
         Increase the maximum bond dimension of the peps
 
@@ -1232,8 +1479,20 @@ class PEPS:
         """
         if newD is not None:
             self.chi = chi
+        self.tensors = increase_peps_mbd(self.tensors,newD,noise=noise)
+        self.ltensors = increase_peps_mbd_lambda(self.ltensors,newD,noise=noise)
 
-        self.tensors = increase_peps_mbd(self.tensors,newD)
+    def absorb_lambdas(self):
+        """
+        Absorb the lambda from the canonical Gamma-Lambda PEPS
+        form to return the normal PEPS form.
+
+        Args:
+            self : PEPS Object
+                The PEPS to be normalized
+        """
+        self.tensors = peps_absorb_lambdas(self.tensors,self.ltensors)
+        self.ltensors = None
 
     def __len__(self):
         return self.Nx
@@ -1245,16 +1504,31 @@ class PEPS:
         self.tensors[ind] = item
 
     def copy(self):
+        """
+        Return a copy of this PEPS
+        """
         peps_copy = PEPS(Nx=self.Nx,Ny=self.Ny,d=self.d,D=self.D,
                          chi=self.chi,norm_tol=self.norm_tol,
+                         canonical=self.canonical,
                          singleLayer=self.singleLayer,
                          max_norm_iter=self.max_norm_iter,
                          norm_BS_upper=self.norm_BS_upper,
                          norm_BS_lower=self.norm_BS_lower,
                          dtype=self.dtype,normalize=False)
+
+        # Copy peps tensors
         for i in range(self.Nx):
             for j in range(self.Ny):
                 peps_copy.tensors[i][j] = copy.deepcopy(self.tensors[i][j])
+
+        # Copy lambda tensors (if there)
+        if self.ltensors is not None:
+            for ind in range(len(self.ltensors)):
+                for x in range(len(self.ltensors[ind])):
+                    for y in range(len(self.ltensors[ind][x])):
+                        peps_copy.ltensors[ind][x][y] = copy.deepcopy(self.ltensors[ind][x][y])
+
+        # Return result
         return peps_copy
 
     def rotate(self,clockwise=True):
@@ -1272,6 +1546,7 @@ class PEPS:
 
         """
         self.tensors = rotate_peps(self.tensors,clockwise=clockwise)
+        self.ltensors= rotate_lambda(self.ltensors,clockwise=clockwise)
         Nx_ = self.Nx
         Ny_ = self.Ny
         self.Nx = Ny_
@@ -1282,3 +1557,4 @@ class PEPS:
         Flip the peps columns
         """
         self.tensors = flip_peps(self.tensors)
+        self.ltensors= flip_lambda(self.ltensors)
