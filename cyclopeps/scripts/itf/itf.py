@@ -17,6 +17,6 @@ chi= int(argv[5])
 ham = return_op(Nx,Ny,(1.,2.))
 
 # Run TEBD
-Ef = run_tebd(Nx,Ny,d,ham,D=D,chi=chi,n_step=100)
+Ef,_ = run_tebd(Nx,Ny,d,ham,D=D,chi=chi,n_step=100)
 
 print('\n\nFinal  E = {}'.format(Ef))

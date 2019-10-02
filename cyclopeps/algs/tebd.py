@@ -2,6 +2,7 @@ from cyclopeps.tools.params import *
 from cyclopeps.tools.utils import *
 from cyclopeps.tools.peps_tools import *
 from cyclopeps.tools.ops_tools import *
+from cyclopeps.algs.simple_update import run_tebd as su
 from numpy import float_
 import copy 
 
@@ -336,7 +337,10 @@ def run_tebd(Nx,Ny,d,ham,
     Kwargs:
         peps : PEPS object
             The initial guess for the PEPS. If this is not 
-            provided, then a random peps will be used. 
+            provided, then a random peps will be initialized,
+            then a few iterations will be performed using 
+            the simple update algorithm to arrive at a good 
+            initial guess. 
             Note that the bond dimension D should be the same
             as the initial calculation bond dimension, since
             no bond reduction or initial increase of bond dimension
@@ -407,10 +411,16 @@ def run_tebd(Nx,Ny,d,ham,
     
     # Create a random peps (if one is not provided)
     if peps is None:
-        peps = PEPS(Nx=Nx,Ny=Ny,d=d,D=D[0],
-                    chi=chi[0],norm_tol=norm_tol,
-                    singleLayer=singleLayer,max_norm_iter=max_norm_iter,
-                    dtype=dtype)
+        
+        _,peps = su(Nx,Ny,d,ham,
+                    D=D[0],
+                    chi=5,
+                    singleLayer=singleLayer,
+                    max_norm_iter=max_norm_iter,
+                    dtype=dtype,
+                    step_size=[1,0.1,0.01],
+                    n_step=[5,5,5],
+                    conv_tol=1e-4)
     
     # Loop over all (bond dims/step sizes/number of steps)
     for Dind in range(len(D)):
@@ -443,17 +453,21 @@ def run_tebd(Nx,Ny,d,ham,
 if __name__ == "__main__":
     # PEPS parameters
     Nx = 3
-    Ny = 5
+    Ny = 3
     d = 2
-    D = 3
+    D = 1
     chi = 10
     # Get Hamiltonian
+    #from cyclopeps.ops.identity import return_op
+    #ham = return_op(Nx,Ny)
     from cyclopeps.ops.itf import return_op
     ham = return_op(Nx,Ny,(1.,2.))
     # Run TEBD
-    E = run_tebd(Nx,Ny,d,ham,
-                 D=D,chi=chi,
-                 singleLayer=True,
-                 max_norm_iter=20,
-                 dtype=float_,
-                 step_size=0.1,n_step=10)
+    E,peps = run_tebd(Nx,Ny,d,ham,
+                      D=D,
+                      chi=chi,
+                      singleLayer=True,
+                      max_norm_iter=20,
+                      dtype=float_,
+                      step_size=0.1,
+                      n_step=100)

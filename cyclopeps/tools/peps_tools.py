@@ -1068,20 +1068,20 @@ def increase_peps_mbd_lambda(Lambda,Dnew,noise=0.01):
     """
     if Lambda is not None:
         # Figure out peps size
-        Nx = len(peps)
-        Ny = len(peps[0])
-        Dold = peps[0][0][0].shape[0]
+        Nx = len(Lambda[0])
+        Ny = len(Lambda[0][0])
+        Dold = Lambda[0][0][0].shape[0]
 
         # Get unitary tensor for insertion
-        identity = zeros((Dnew,Dold),dtype=peps[0][0].dtype)
-        identity[:Dold,:] = eye(Dold,dtype=peps[0][0].dtype)
-        mat = identity + noise*rand((Dnew,Dold),dtype=peps[0][0].dtype)
+        identity = zeros((Dnew,Dold),dtype=Lambda[0][0][0].dtype)
+        identity[:Dold,:] = eye(Dold,dtype=Lambda[0][0][0].dtype)
+        mat = identity + noise*rand((Dnew,Dold),dtype=Lambda[0][0][0].dtype)
         mat = svd(mat)[0]
 
         # Loop through all possible tensors and increase their sizes
         for ind in range(len(Lambda)):
-            for x in range(len(Lambda[0])):
-                for y in range(len(Lambda[0][x])):
+            for x in range(len(Lambda[ind])):
+                for y in range(len(Lambda[ind][x])):
                     Lambda[ind][x][y] = einsum('Ll,l->L',mat,Lambda[ind][x][y])
 
         # Return result
