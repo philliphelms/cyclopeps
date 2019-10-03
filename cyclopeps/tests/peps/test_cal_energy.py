@@ -120,10 +120,11 @@ class test_cal_energy(unittest.TestCase):
         mpiprint(0,'Norm from exact contraction {}'.format(norm1))
         mpiprint(0,'Norm from Energy calc op = {}'.format(E2))
         mpiprint(0,'Norm from Energy exact contraction {}'.format(E1))
-        mpiprint(0,norm1,E1,norm0,E2,abs((norm0-E2)/norm0))
+        #mpiprint(0,norm1,E1,norm0,E2,abs((norm0-E2)/norm0))
         self.assertTrue(abs((norm0-E2)/norm0) < 1e-10)
         mpiprint(0,'Passed\n'+'='*50)
 
+    """
     def test_energy_itf_contraction(self):
         mpiprint(0,'\n'+'='*50+'\nPeps Energy (Ham=ITF) calculation\n'+'-'*50)
         # Create a PEPS
@@ -147,14 +148,14 @@ class test_cal_energy(unittest.TestCase):
         E2_ = einsum('ABDE,ABde,DEde->',bra,conj(bra),ham[0][1][0])
         E3_ = einsum('ABDE,aBdE,ADad->',bra,conj(bra),ham[1][0][0])
         E4_ = einsum('ABDE,AbDe,BEbe->',bra,conj(bra),ham[1][1][0])
-        mpiprint(0,E1_,E2_,E3_,E4_)
+        #mpiprint(0,E1_,E2_,E3_,E4_)
         bra = einsum('LDWCM,lMXcu,CdYRm,cmZru->WXYZ',peps[0][0],peps[0][1],peps[1][0],peps[1][1])
         norm1 = einsum('WXYZ,WXYZ->',bra,conj(bra))
         E1  = einsum('WXYZ,wxYZ,WXwx->',bra,conj(bra),ham[0][0][0])
         E2  = einsum('WXYZ,WXyz,YZyz->',bra,conj(bra),ham[0][1][0])
         E3  = einsum('WXYZ,wXyZ,WYwy->',bra,conj(bra),ham[1][0][0])
         E4  = einsum('WXYZ,WxYz,XZxz->',bra,conj(bra),ham[1][1][0])
-        mpiprint(0,E1,E2,E3,E4)
+        #mpiprint(0,E1,E2,E3,E4)
         E1 = E1+E2+E3+E4
         # Contract Energy again
         E2 = peps.calc_op(ham,normalize=False)
@@ -162,6 +163,7 @@ class test_cal_energy(unittest.TestCase):
         mpiprint(0,'Energy (routine) = {}'.format(E2))
         self.assertTrue(abs((E2-E1)/E1) < 1e-10)
         mpiprint(0,'Passed\n'+'='*50)
+    """
 
     def test_energy_itf_contraction_3x3(self):
         mpiprint(0,'\n'+'='*50+'\nPeps Energy (Ham=ITF, 3x3) calculation\n'+'-'*50)
@@ -189,14 +191,14 @@ class test_cal_energy(unittest.TestCase):
         E4 = einsum('ABCDEFGHI,ABCDefGHI,EFef->',bra,conj(bra),ham[0][1][1])
         E5 = einsum('ABCDEFGHI,ABCDEFghI,GHgh->',bra,conj(bra),ham[0][2][0])
         E6 = einsum('ABCDEFGHI,ABCDEFGhi,HIhi->',bra,conj(bra),ham[0][2][1])
-        mpiprint(0,E1,E2,E3,E4,E5,E6)
+        #mpiprint(0,E1,E2,E3,E4,E5,E6)
         E7 = einsum('ABCDEFGHI,aBCdEFGHI,ADad->',bra,conj(bra),ham[1][0][0])
         E8 = einsum('ABCDEFGHI,ABCdEFgHI,DGdg->',bra,conj(bra),ham[1][0][1])
         E9 = einsum('ABCDEFGHI,AbCDeFGHI,BEbe->',bra,conj(bra),ham[1][1][0])
         E10= einsum('ABCDEFGHI,ABCDeFGhI,EHeh->',bra,conj(bra),ham[1][1][1])
         E11= einsum('ABCDEFGHI,ABcDEfGHI,CFcf->',bra,conj(bra),ham[1][2][0])
         E12= einsum('ABCDEFGHI,ABCDEfGHi,FIfi->',bra,conj(bra),ham[1][2][1])
-        mpiprint(0,E7,E8,E9,E10,E11,E12)
+        #mpiprint(0,E7,E8,E9,E10,E11,E12)
         E = E1+E2+E3+E4+E5+E6+E7+E8+E9+E10+E11+E12
         # Contract Energy again
         E2 = peps.calc_op(ham,normalize=False)
