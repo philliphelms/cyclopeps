@@ -140,7 +140,7 @@ def qr_ten(ten,split_ind,rq=False):
     # Reshape tensor into matrix
     ten_shape = ten.shape
     mpiprint(9,'First, reshape the tensor into a matrix')
-    ten = ten.reshape([prod(ten_shape[:split_ind]),prod(ten_shape[split_ind:])])
+    ten = ten.reshape([int(prod(ten_shape[:split_ind])),int(prod(ten_shape[split_ind:]))])
 
     # Perform svd
     mpiprint(9,'Perform actual qr')
@@ -152,7 +152,7 @@ def qr_ten(ten,split_ind,rq=False):
         mpiprint(9,'Reshape to match original tensor dimensions')
         new_dims = ten_shape[:split_ind]+(int(prod(Q.shape)/prod(ten_shape[:split_ind])),)
         Q = Q.reshape(new_dims)
-        new_dims = (prod(R.shape)/prod(ten_shape[split_ind:]),)+ten_shape[split_ind:]
+        new_dims = (int(prod(R.shape)/prod(ten_shape[split_ind:])),)+ten_shape[split_ind:]
         R = R.reshape(new_dims)
 
         # Quick check to see if it worked
@@ -166,9 +166,9 @@ def qr_ten(ten,split_ind,rq=False):
 
         # Reshape to match correct tensor format
         mpiprint(9,'Reshape to match original tensor dimensions')
-        new_dims = ten_shape[:split_ind]+(prod(R.shape)/prod(ten_shape[:split_ind]),)
+        new_dims = ten_shape[:split_ind]+(int(prod(R.shape)/prod(ten_shape[:split_ind])),)
         R = R.reshape(new_dims)
-        new_dims = (prod(Q.shape)/prod(ten_shape[split_ind:]),)+ten_shape[split_ind:]
+        new_dims = (int(prod(Q.shape)/prod(ten_shape[split_ind:])),)+ten_shape[split_ind:]
         Q = Q.reshape(new_dims)
 
         # Quick check to see if it worked...
@@ -223,7 +223,7 @@ def svd_ten(ten,split_ind,truncate_mbd=1e100,return_ent=True,return_wgt=True):
     # Reshape tensor into matrix
     ten_shape = ten.shape
     mpiprint(9,'First, reshape the tensor into a matrix')
-    ten = ten.reshape([prod(ten_shape[:split_ind]),prod(ten_shape[split_ind:])])
+    ten = ten.reshape([int(prod(ten_shape[:split_ind])),int(prod(ten_shape[split_ind:]))])
 
     # Perform svd
     mpiprint(9,'Perform actual svd')
@@ -251,9 +251,9 @@ def svd_ten(ten,split_ind,truncate_mbd=1e100,return_ent=True,return_wgt=True):
 
     # Reshape to match correct tensor format
     mpiprint(9,'Reshape to match original tensor dimensions')
-    new_dims = ten_shape[:split_ind]+(prod(U.shape)/prod(ten_shape[:split_ind]),)
+    new_dims = ten_shape[:split_ind]+(int(prod(U.shape)/prod(ten_shape[:split_ind])),)
     U = U.reshape(new_dims)
-    new_dims = (prod(V.shape)/prod(ten_shape[split_ind:]),)+ten_shape[split_ind:]
+    new_dims = (int(prod(V.shape)/prod(ten_shape[split_ind:])),)+ten_shape[split_ind:]
     V = V.reshape(new_dims)
 
     # Print some results
