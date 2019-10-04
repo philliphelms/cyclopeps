@@ -21,7 +21,7 @@ from cyclopeps.tools.env_tools import *
 from numpy import float_
 from numpy import isnan, power
 import copy
-import mps_tools
+from . import mps_tools
 
 def rotate_peps(peps,clockwise=True):
     """

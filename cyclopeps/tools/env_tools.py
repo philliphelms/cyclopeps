@@ -10,7 +10,7 @@ Date: July 2019
 from cyclopeps.tools.utils import *
 from cyclopeps.tools.mps_tools import MPS
 from numpy import float_
-import peps_tools 
+from . import peps_tools 
 import copy
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

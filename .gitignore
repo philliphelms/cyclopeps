@@ -5,3 +5,5 @@
 *.out
 *.job
 /cyclopeps/scripts/jobs
+
+.vscode
