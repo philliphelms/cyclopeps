@@ -7,7 +7,7 @@ class test_cal_energy(unittest.TestCase):
     def test_energy_calc(self):
         from cyclopeps.tools.peps_tools import PEPS
         from cyclopeps.ops.itf import return_op
-        from cyclopeps.algs.tebd import run_tebd
+        from cyclopeps.algs.simple_update import run_tebd
         mpiprint(0,'\n'+'='*50+'\nPeps Normalization test\n'+'-'*50)
         # Create PEPS
         Nx = 5

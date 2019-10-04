@@ -150,7 +150,7 @@ def qr_ten(ten,split_ind,rq=False):
 
         # Reshape to match correct tensor format
         mpiprint(9,'Reshape to match original tensor dimensions')
-        new_dims = ten_shape[:split_ind]+(prod(Q.shape)/prod(ten_shape[:split_ind]),)
+        new_dims = ten_shape[:split_ind]+(int(prod(Q.shape)/prod(ten_shape[:split_ind])),)
         Q = Q.reshape(new_dims)
         new_dims = (prod(R.shape)/prod(ten_shape[split_ind:]),)+ten_shape[split_ind:]
         R = R.reshape(new_dims)

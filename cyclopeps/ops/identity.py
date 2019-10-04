@@ -59,7 +59,7 @@ def op0():
     op = 0.25*einsum('io,IO->iIoO',I,I)
     return op
 
-def opN(params):
+def opN():
     """
     Operator for site (N-1,N)
     """
