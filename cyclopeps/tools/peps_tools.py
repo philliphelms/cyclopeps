@@ -1326,7 +1326,7 @@ class PEPS:
             chi = self.chi
         if singleLayer is None:
             singleLayer = self.singleLayer
-        return calc_left_bound_mpo(peps,col,chi=chi,singleLayer=singleLayer,truncate=truncate,return_all=return_all)
+        return calc_left_bound_mpo(self,col,chi=chi,singleLayer=singleLayer,truncate=truncate,return_all=return_all)
 
     def calc_bmpo_right(self,col,chi=None,singleLayer=None,truncate=True,return_all=False):
         """
@@ -1361,7 +1361,7 @@ class PEPS:
             chi = self.chi
         if singleLayer is None:
             singleLayer = self.singleLayer
-        return calc_right_bound_mpo(peps,col,chi=chi,singleLayer=singleLayer,truncate=truncate,return_all=return_all)
+        return calc_right_bound_mpo(self,col,chi=chi,singleLayer=singleLayer,truncate=truncate,return_all=return_all)
 
     def calc_norm(self,chi=None,singleLayer=None):
         """

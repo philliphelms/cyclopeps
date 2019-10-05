@@ -12,23 +12,23 @@ TMPDIR = os.environ.get('TMPDIR','.')
 TMPDIR = os.environ.get('CYCLOPEPS_TMPDIR',TMPDIR)
 
 # Specify new directory for this calculation
-if RANK == 0:
-    ind = 0
-    created = False
-    while not created:
-        CALCDIR = TMPDIR+'/cyclopeps_calc'+str(ind)
-        if not os.path.exists(CALCDIR):
-            try:
-                os.mkdir(CALCDIR)
-                created = True
-            except:
-                pass
-        ind += 1
-    for ind in range(1,SIZE):
-        COMM.send({'dir': CALCDIR}, dest=ind)
-else:
-    dic = COMM.recv(source=0)
-    CALCDIR = dic['dir']
+# if RANK == 0:
+#     ind = 0
+#     created = False
+#     while not created:
+#         CALCDIR = TMPDIR+'/cyclopeps_calc'+str(ind)
+#         if not os.path.exists(CALCDIR):
+#             try:
+#                 os.mkdir(CALCDIR)
+#                 created = True
+#             except:
+#                 pass
+#         ind += 1
+#     for ind in range(1,SIZE):
+#         COMM.send({'dir': CALCDIR}, dest=ind)
+# else:
+#     dic = COMM.recv(source=0)
+#     CALCDIR = dic['dir']
 
 # Use ctf or numpy
 USE_CTF = False
