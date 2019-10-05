@@ -1162,7 +1162,7 @@ class MPS:
         """
         mps_tmp = self.copy()
         for site in range(self.N):
-            mps_tmp[site] = mps_tmp[site] * (abs(const)**(1./mps_temp.N))
+            mps_tmp[site] = mps_tmp[site] * (abs(const)**(1./mps_tmp.N))
             if (const < 0.) and (site == 0):
                 mps_tmp[site] *= -1.
         return mps_tmp

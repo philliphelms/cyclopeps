@@ -283,7 +283,7 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,dtype=float_):
             A random tensor with the correct dimensions
             for the given site
     """
-    # Determine the correct left bond dimension
+    # Determine the correct bond dimensions
     Dl = D
     Dr = D
     Du = D

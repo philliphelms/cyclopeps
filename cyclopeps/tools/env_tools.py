@@ -151,7 +151,7 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
         mpiprint(6,'Adding Identity boundary mps')
         bound_tens = bound_mpo[2*row+1]
         (Dm,Dp,Dn) = bound_tens.shape
-        d = Dp/D
+        d = int(Dp/D)
         bound_tens = reshape(bound_tens,(Dm,D,d,Dn))
         I = eye(DU)
         # Contract with previous bound_mpo tensor
