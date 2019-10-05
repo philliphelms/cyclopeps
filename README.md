@@ -2,7 +2,14 @@
 An implementation of common algorithms for Projected Entangled Pair States (PEPS)
 using Cyclops Tensor Framework (CTF).
 
-# Dependencies
+## Install
+```bash
+git clone https://github.com/philliphelms/cyclopeps.git
+pip install -e cyclopeps
+```
+`-e` editable mode is suggested for the package is currently under development
+
+## Dependencies
 Currently, the only dependency is the python version of 
 CTF.
 
