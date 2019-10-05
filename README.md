@@ -1,4 +1,4 @@
-# cyclomps
+# cyclopeps
 An implementation of common algorithms for Projected Entangled Pair States (PEPS)
 using Cyclops Tensor Framework (CTF).
 
