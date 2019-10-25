@@ -107,7 +107,7 @@ class test_env(unittest.TestCase):
         mpiprint(0,'\n'+'='*50+'\nTesting d=1, D=2, (Nx,Ny) = (2,2)\n'+'-'*50)
 
         from cyclopeps.tools.peps_tools import make_rand_peps, calc_peps_norm
-        from cyclopeps.tools.env_tools import calc_left_bound_mpo,calc_right_bound_mpo
+        from cyclopeps.tools.peps_tools import calc_left_bound_mpo,calc_right_bound_mpo
         # Calculation Parameters
         Nx = 2
         Ny = 2
@@ -129,7 +129,7 @@ class test_env(unittest.TestCase):
     def test_left_bmpo(self):
         mpiprint(0,'\n'+'='*50+'\nTesting left boundary mpo\n'+'-'*50)
         from cyclopeps.tools.peps_tools import make_rand_peps, calc_peps_norm
-        from cyclopeps.tools.env_tools import calc_left_bound_mpo,calc_right_bound_mpo
+        from cyclopeps.tools.peps_tools import calc_left_bound_mpo,calc_right_bound_mpo
         # Calculation Parameters
         Nx = 2
         Ny = 2
@@ -159,7 +159,7 @@ class test_env(unittest.TestCase):
     def test_right_bmpo(self):
         mpiprint(0,'\n'+'='*50+'\nTesting right boundary mpo\n'+'-'*50)
         from cyclopeps.tools.peps_tools import make_rand_peps, calc_peps_norm
-        from cyclopeps.tools.env_tools import calc_left_bound_mpo,calc_right_bound_mpo
+        from cyclopeps.tools.peps_tools import calc_left_bound_mpo,calc_right_bound_mpo
         # Calculation Parameters
         Nx = 2
         Ny = 2
@@ -189,7 +189,7 @@ class test_env(unittest.TestCase):
     def test_left_right_bmpo_2x2(self):
         mpiprint(0,'\n'+'='*50+'\nTesting left and right boundary mpo (2x2)\n'+'-'*50)
         from cyclopeps.tools.peps_tools import make_rand_peps, calc_peps_norm
-        from cyclopeps.tools.env_tools import calc_left_bound_mpo,calc_right_bound_mpo
+        from cyclopeps.tools.peps_tools import calc_left_bound_mpo,calc_right_bound_mpo
         # Calculation Parameters
         Nx = 2
         Ny = 2
@@ -216,7 +216,7 @@ class test_env(unittest.TestCase):
     def test_left_right_bmpo_3x3(self):
         mpiprint(0,'\n'+'='*50+'\nTesting left and right boundary mpo (3x3)\n'+'-'*50)
         from cyclopeps.tools.peps_tools import make_rand_peps, calc_peps_norm
-        from cyclopeps.tools.env_tools import calc_left_bound_mpo,calc_right_bound_mpo
+        from cyclopeps.tools.peps_tools import calc_left_bound_mpo,calc_right_bound_mpo
         # Calculation Parameters
         Nx = 3
         Ny = 3

@@ -30,7 +30,10 @@ def return_op(Nx,Ny,params,hermitian=False):
     for x in range(Nx):
         col_ops = []
         for y in range(Ny-1):
-            col_ops.append(op(params,hermitian=hermitian))
+            if (x == 0) and (y == Ny-2):
+                col_ops.append(corner_op(params,hermitian=hermitian))
+            else:
+                col_ops.append(op(params,hermitian=hermitian))
         columns.append(col_ops)
 
     # Operators within Rows
@@ -38,8 +41,10 @@ def return_op(Nx,Ny,params,hermitian=False):
     for y in range(Ny):
         row_ops = []
         for x in range(Nx-1):
-            #row_ops.append(quick_op(z,z))
-            row_ops.append(op(params,hermitian=hermitian))
+            if (x == 0) and (y == Ny-1):
+                row_ops.append(corner_op(params,hermitian=hermitian))
+            else:
+                row_ops.append(op(params,hermitian=hermitian))
         rows.append(row_ops)
 
     return [columns,rows]
@@ -72,6 +77,28 @@ def op(params,hermitian=False):
         op += (1.-c)*exp(-s) * quick_op(n,Sm)
         op -= c * quick_op(n,v)
         op -= (1.-c) * quick_op(n,n)
+        op = -op
+    # Return result
+    return op
+
+def corner_op(params,hermitian=False):
+    """
+    Operator to keep top left occpied
+    """
+    c = params[0]
+    s = params[1]
+    if hermitian:
+        # Add 'east' interaction
+        op  = exp(-s)*sqrt(c*(1.-c)) * quick_op(I,X)
+        op -= c * quick_op(I,v)
+        op -= (1.-c) * quick_op(I,n)
+        op = -op
+    else:
+        # Add 'east' interaction
+        op  = c*exp(-s) * quick_op(I,Sp)
+        op += (1.-c)*exp(-s) * quick_op(I,Sm)
+        op -= c * quick_op(I,v)
+        op -= (1.-c) * quick_op(I,n)
         op = -op
     # Return result
     return op
