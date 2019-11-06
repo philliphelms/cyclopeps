@@ -318,7 +318,9 @@ def run_tebd(Nx,Ny,d,ham,
              max_norm_iter=20,
              dtype=float_,
              step_size=[0.1,0.01,0.001],
+             su_step_size=None,
              n_step=5,
+             su_n_step=None,
              conv_tol=1e-8,
              als_iter=5,als_tol=1e-10):
     """
@@ -414,15 +416,16 @@ def run_tebd(Nx,Ny,d,ham,
     
     # Create a random peps (if one is not provided)
     if peps is None:
-        print('here we are')
+        if su_step_size is None: su_step_size = step_size
+        if su_n_step is None: su_n_step = n_step
         _,peps = su(Nx,Ny,d,ham,
                     D=D[0],
                     chi=5,
                     singleLayer=singleLayer,
                     max_norm_iter=max_norm_iter,
                     dtype=dtype,
-                    step_size=step_size,
-                    n_step=n_step,
+                    step_size=su_step_size,
+                    n_step=su_n_step,
                     conv_tol=conv_tol)
     
     # Loop over all (bond dims/step sizes/number of steps)

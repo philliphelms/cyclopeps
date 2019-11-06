@@ -151,6 +151,132 @@ def make_op(row,ju,jd,cu,cd,du,dd,sy):
     # Return Result
     return -op
 
+
+# Current operators ------------------------------------------------------------------------------
+def return_curr_op(Nx,Ny,params):
+    """
+    Return the operators to calculate the current
+
+    Args:
+        Nx : int
+            Lattice size in the x direction
+        Ny : int
+            Lattixe size in the y direction
+        params : 1D Array
+            The parameters for the hamiltonian.
+            Here, the first four entries are the
+            bulk hopping rates:
+                params[0] = jump right
+                params[1] = jump left
+                params[2] = jump up
+                params[3] = jump down
+            The next four are the insertion rates:
+                params[4] = insert to the right (left boundary)
+                params[5] = insert to the left (right boundary)
+                params[6] = insert upwards (bottom boundary)
+                params[7] = insert downards (top boundary)
+            The next four are the removal rates:
+                params[8] = remove to the right (right boundary)
+                params[9] = remove to the left (left boundary)
+                params[10]= remove upwards (top boundary)
+                params[11]= remove downwards (bottom boundary)
+            The last two are the biasing parameters:
+                params[12]= Bias in the x-direction
+                params[13]= Bias in the y-direction
+
+    Returns:
+        ops
+    """
+    # Convert params to matrices
+    params = val2mat_params(Nx,Ny,params)
+    (jr,jl,ju,jd, cr,cl,cu,cd, dr,dl,du,dd, sx,sy) = params
+
+    # Operators within columns
+    columns = []
+    for x in range(Nx):
+        # Create operator for single column
+        col_ops = []
+        for y in range(Ny-1):
+            # Create operator for intereaction between sites (y,y+1)
+            op = make_curr_op(y,
+                              ju[x,:],
+                              jd[x,:],
+                              cu[x,:],
+                              cd[x,:],
+                              du[x,:],
+                              dd[x,:],
+                              sy[x,:])
+            # Add to list of column operators
+            col_ops.append(op)
+        # Add column of operators to list of columns
+        columns.append(col_ops)
+
+    # Operators within Rows
+    rows = []
+    for y in range(Ny):
+        # Create operator for single row
+        row_ops = []
+        for x in range(Nx-1):
+            # Create operator for interaction between sites (x,x+1)
+            op = make_curr_op(x,
+                              jr[:,y],
+                              jl[:,y],
+                              cr[:,y],
+                              cl[:,y],
+                              dr[:,y],
+                              dl[:,y],
+                              sx[:,y])
+            # Add to list of row operators
+            row_ops.append(op)
+        # Add row of operators to list of rows
+        rows.append(row_ops)
+
+    # Return Results
+    return [columns,rows]
+
+def make_curr_op(row,ju,jd,cu,cd,du,dd,sy):
+    """
+    Interaction between sites (row,row+1)
+    """
+    # -----------------------------------------
+    # Hopping between sites
+
+    # Hop up
+    op  = ju[row]*exp(sy[row])*quick_op(Sp,Sm)
+    # Hop down
+    op += jd[row+1]*exp(-sy[row+1])*quick_op(Sm,Sp)
+
+    """
+    # ----------------------------------------
+    # Top Site creation/Annihilation
+
+    # Destroy upwards
+    op += du[row+1]*exp(sy[row+1])*quick_op(I,Sp)
+    # Destroy downwards
+    op += dd[row+1]*exp(-sy[row+1])*quick_op(I,Sp)
+    # Create upwards
+    op += cu[row+1]*exp(sy[row+1])*quick_op(I,Sm)
+    # Create Downwards
+    op += cd[row+1]*exp(-sy[row+1])*quick_op(I,Sm)
+
+    if row == 0:
+        # ----------------------------------------
+        # Bottom Site Creation/Annihilation
+
+        # Destroy upwards
+        op += du[row]*exp(sy[row])*quick_op(Sp,I)
+        # Destroy downwards
+        op += dd[row]*exp(-sy[row])*quick_op(Sp,I)
+        # Create upwards
+        op += cu[row]*exp(sy[row])*quick_op(Sm,I)
+        # Create Downwards
+        op += cd[row]*exp(-sy[row])*quick_op(Sm,I)
+    """
+
+    # Return Result
+    return -op
+
+# Helpful Functions ------------------------------------------------------------------------------
 def val2mat_params(Nx,Ny,params):
     # Extract values
     jr = params[0]

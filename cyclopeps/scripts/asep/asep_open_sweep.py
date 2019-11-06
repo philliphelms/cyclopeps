@@ -1,6 +1,7 @@
 from cyclopeps.tools.utils import *
 from cyclopeps.tools.peps_tools import PEPS
-from cyclopeps.ops.asep import return_op
+from cyclopeps.ops.asep import return_op,return_curr_op
+from cyclopeps.ops.basic import return_dens_op
 from cyclopeps.algs.tebd import run_tebd
 from sys import argv
 from numpy import linspace
@@ -11,11 +12,12 @@ Ny = int(argv[2])
 D  = int(argv[3])
 #chi= int(argv[4])
 d  = 2
+ns = 5
 
 # TEBD Parameters
-step_sizes = [0.1,0.05, 0.01]
-n_step =     [ 50,  50,   50]
-chi        = [ 10,  20,   50]
+step_sizes = [0.5,0.1,0.05, 0.01]
+n_step =     [  ns,ns,  ns,   ns]
+chi        = [  5, 10,  20,   50]
 
 # Sx parameters
 sxVec = linspace(-0.5,0.5,20)
@@ -46,6 +48,8 @@ for sxind in range(len(sxVec)):
 
         # Create the Suzuki trotter decomposed operator
         ops = return_op(Nx,Ny,params)
+        curr_ops = return_curr_op(Nx,Ny,params)
+        dens_ops = return_dens_op(Nx,Ny)
 
         # Run TEBD
         try:
@@ -73,6 +77,36 @@ for sxind in range(len(sxVec)):
             except:
                 peps = None
 
+        # Evaluate X and Y Current and local density
+        if peps is not None:
+            # Calculate Current
+            currents = peps.calc_op(curr_ops,return_sum=False)
+            print('Vertical Currents')
+            for i in range(Nx):
+                print_str = ''
+                for j in range(Ny-1):
+                    print_str += '{} '.format(currents[0][i][j])
+                print(print_str)
+            print('Horizontal Currents')
+            for i in range(Ny):
+                print_str = ''
+                for j in range(Nx-1):
+                    print_str += '{} '.format(currents[1][i][j])
+                print(print_str)
+            # Calculate Density
+            density = peps.calc_op(dens_ops,return_sum=False)
+            print('Vertical Density')
+            for i in range(Nx):
+                print_str = ''
+                for j in range(Ny-1):
+                    print_str += '{} '.format(density[0][i][j])
+                print(print_str)
+            print('Horizontal Density')
+            for i in range(Ny):
+                print_str = ''
+                for j in range(Nx-1):
+                    print_str += '{} '.format(density[1][i][j])
+                print(print_str)
 
         # Print sx
         print_str = '\t'

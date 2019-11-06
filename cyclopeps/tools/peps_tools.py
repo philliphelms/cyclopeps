@@ -1404,13 +1404,13 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True):
         pass
 
     # Calculate contribution from interactions between columns
-    col_energy = calc_all_column_op(peps,ops[0],chi=chi,normalize=normalize)
+    col_energy = calc_all_column_op(peps,ops[0],chi=chi,normalize=normalize,return_sum=return_sum)
 
     # Calculate contribution from interactions between rows
     peps = rotate_peps(peps,clockwise=True)
-    row_energy = calc_all_column_op(peps,ops[1],chi=chi,normalize=normalize)
+    row_energy = calc_all_column_op(peps,ops[1],chi=chi,normalize=normalize,return_sum=return_sum)
     peps = rotate_peps(peps,clockwise=False)
-    
+
     # Return Result
     if return_sum:
         return summ(col_energy)+summ(row_energy)
@@ -1813,7 +1813,7 @@ class PEPS:
 
         return norm
 
-    def calc_op(self,ops,chi=None,normalize=True):
+    def calc_op(self,ops,chi=None,normalize=True,return_sum=True):
         """
         Calculate the expectation value for a given operator
 
@@ -1833,7 +1833,7 @@ class PEPS:
         """
         if chi is None: chi = self.chi
         # Calculate the operator's value
-        return calc_peps_op(self,ops,chi=chi,normalize=normalize)
+        return calc_peps_op(self,ops,chi=chi,normalize=normalize,return_sum=return_sum)
 
     def increase_mbd(self,newD,chi=None,noise=0.01):
         """
