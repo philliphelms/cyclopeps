@@ -13,15 +13,16 @@ Date: July 2019
              | \
     (2) bottom  (3) physical
 """
+from cyclopeps.tools.gen_ten import rand
 
 from cyclopeps.tools.params import *
-from cyclopeps.tools.utils import *
-from cyclopeps.tools.mps_tools import MPS,contract_mps
-from cyclopeps.tools.env_tools import *
+#from cyclopeps.tools.utils import *
+#from cyclopeps.tools.mps_tools import MPS,contract_mps
+#from cyclopeps.tools.env_tools import *
 from numpy import float_
-from numpy import isnan, power
+#from numpy import isnan, power
 import copy
-from . import mps_tools
+#from . import mps_tools
 
 def rotate_peps(peps,clockwise=True):
     """
@@ -187,7 +188,7 @@ def flip_lambda(Lambda):
     else:
         return None
 
-def peps_col_to_mps(peps_col,mk_copy=True):
+def peps_col_to_mps(peps_col):
     """
     Convert a PEPS column into an MPS.
     The structure of the resulting MPS tensors is:
@@ -202,12 +203,6 @@ def peps_col_to_mps(peps_col,mk_copy=True):
         peps_col : 1D Array
             A list containing the tensors for each site in a peps column
 
-    Kwargs:
-        mk_copy : bool
-            Specify whether a copy of the peps col should be made
-            and put into the MPS. Default is True, meaning a copy
-            is made.
-
     Returns:
         mps : 1D Array
             The resulting 1D array containing the PEPS column's tensor
@@ -217,8 +212,6 @@ def peps_col_to_mps(peps_col,mk_copy=True):
     # Determine number of rows
     Ny = len(peps_col)
 
-    # Make copy (if wanted)
-    if mk_copy: peps_col = copy.deepcopy(peps_col)
     # Create a list to hold the copy
     peps_col_copy = [None]*Ny
     for row in range(Ny):
@@ -259,7 +252,7 @@ def calc_peps_col_norm(peps_col):
     # Return the resulting norm
     return norm
 
-def rand_peps_tensor(Nx,Ny,x,y,d,D,dtype=float_):
+def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,backend='numpy',dtype=float_):
     """
     Create a random tensor for a PEPS
 
@@ -274,6 +267,14 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,dtype=float_):
             The y-coordinate of the tensor
 
     Kwargs:
+        Zn : int
+            Create a PEPS which preserves this Zn symmetry,
+            i.e. if Zn=2, then Z2 symmetry is preserved.
+        backend : str
+            This specifies the backend to be used for the calculation.
+            Options are currently 'numpy' or 'ctf'. If using symmetries,
+            this will be adapted to using symtensors with numpy or ctf as
+            the backend.
         dtype : dtype
             The data type of the tensor
             Default : np.float_
@@ -295,10 +296,39 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,dtype=float_):
     if y == 0:    Dd = 1
     if y == Ny-1: Du = 1
 
-    # Create a random tensor
-    dims = (Dl,Dd,d,Dr,Du)
-    ten = rand(dims,dtype=dtype)
+    # Set default value of sym
+    sym = None
 
+    # Deal with Zn symmetry (if needed)
+    if Zn is not None:
+        # And correct symmetries
+        Znl= Zn
+        Znr= Zn
+        Znu= Zn
+        Znd= Zn
+        # Set to one if at an edge
+        if x == 0:    Znl = 1
+        if x == Nx-1: Znr = 1
+        if y == 0:    Znd = 1
+        if y == Ny-1: Znu = 1
+        # Resize D->Dnew so Dnew*Zn = D
+        Dl /= Znl
+        Dr /= Znr
+        Dd /= Znd
+        Du /= Znu
+        d  /= Zn
+
+        # Create sym argument
+        sym = ['+++--',
+               [range(Znl),range(Znd),range(Zn),range(Znr),range(Znu)],
+               0,
+               Zn]
+
+    # Create the random tensor
+    dims = (Dl,Dd,d,Dr,Du)
+    ten = rand(dims,sym,backend=backend,dtype=dtype)
+    print(ten)
+    
     # Return result
     return ten
 
@@ -484,9 +514,36 @@ def calc_peps_norm(peps,chi=4,singleLayer=True):
     # Return result
     return norm
 
-def make_rand_peps(Nx,Ny,d,D,canonical=False,dtype=float_):
+def make_rand_peps(Nx,Ny,d,D,Zn=None,backend='numpy',dtype=float_):
     """
     Make a random PEPS
+
+    Args:
+        d : int
+            The local bond dimension
+        D : int
+            The auxilliary bond dimension
+        Nx : int
+            The PEPS lattice size in the x-direction
+        Ny : int
+            The PEPS lattice size in the y-direction
+
+    Kwargs:
+        Zn : int
+            Create a PEPS which preserves this Zn symmetry,
+            i.e. if Zn=2, then Z2 symmetry is preserved.
+        backend : str
+            This specifies the backend to be used for the calculation.
+            Options are currently 'numpy' or 'ctf'. If using symmetries,
+            this will be adapted to using symtensors with numpy or ctf as
+            the backend.
+        dtype : dtype
+            The data type of the tensor
+            Default : np.float_
+
+    Returns:
+        peps : array of arrays
+            A random peps held as an array of arrays
     """
     # Create a list of lists to hold PEPS tensors
     tensors = []
@@ -499,7 +556,7 @@ def make_rand_peps(Nx,Ny,d,D,canonical=False,dtype=float_):
     # Place random tensors into the PEPS
     for x in range(Nx):
         for y in range(Ny):
-            tensors[x][y] = rand_peps_tensor(Nx,Ny,x,y,d,D,dtype=dtype)
+            tensors[x][y] = rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=Zn,backend=backend,dtype=dtype)
         # At the end of each column, make the norm smaller
         tensors[x][:] = normalize_peps_col(tensors[x][:])
 
@@ -1200,14 +1257,14 @@ def peps_absorb_lambdas(Gamma,Lambda,mk_copy=False):
 
 class PEPS:
     """
-    A class to hold and manipulate PEPS
+    A class to hold and manipulate a PEPS
     """
 
     def __init__(self,Nx=10,Ny=10,d=2,D=2,
-                 chi=None,norm_tol=20,canonical=False,
-                 singleLayer=True,max_norm_iter=100,
-                 norm_BS_upper=1.0,norm_BS_lower=0.0,
-                 norm_BS_print=1,dtype=float_,normalize=True):
+                 chi=None,Zn=None,canonical=False,backend='numpy',
+                 singleLayer=True,dtype=float_,
+                 normalize=True,norm_tol=20.,
+                 max_norm_iter=100,norm_bs_upper=1.0,norm_bs_lower=0.0):
         """
         Create a random PEPS object
 
@@ -1225,32 +1282,40 @@ class PEPS:
                 The auxilliary bond dimension
             chi : int
                 The boundary mpo maximum bond dimension
+            Zn : int
+                Create a PEPS which preserves this Zn symmetry,
+                i.e. if Zn=2, then Z2 symmetry is preserved.
+            canonical : bool
+                If true, then the PEPS will be created in the 
+                Gamma Lambda formalism, with diagonal matrices
+                between each set of PEPS tensors. Default is False,
+                where a standard PEPS, with one tensor per site,
+                will be created.
+            backend : str
+                This specifies the backend to be used for the calculation.
+                Options are currently 'numpy' or 'ctf'. If using symmetries,
+                this will be adapted to using symtensors with numpy or ctf as
+                the backend.
+            singleLayer : bool
+                Whether to use a single layer environment
+                (currently only option implemented)
             norm_tol : float
                 How close to 1. the norm should be before exact
                 artihmetic is used in the normalization procedure.
                 See documentation of normalize_peps() function
                 for more details.
-            canonical : bool
-                A PEPS in the Gamma Lambda formalism, with diagonal
-                matrices between each set of PEPS tensors
-            singleLayer : bool
-                Whether to use a single layer environment
-                (currently only option implemented)
-            max_norm_iter : int
-                The maximum number of normalization iterations
-            norm_BS_upper : float
-                The upper bound for the binary search factor
-                during normalization.
-            norm_BS_lower : float
-                The lower bound for the binary search factor
-                during normalization.
-            norm_BS_print : boolean
-                Controls output of binary search normalization
-                procedure.
             dtype : dtype
                 The data type for the PEPS
             normalize : bool
-                Whether the initial random peps should be normalized
+                Whether the initialized random peps should be normalized
+            max_norm_iter : int
+                The maximum number of normalization iterations
+            norm_bs_upper : float
+                The upper bound for the binary search factor
+                during normalization.
+            norm_bs_lower : float
+                The lower bound for the binary search factor
+                during normalization.
 
         Returns:
             PEPS : PEPS Object
@@ -1263,22 +1328,25 @@ class PEPS:
         self.shape       = (Nx,Ny)
         self.d           = d
         self.D           = D
-        if chi is None: chi = D**2
+        if chi is None: chi = 4*D**2
         self.chi         = chi
-        self.norm_tol    = norm_tol
+        self.Zn          = Zn
         self.canonical   = canonical
+        self.backend     = backend
         self.singleLayer = singleLayer
-        self.max_norm_iter = max_norm_iter
         self.dtype       = dtype
-        self.norm_BS_upper = norm_BS_upper
-        self.norm_BS_lower = norm_BS_lower
-        self.norm_BS_print = norm_BS_print
+        self.norm_tol    = norm_tol
+        self.max_norm_iter = max_norm_iter
+        self.norm_bs_upper = norm_bs_upper
+        self.norm_bs_lower = norm_bs_lower
 
         # Make a random PEPS
         self.tensors = make_rand_peps(self.Nx,
                                       self.Ny,
                                       self.d,
                                       self.D,
+                                      Zn=self.Zn,
+                                      backend=self.backend,
                                       dtype=self.dtype)
 
         # Add in lambda "singular value" matrices
@@ -1428,8 +1496,8 @@ class PEPS:
         if chi is None: chi = self.chi
         if max_iter is None: max_iter = self.max_norm_iter
         if norm_tol is None: norm_tol = self.norm_tol
-        if up is None: up = self.norm_BS_upper
-        if down is None: down = self.norm_BS_lower
+        if up is None: up = self.norm_bs_upper
+        if down is None: down = self.norm_bs_lower
         if singleLayer is None: singleLayer = self.singleLayer
         # Run the normalization procedure
         norm, self.tensors = normalize_peps(self,
@@ -1512,8 +1580,8 @@ class PEPS:
                          canonical=self.canonical,
                          singleLayer=self.singleLayer,
                          max_norm_iter=self.max_norm_iter,
-                         norm_BS_upper=self.norm_BS_upper,
-                         norm_BS_lower=self.norm_BS_lower,
+                         norm_bs_upper=self.norm_bs_upper,
+                         norm_bs_lower=self.norm_bs_lower,
                          dtype=self.dtype,normalize=False)
 
         # Copy peps tensors

@@ -9,8 +9,8 @@ Date: July 2019
 
 from cyclopeps.tools.utils import *
 from cyclopeps.tools.mps_tools import MPS
+from cyclopeps.tools.peps_tools import *
 from numpy import float_
-from . import peps_tools 
 import copy
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -369,7 +369,7 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
     Ny = len(peps[0])
 
     # Flip the peps
-    peps = peps_tools.flip_peps(peps)
+    peps = flip_peps(peps)
     col = Nx-col
 
     # Loop through the columns, creating a boundary mpo for each
