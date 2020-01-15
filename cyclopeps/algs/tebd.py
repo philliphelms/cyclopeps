@@ -70,6 +70,12 @@ def optimize_bottom(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
     # Take inverse of R
     (n1,n2,n3,n4) = R.shape
     R = reshape(R,(n1*n2,n3*n4))
+    try:
+        R_ = inv(R)
+    except:
+        print(R)
+        import sys
+        sys.exit()
     R_ = inv(R)
     R_ = reshape(R_,(n1,n2,n3,n4))
 
@@ -101,7 +107,12 @@ def optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
     # Take inverse of R
     (n1,n2,n3,n4) = R.shape
     R = reshape(R,(n1*n2,n3*n4))
-    R_ = inv(R)
+    try:
+        R_ = inv(R)
+    except:
+        print(R)
+        import sys
+        sys.exit()
     R_ = reshape(R_,(n1,n2,n3,n4))
 
     # Compute new phys_t_new
@@ -203,7 +214,7 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,als_iter=10
     for row in range(len(ham)):
         
         # Calculate environment aroudn reduced tensors
-        peps_b,phys_b,phys_t,peps_t,N = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs)
+        peps_b,phys_b,phys_t,peps_t,_,_,_,_,N = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs)
 
         # Take the exponential of the hamiltonian
         eH = exp_ham(ham[row],-step_size)
@@ -212,7 +223,7 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,als_iter=10
         phys_b,phys_t = alternating_least_squares(phys_b,phys_t,N,eH,als_iter=als_iter,als_tol=als_tol)
 
         # Calculate Energy & Norm
-        E[row] = calc_local_op(phys_b,phys_t,N,ham[row])
+        E[row],norm = calc_local_op(phys_b,phys_t,N,ham[row],return_norm=True)
 
         # Update peps_col tensors
         peps_col[row]   = einsum('LDRa,aPU->LDPRU',peps_b,phys_b)
@@ -223,12 +234,24 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,als_iter=10
         peps_col[row],peps_col[row+1] = make_equal_distance(peps_col[row],peps_col[row+1])
 
         # Update top and bottom environments
+        #print('Bottom Envs before = {}'.format(summ(abss(bot_envs[row-1]))))
+        #print('max peps 1 {}, bot_envs {}'.format(maxx(abss(peps_col[row])),maxx(abss(bot_envs[row-1]))))
+        #print('min peps 1 {}, bot_envs {}'.format(minn(abss(peps_col[row])),minn(abss(bot_envs[row-1]))))
         bot_envs[row] = update_bot_env(peps_col[row],
+                                       peps_col[row].conj(), 
                                        left_bmpo[2*row],
                                        left_bmpo[2*row+1],
                                        right_bmpo[2*row],
                                        right_bmpo[2*row+1],
                                        bot_envs[row-1])
+        
+        # Normalize the bottom envs as well (just for safety
+        #print('PH - Fix this norm stuff')
+        norm_fact = maxx(bot_envs[row])
+        #print('Bottom Envs middl = {}'.format(summ(abss(bot_envs[row]))))
+        bot_envs[row] /= norm_fact
+        #print('Bottom Envs after = {}'.format(summ(abss(bot_envs[row]))))
+        peps_col[row] /= sqrt(norm_fact)
 
     # Return the result
     return E,peps_col
@@ -285,6 +308,7 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None,als_iter=100,als_tol=
     nSite = len(peps)*len(peps[0])
 
     # Compute Initial Energy
+    mpiprint(3,'Calculation Initial Energy/site')
     Eprev = peps.calc_op(ham,chi=chi)
     mpiprint(0,'Initial Energy/site = {}'.format(Eprev/nSite))
 
@@ -446,6 +470,8 @@ def run_tebd(Nx,Ny,d,ham,
         # Increase MBD if needed
         if (len(D)-1 > Dind) and (D[Dind+1] > D[Dind]):
             peps.increase_mbd(D[Dind+1],chi=chi[Dind+1])
+            peps.normalize()
+
 
     # Print out results
     mpiprint(0,'\n\n'+'#'*50)

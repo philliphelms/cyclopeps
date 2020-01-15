@@ -4,6 +4,7 @@
 *.prof
 *.out
 *.job
+*.npz
 /cyclopeps/scripts/jobs
 
 .vscode

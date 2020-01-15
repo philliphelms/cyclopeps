@@ -24,7 +24,7 @@ import copy
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # PEPS ENVIRONMENT FUNCTIONS 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-def init_left_bmpo_sl(ket, bra=None, chi=4, truncate=True):
+def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
     """
     Create the initial boundary mpo for a peps
 
@@ -38,19 +38,23 @@ def init_left_bmpo_sl(ket, bra=None, chi=4, truncate=True):
         truncate : bool
             Whether or not to do an svd and truncate the resulting
             boundary mpo
+        ket : PEPS Object
+            A second peps column, to use as the ket
+            If None, then the bra col will be used
 
     Returns:
         bound_mpo : list
             An updated boundary mpo
     """
     mpiprint(3,'Initial Layer of left boundary mpo (sl)')
+
     # Find size of peps column and dims of tensors
-    Ny = len(ket)
-    _,_,d,D,_ = ket[0].shape
+    Ny = len(bra)
+    _,_,d,D,_ = bra[0].shape
 
     # Copy the ket column if needed
-    if bra is None:
-        bra = copy.deepcopy(ket)
+    if ket is None:
+        ket = copy.deepcopy(bra)
 
     # Make list to hold resulting mpo
     bound_mpo = []
@@ -59,7 +63,7 @@ def init_left_bmpo_sl(ket, bra=None, chi=4, truncate=True):
         # Add Bra-ket contraction
         res = einsum('ldpru,LDpRU->lLdDRurU',ket[row],bra[row])
         # Reshape so it is an MPO
-        (Dl,Dd,Dp,Dr,Du) = ket[row].shape
+        (Dl,Dd,Dp,Dr,Du) = bra[row].shape
         res = reshape(res,(Dl*Dl*Dd*Dd,Dr,Dr*Du*Du))
         # Append to boundary_mpo
         bound_mpo.append(res)
@@ -95,7 +99,7 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
     bound_mpo_new = []
 
     for row in range(Ny):
-        mpiprint(5,'Adding Site {} to Ket'.format(Ny))
+        mpiprint(5,'Adding Site {} to Ket'.format(row))
 
         # Add correct identity
         mpiprint(6,'Adding Identity to ket boundary mps')
@@ -125,13 +129,15 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
     # Reduce bond dimension
     if truncate:
         mpiprint(5,'Truncating Boundary MPS')
-        #mpiprint(6,'Computing initial norm')
-        #norm0 = bound_mps.norm()
-        #mpiprint(6,'Applying SVD')
+        if DEBUG:
+            mpiprint(6,'Computing initial norm')
+            norm0 = bound_mps.norm()
+        mpiprint(6,'Applying SVD')
         bound_mps.apply_svd(chi)
-        #mpiprint(6,'Computing Resulting norm')
-        #norm1 = bound_mps.norm()
-        #mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+        if DEBUG:
+            mpiprint(6,'Computing Resulting norm')
+            norm1 = bound_mps.norm()
+            mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
     return bound_mps
 
 def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
@@ -143,7 +149,7 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
     bound_mpo_new = []
 
     for row in range(Ny):
-        mpiprint(5,'Adding Site {} to bra'.format(Ny))
+        mpiprint(5,'Adding Site {} to bra'.format(row))
 
         # Add bra contraction
         mpiprint(6,'Adding bra tensor to boundary mps')
@@ -177,48 +183,50 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
     mpiprint(7,'Putting MPS list into MPS object')
     if truncate:
         mpiprint(5,'Truncating Boundary MPS')
-        #mpiprint(6,'Computing initial norm')
-        #norm0 = bound_mps.norm()
-        #mpiprint(6,'Applying SVD')
+        if DEBUG:
+            mpiprint(6,'Computing initial norm')
+            norm0 = bound_mps.norm()
+        mpiprint(6,'Applying SVD')
         bound_mps.apply_svd(chi)
-        #mpiprint(6,'Computing Resulting norm')
-        #norm1 = bound_mps.norm()
-        #mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+        if DEBUG:
+            mpiprint(6,'Computing Resulting norm')
+            norm1 = bound_mps.norm()
+            mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
     return bound_mps
 
-def left_bmpo_sl(ket, bound_mpo, bra=None, chi=4,truncate=True):
+def left_bmpo_sl(bra, bound_mpo, chi=4,truncate=True,ket=None):
     """
     Add two layers to the single layer boundary mpo environment
 
     Args:
-        ket : list
+        bra : list
             A list containing the tensors for a single peps column
         bound_mpo : list
             A list containing the tensors for the left neighboring
             boundary mpo
 
     Kwargs:
-        bra : list
-            A list containing the bra tensors for a single peps column. 
-            If None, then the ket col will be used
         chi : int
             The maximum bond dimension for the boundary mpo
         truncate : bool
             Whether or not to do an svd and truncate the resulting
             boundary mpo
+        ket : PEPS Object
+            A second peps column, to use as the ket
+            If None, then the bra col will be used
 
     Returns:
         bound_mpo : list
             An updated boundary mpo
     """
-    mpiprint(5,'Updating boundary mpo (sl)')
+    mpiprint(3,'Updating boundary mpo (sl), maxelem = {}'.format(bound_mpo.max_elem()))
     # Find size of peps column and dims of tensors
-    Ny = len(ket)
-    _,_,d,D,_ = ket[0].shape
+    Ny = len(bra)
+    _,_,d,D,_ = bra[0].shape
     
     # Copy the ket column if needed
-    if bra is None:
-        bra = copy.deepcopy(ket)
+    if ket is None:
+        ket = copy.deepcopy(bra)
 
     # First Layer (ket) #####################################
     bound_mpo = left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=chi,truncate=truncate)
@@ -228,7 +236,7 @@ def left_bmpo_sl(ket, bound_mpo, bra=None, chi=4,truncate=True):
     # Return result
     return bound_mpo
 
-def left_update_sl(peps_col, bound_mpo, chi=4,truncate=True):
+def left_update_sl(peps_col, bound_mpo, chi=4,truncate=True,ket=None):
     """
     Update the boundary mpo, from the left, moving right, using single layer
 
@@ -244,6 +252,8 @@ def left_update_sl(peps_col, bound_mpo, chi=4,truncate=True):
         truncate : bool
             Whether or not to do an svd and truncate the resulting
             boundary mpo
+        ket : PEPS Object
+            A second peps column, to use as the ket
 
     Returns:
         bound_mpo : list
@@ -251,19 +261,19 @@ def left_update_sl(peps_col, bound_mpo, chi=4,truncate=True):
     """
     # Check if we are at left edge
     if bound_mpo is None:
-        bound_mpo = init_left_bmpo_sl(peps_col,chi=chi,truncate=truncate)
+        bound_mpo = init_left_bmpo_sl(peps_col,chi=chi,truncate=truncate,ket=ket)
     # Otherwise update is generic
     else:
         # Start from bottom of the column
-        bound_mpo = left_bmpo_sl(peps_col,bound_mpo,chi=chi,truncate=truncate)
+        bound_mpo = left_bmpo_sl(peps_col,bound_mpo,chi=chi,truncate=truncate,ket=ket)
     return bound_mpo
 
-def left_update(peps_col,bound_mpo,chi=4):
+def left_update(peps_col,bound_mpo,chi=4,ket=None):
     mpiprint(0,'Only single layer environment implemented')
     import sys
     sys.exit()
 
-def update_left_bound_mpo(peps_col, bound_mpo, chi=4, singleLayer=True,truncate=True):
+def update_left_bound_mpo(peps_col, bound_mpo, chi=4, singleLayer=True,truncate=True,ket_col=None):
     """
     Update the boundary mpo, from the left, moving right
 
@@ -282,17 +292,19 @@ def update_left_bound_mpo(peps_col, bound_mpo, chi=4, singleLayer=True,truncate=
         truncate : bool
             Whether or not to do an svd and truncate the resulting
             boundary mpo
+        ket_col : PEPS Object
+            A second peps column, to use as the ket
 
     Returns:
         bound_mpo : list
             An updated boundary mpo
     """
     if singleLayer:
-        return left_update_sl(peps_col,bound_mpo,chi=chi,truncate=truncate)
+        return left_update_sl(peps_col,bound_mpo,chi=chi,truncate=truncate,ket=ket_col)
     else:
-        return left_update(peps_col,bound_mpo,chi=chi,truncate=truncate)
+        return left_update(peps_col,bound_mpo,chi=chi,truncate=truncate,ket=ket_col)
 
-def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all=False):
+def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None):
     """
     Calculate the left boundary MPO
 
@@ -314,6 +326,8 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all
         return_all : bool
             Whether to return a list of boundary mpos upto col or just
             return the boundary mpo for col.
+        ket : PEPS Object
+            A second peps, to use as the ket, in the operator contraction
 
     returns:
         bound_mpo : list
@@ -330,10 +344,13 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all
     bound_mpo = [None]*(col-1)
     for colind in range(col-1):
         mpiprint(4,'Updating left boundary mpo')
+        if ket is not None: 
+            ket_col = ket[colind][:]
+        else: ket_col = None
         if colind == 0:
-            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], None, chi=chi, singleLayer=singleLayer,truncate=truncate)
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], None, chi=chi, singleLayer=singleLayer,truncate=truncate,ket_col=ket_col)
         else:
-            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], bound_mpo[colind-1], chi=chi, singleLayer=singleLayer,truncate=truncate)
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], bound_mpo[colind-1], chi=chi, singleLayer=singleLayer,truncate=truncate,ket_col=ket_col)
 
     # Return result
     if return_all:
@@ -341,7 +358,7 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all
     else:
         return bound_mpo[-1]
 
-def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all=False):
+def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None):
     """
     Calculate the right boundary MPO
 
@@ -363,6 +380,8 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
         return_all : bool
             Whether to return a list of boundary mpos upto col or just
             return the boundary mpo for col.
+        ket : PEPS Object
+            A second peps, to use as the ket, in the operator contraction
 
     returns:
         bound_mpo : list
@@ -378,22 +397,33 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
 
     # Flip the peps
     peps = flip_peps(peps)
+    if ket is not None: 
+        ket = flip_peps(ket)
     col = Nx-col
 
     # Loop through the columns, creating a boundary mpo for each
     bound_mpo = [None]*(col-1)
     for colind in range(col-1):
         mpiprint(4,'Updating boundary mpo')
+        if ket is not None: 
+            ket_col = ket[colind][:]
+        else: ket_col = None
         if colind == 0:
-            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], None, chi=chi, singleLayer=singleLayer, truncate=truncate)
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], None, chi=chi, singleLayer=singleLayer, truncate=truncate, ket_col=ket_col)
         else:
-            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], bound_mpo[colind-1], chi=chi, singleLayer=singleLayer, truncate=truncate)
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], bound_mpo[colind-1], chi=chi, singleLayer=singleLayer, truncate=truncate, ket_col=ket_col)
 
+    # Unflip the peps
+    peps = flip_peps(peps)
+    if ket is not None: 
+        ket = flip_peps(ket)
+    
     # Return results
     if return_all:
         return bound_mpo[::-1]
     else:
         return bound_mpo[-1]
+
 def rotate_peps(peps,clockwise=True):
     """
     Rotate a peps
@@ -480,7 +510,7 @@ def rotate_lambda(Lambda,clockwise=True):
     else:
         return None
 
-def flip_peps(peps):
+def flip_peps(peps,mk_copy=True):
     """
     Flip a peps horizontally
 
@@ -488,10 +518,14 @@ def flip_peps(peps):
         peps : a list of a list containing peps tensors
             The initial peps tensor
 
+    Kwargs:
+        mk_copy : bool
+            Whether to make this a copy of the original peps
+
     Returns:
         peps : a list of a list containing peps tensors
             The horizontally flipped version of the peps
-            tensor. This is flipped such that ...
+            tensor. This is a copy of the original peps
     """
 
     # Get system size
@@ -510,7 +544,10 @@ def flip_peps(peps):
     for x in range(Nx):
         for y in range(Ny):
             # Copy Correct Tensor
-            fpeps[x][y] = copy.deepcopy(peps[(Nx-1)-x][y])
+            if mk_copy:
+                fpeps[x][y] = copy.deepcopy(peps[(Nx-1)-x][y])
+            else:
+                fpeps[x][y] = peps[(Nx-1)-x][y]
             # Reorder Indices
             fpeps[x][y] = transpose(fpeps[x][y],[3,1,2,0,4])
 
@@ -668,7 +705,8 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,dtype=float_):
 
     # Create a random tensor
     dims = (Dl,Dd,d,Dr,Du)
-    ten = rand(dims,dtype=dtype)
+    #ten = rand(dims,dtype=dtype)
+    ten = 0.95*ones(dims,dtype=dtype)+0.1*rand(dims,dtype=dtype)
 
     # Return result
     return ten
@@ -756,6 +794,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
         peps : list
             The normalized version of the PEPS, stored as a
             list of lists
+
     """
 
     # Figure out peps size
@@ -765,7 +804,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
     pwr = -1.0 / (2*Nx*Ny) # NOTE: if trying to use this procedure to 
                            # normalize a partition function, remove
                            # the factor of 2 in this denominator
-    mpiprint(2, '\n[binarySearch] shape=({},{}), chi={}'.format(Nx,Ny,chi))
+    mpiprint(4, '\n[binarySearch] shape=({},{}), chi={}'.format(Nx,Ny,chi))
 
     # get initial scale factor
     scale = (up+down)/2.0
@@ -806,7 +845,8 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
                 mpiprint(2, 'apply exact scale: {}'.format(scale))
 
         if istep == max_iter:
-            mpiprint(0, 'binarySearch normalization exceeds max_iter... terminating')
+            mpiprint(4, 'binarySearch normalization exceeds max_iter... terminating')
+            print('Exceeded normalization!')
             break
 
         peps_try = multiply_peps_elements(peps.copy(),scale)
@@ -833,6 +873,7 @@ def calc_peps_norm(peps,chi=4,singleLayer=True):
         norm : float
             The (approximate) norm of the PEPS
     """
+    # TODO Add - separate bra and ket
     # Absorb Lambda tensors if needed
     try:
         peps = peps_absorb_lambdas(peps.tensors,peps.ltensors,mk_copy=True)
@@ -906,7 +947,7 @@ def make_rand_lambdas(Nx,Ny,D,dtype=float_):
     tensors = [vert,horz]
     return tensors
 
-def update_top_env(peps,left1,left2,right1,right2,prev_env):
+def update_top_env(bra,ket,left1,left2,right1,right2,prev_env):
     """
     Doing the following contraction:
 
@@ -935,16 +976,16 @@ def update_top_env(peps,left1,left2,right1,right2,prev_env):
 
     """
     if prev_env is None:
-        prev_env = ones((1,1,1,1),dtype=peps.dtype)
-    tmp = einsum('LDPRU,OUuo->OLDPRuo',peps,prev_env)
-    tmp = einsum('OLDPRuo,NLO->NDPRuo',tmp,left2)
-    tmp = einsum('NDPRuo,nRo->NDPun',tmp,right2)
-    tmp = einsum('NDPun,ldPru->NDldrn',tmp,conj(peps))
-    tmp = einsum('NDldrn,MlN->MDdrn',tmp,left1)
-    top_env = einsum('MDdrn,mrn->MDdm',tmp,right1)
+        prev_env = ones((1,1,1,1),dtype=bra.dtype)
+    tmp = einsum('ldpru,OuUo->OldprUo',ket,prev_env)
+    tmp = einsum('OldprUo,NlO->NdprUo',tmp,left2)
+    tmp = einsum('NdprUo,nro->NdpUn',tmp,right2)
+    tmp = einsum('NdpUn,LDpRU->NdLDRn',tmp,bra)
+    tmp = einsum('NdLDRn,MLN->MdDRn',tmp,left1)
+    top_env = einsum('MdDRn,mRn->MdDm',tmp,right1)
     return top_env
 
-def calc_top_envs(peps_col,left_bmpo,right_bmpo):
+def calc_top_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
     """
     Doing the following contraction:
 
@@ -974,14 +1015,20 @@ def calc_top_envs(peps_col,left_bmpo,right_bmpo):
     """
 
     # Figure out height of peps column
-    Ny = len(peps_col)
+    Ny = len(bra_col)
+
+    # Copy bra if needed
+    if ket_col is None: 
+        ket_col = copy.deepcopy(bra_col)
+    # TODO - Conjugate this ket col
 
     # Compute top environment
     top_env = [None]*Ny
     for row in reversed(range(Ny)):
         if row == Ny-1: prev_env = None
         else: prev_env = top_env[row+1]
-        top_env[row] = update_top_env(peps_col[row],
+        top_env[row] = update_top_env(bra_col[row],
+                                      ket_col[row],
                                       left_bmpo[2*row],
                                       left_bmpo[2*row+1],
                                       right_bmpo[2*row],
@@ -989,7 +1036,7 @@ def calc_top_envs(peps_col,left_bmpo,right_bmpo):
                                       prev_env)
     return top_env
 
-def update_bot_env(peps,left1,left2,right1,right2,prev_env):
+def update_bot_env(bra,ket,left1,left2,right1,right2,prev_env):
     """
     Doing the following contraction:
 
@@ -1013,16 +1060,16 @@ def update_bot_env(peps,left1,left2,right1,right2,prev_env):
 
     """
     if prev_env is None:
-        prev_env = ones((1,1,1,1),dtype=peps.dtype)
-    tmp = einsum('LDPRU,MdDm->MdLPURm',peps,prev_env)
+        prev_env = ones((1,1,1,1),dtype=bra.dtype)
+    tmp = einsum('LDPRU,MdDm->MdLPURm',bra,prev_env)
     tmp = einsum('MdLPURm,MLN->NdPURm',tmp,left1)
     tmp = einsum('NdPURm,mRn->NdPUn',tmp,right1)
-    tmp = einsum('NdPUn,ldPru->NlurUn',tmp,conj(peps))
+    tmp = einsum('NdPUn,ldPru->NlurUn',tmp,ket)
     tmp = einsum('NlurUn,NlO->OurUn',tmp,left2)
     bot_env = einsum('OurUn,nro->OuUo',tmp,right2)
     return bot_env
 
-def calc_bot_envs(peps_col,left_bmpo,right_bmpo):
+def calc_bot_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
     """
     Doing the following contraction:
 
@@ -1047,14 +1094,20 @@ def calc_bot_envs(peps_col,left_bmpo,right_bmpo):
     """
 
     # Figure out height of peps column
-    Ny = len(peps_col)
+    Ny = len(bra_col)
+
+    # Copy bra if needed
+    if ket_col is None: 
+        ket_col = copy.deepcopy(bra_col)
+    # TODO - Conjugate this ket column
 
     # Compute the bottom environment
     bot_env = [None]*Ny
     for row in range(Ny):
         if row == 0: prev_env = None
         else: prev_env = bot_env[row-1]
-        bot_env[row] = update_bot_env(peps_col[row],
+        bot_env[row] = update_bot_env(bra_col[row],
+                                      ket_col[row],
                                       left_bmpo[2*row],
                                       left_bmpo[2*row+1],
                                       right_bmpo[2*row],
@@ -1123,14 +1176,17 @@ def make_N_positive(N,hermitian=True,positive=True):
 
     # Get a positive approximation of the environment
     if positive:
-        N = einsum('UuDd->UDud',N)
-        (n1,n2,n3,n4) = N.shape
-        Nmat = reshape(N,(n1*n2,n3*n4))
-        u,v = eigh(Nmat)
-        u = pos_sqrt_vec(u)
-        Nmat = einsum('ij,j,kj->ik',v,u,v)
-        N = reshape(Nmat,(n1,n2,n3,n4))
-        N = einsum('UDud->UuDd',N)
+        try:
+            N = einsum('UuDd->UDud',N)
+            (n1,n2,n3,n4) = N.shape
+            Nmat = reshape(N,(n1*n2,n3*n4))
+            u,v = eigh(Nmat)
+            u = pos_sqrt_vec(u)
+            Nmat = einsum('ij,j,kj->ik',v,u,v)
+            N = reshape(Nmat,(n1,n2,n3,n4))
+            N = einsum('UDud->UuDd',N)
+        except Exception as e:
+            print('Failed to make N positive, eigenvalues did not converge')
 
         # Check to ensure N is positive
         if DEBUG:
@@ -1142,14 +1198,18 @@ def make_N_positive(N,hermitian=True,positive=True):
 
     return N
 
-def calc_local_env(peps1,peps2,env_top,env_bot,lbmpo,rbmpo,reduced=True,hermitian=True,positive=True):
+def calc_local_env(bra1,bra2,ket1,ket2,env_top,env_bot,lbmpo,rbmpo,reduced=True,hermitian=True,positive=True):
     """
     Calculate the local environment around two peps tensors
 
     Args:
-        peps1 : peps tensor
+        bra1 : peps tensor
             The peps tensor for the bottom site
-        peps2 : peps tensor
+        bra2 : peps tensor
+            The peps tensor for the top site
+        ket1 : peps tensor
+            The peps tensor for the bottom site
+        ket2 : peps tensor
             The peps tensor for the top site
         env_top : env tensor
             The top environment for the given sites
@@ -1177,47 +1237,31 @@ def calc_local_env(peps1,peps2,env_top,env_bot,lbmpo,rbmpo,reduced=True,hermitia
     """
 
     if reduced:
-        if DEBUG:
-            # Calculate initial norm exactly
-            tmp = einsum('abcd,aef->febcd',env_bot,lbmpo[0])
-            tmp = einsum('febcd,ecghi->fbgihd',tmp,peps1)
-            tmp = einsum('fbgihd,dhj->fbgij',tmp,rbmpo[0])
-            tmp = einsum('fbgij,fkl->lkbgij',tmp,lbmpo[1])
-            tmp = einsum('lkbgij,kbgmn->lnmij',tmp,peps1)
-            tmp = einsum('lnmij,jmo->lnio',tmp,rbmpo[1])
-            tmp = einsum('lnio,lpq->qpnio',tmp,lbmpo[2])
-            tmp = einsum('qpnio,pirst->qnrtso',tmp,peps2)
-            tmp = einsum('qnrtso,osu->qnrtu',tmp,rbmpo[2])
-            tmp = einsum('qnrtu,qvw->wvnrtu',tmp,lbmpo[3])
-            tmp = einsum('wvnrtu,vnrxy->wyxtu',tmp,peps2)
-            tmp = einsum('wyxtu,uxz->wytz',tmp,rbmpo[3])
-            norm =einsum('wytz,wytz->',tmp,env_top)
-            mpiprint(0,'Tedious norm = {}'.format(norm))
-
         # Get reduced tensors
-        ub,phys_b,phys_t,vt = reduce_tensors(peps1,peps2)
+        ub,phys_b,phys_t,vt = reduce_tensors(bra1,bra2)
+        ubk,phys_bk,phys_tk,vtk = reduce_tensors(ket1,ket2)
 
         # Compute bottom half of environment
-        tmp = einsum('CDdc,ClB->BlDdc',env_bot,lbmpo[0])
-        tmp = einsum('BlDdc,ldru->BDurc',tmp,conj(ub))
-        tmp = einsum('BDurc,crb->BDub',tmp,rbmpo[0])
-        tmp = einsum('BDub,BLA->ALDub',tmp,lbmpo[1])
-        tmp = einsum('ALDub,LDRU->AURub',tmp,ub)
-        envt= einsum('AURub,bRa->AUua',tmp,rbmpo[1])
+        tmp = einsum('CdDc,CLB->BLdDc',env_bot,lbmpo[0])
+        tmp = einsum('BLdDc,LDRU->BdURc',tmp,ub)
+        tmp = einsum('BdURc,cRb->BdUb',tmp,rbmpo[0])
+        tmp = einsum('BdUb,BlA->AldUb',tmp,lbmpo[1])
+        tmp = einsum('AldUb,ldru->AurUb',tmp,ubk)
+        envb= einsum('AurUb,bra->AuUa',tmp,rbmpo[1])
 
         # Compute top half of environment
-        tmp = einsum('CUuc,BLC->BLUuc',env_top,lbmpo[3])
-        tmp = einsum('BLUuc,LDRU->BDRuc',tmp,vt)
-        tmp = einsum('BDRuc,bRc->BDub',tmp,rbmpo[3])
-        tmp = einsum('BDub,AlB->AlDub',tmp,lbmpo[2])
-        tmp = einsum('AlDub,ldru->ADdrb',tmp,conj(vt))
-        envb= einsum('ADdrb,arb->ADda',tmp,rbmpo[2])
+        tmp = einsum('CuUc,BlC->BluUc',env_top,lbmpo[3])
+        tmp = einsum('BluUc,ldru->BdrUc',tmp,vtk)
+        tmp = einsum('BdrUc,brc->BdUb',tmp,rbmpo[3])
+        tmp = einsum('BdUb,ALB->ALdUb',tmp,lbmpo[2])
+        tmp = einsum('ALdUb,LDRU->AdDRb',tmp,vt)
+        envt= einsum('AdDRb,aRb->AdDa',tmp,rbmpo[2])
 
         # Compute Environment
-        N = einsum('AUua,ADda->UuDd',envt,envb)
+        N = einsum('AdDa,AuUa->uUdD',envt,envb)
         N = make_N_positive(N,hermitian=hermitian,positive=positive)
 
-        return ub,phys_b,phys_t,vt,N
+        return ub,phys_b,phys_t,vt,ubk,phys_bk,phys_tk,vtk,N
     else:
         mpiprint(0,'Only reduced update implemented')
         import sys
@@ -1225,7 +1269,7 @@ def calc_local_env(peps1,peps2,env_top,env_bot,lbmpo,rbmpo,reduced=True,hermitia
 
 def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
                       phys_b_ket=None,phys_t_ket=None,
-                      reduced=True,normalize=True):
+                      reduced=True,normalize=True,return_norm=False):
     """
     Calculate the normalized Energy of the system
     """
@@ -1237,8 +1281,8 @@ def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
 
     # Compute Energy (or op value
     if reduced:
-        tmp1= einsum('APU,UQB->APQB',phys_b_bra,phys_t_bra)
-        tmp1 = einsum('APQB,AaBb->aPQb',tmp1,N)
+        tmp = einsum('APU,UQB->APQB',phys_b_bra,phys_t_bra)
+        tmp1= einsum('APQB,aAbB->aPQb',tmp,N)
         tmp2= einsum('apu,uqb->apqb',phys_b_ket,phys_t_ket)
         tmp = einsum('aPQb,apqb->PQpq',tmp1,tmp2)
         if ham is not None:
@@ -1248,59 +1292,81 @@ def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
         norm = einsum('PQPQ->',tmp)
         mpiprint(7,'E = {}/{} = {}'.format(E,norm,E/norm))
         if normalize:
-            return E/norm
+            if return_norm:
+                return E/norm,norm
+            else:
+                return E/norm
         else:
-            return E
+            if return_norm:
+                return E,norm
+            else:
+                return E
     else:
         mpiprint(0,'Only reduced update implemented')
         import sys
         sys.exit()
 
-def calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,positive=True):
+def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,positive=True,ket_col=None):
+    """
+    Calculate the environment tensor
+    """
+    # Copy bra if needed
+    _ket_col = ket_col
+    if ket_col is None: 
+        ket_col = copy.deepcopy(bra_col)
+    # TODO - Conjugate this ket column
 
     if row == 0:
-        if len(peps_col) == 2:
+        if len(bra_col) == 2:
             # Only two sites in column, use identity at both ends
-            ub,phys_b,phys_t,vt,N = calc_local_env(peps_col[row],
-                                             peps_col[row+1],
-                                             ones((1,1,1,1),dtype=top_envs[0].dtype),
-                                             ones((1,1,1,1),dtype=top_envs[0].dtype),
-                                             left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                             right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                             hermitian=hermitian,
-                                             positive=positive)
+            res = calc_local_env(bra_col[row],
+                                 bra_col[row+1],
+                                 ket_col[row],
+                                 ket_col[row+1],
+                                 ones((1,1,1,1),dtype=top_envs[0].dtype),
+                                 ones((1,1,1,1),dtype=top_envs[0].dtype),
+                                 left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
+                                 right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
+                                 hermitian=hermitian,
+                                 positive=positive)
         else:
             # Get the local environment tensor
-            ub,phys_b,phys_t,vt,N = calc_local_env(peps_col[row],
-                                             peps_col[row+1],
-                                             top_envs[row+2],
-                                             ones((1,1,1,1),dtype=top_envs[0].dtype),
-                                             left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                             right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                             hermitian=hermitian,
-                                             positive=positive)
-    elif row == len(peps_col)-2:
-        ub,phys_b,phys_t,vt,N = calc_local_env(peps_col[row],
-                                         peps_col[row+1],
-                                         ones((1,1,1,1),dtype=top_envs[0].dtype),
-                                         bot_envs[row-1],
-                                         left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                         right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                         hermitian=hermitian,
-                                         positive=positive)
+            res = calc_local_env(bra_col[row],
+                                 bra_col[row+1],
+                                 ket_col[row],
+                                 ket_col[row+1],
+                                 top_envs[row+2],
+                                 ones((1,1,1,1),dtype=top_envs[0].dtype),
+                                 left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
+                                 right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
+                                 hermitian=hermitian,
+                                 positive=positive)
+    elif row == len(bra_col)-2:
+        res = calc_local_env(bra_col[row],
+                             bra_col[row+1],
+                             ket_col[row],
+                             ket_col[row+1],
+                             ones((1,1,1,1),dtype=top_envs[0].dtype),
+                             bot_envs[row-1],
+                             left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
+                             right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
+                             hermitian=hermitian,
+                             positive=positive)
     else:
         # Get the local environment tensor
-        ub,phys_b,phys_t,vt,N = calc_local_env(peps_col[row],
-                                         peps_col[row+1],
-                                         top_envs[row+2],
-                                         bot_envs[row-1],
-                                         left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                         right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                         hermitian=hermitian,
-                                         positive=positive)
-    return ub,phys_b,phys_t,vt,N
+        res = calc_local_env(bra_col[row],
+                             bra_col[row+1],
+                             ket_col[row],
+                             ket_col[row+1],
+                             top_envs[row+2],
+                             bot_envs[row-1],
+                             left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
+                             right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
+                             hermitian=hermitian,
+                             positive=positive)
+    return res
 
-def calc_single_column_op(peps_col,left_bmpo,right_bmpo,ops_col,normalize=True):
+def calc_single_column_op(peps_col,left_bmpo,right_bmpo,ops_col,normalize=True,ket_col=None):
     """
     Calculate contribution to operator from interactions within
     a single column.
@@ -1319,17 +1385,18 @@ def calc_single_column_op(peps_col,left_bmpo,right_bmpo,ops_col,normalize=True):
     """
 
     # Calculate top and bottom environments
-    top_envs = calc_top_envs(peps_col,left_bmpo,right_bmpo)
-    bot_envs = calc_bot_envs(peps_col,left_bmpo,right_bmpo)
+    top_envs = calc_top_envs(peps_col,left_bmpo,right_bmpo,ket_col=ket_col)
+    bot_envs = calc_bot_envs(peps_col,left_bmpo,right_bmpo,ket_col=ket_col)
 
     # Calculate Energy
     E = zeros(len(ops_col))
     for row in range(len(ops_col)):
-        _,phys_b,phys_t,_,N = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=False,positive=False)
-        E[row] = calc_local_op(phys_b,phys_t,N,ops_col[row],normalize=normalize)
+        res = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=False,positive=False,ket_col=ket_col)
+        _,phys_b,phys_t,_,_,phys_bk,phys_tk,_,N = res
+        E[row] = calc_local_op(phys_b,phys_t,N,ops_col[row],normalize=normalize,phys_b_ket=phys_bk,phys_t_ket=phys_tk)
     return E
 
-def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True):
+def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
     """
     Calculate contribution to operator from interactions within all columns,
     ignoring interactions between columns
@@ -1346,6 +1413,8 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True):
         return_sum : bool
             Whether to return the summation of all energies or
             a 2D array showing the energy contribution from each bond.
+        ket : PEPS Object
+            A second peps, to use as the ket, in the operator contraction
 
     Returns:
         val : float
@@ -1358,20 +1427,23 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True):
     Ny = len(peps[0])
 
     # Compute the boundary MPOs
-    right_bmpo = calc_right_bound_mpo(peps, 0,chi=chi,return_all=True)
-    left_bmpo  = calc_left_bound_mpo (peps,Nx,chi=chi,return_all=True)
+    right_bmpo = calc_right_bound_mpo(peps, 0,chi=chi,return_all=True,ket=ket)
+    left_bmpo  = calc_left_bound_mpo (peps,Nx,chi=chi,return_all=True,ket=ket)
     ident_bmpo = identity_mps(len(right_bmpo[0]),dtype=peps[0][0].dtype)
 
     # Loop through all columns
     E = zeros((len(ops),len(ops[0])),dtype=peps[0][0].dtype)
     for col in range(Nx):
+        if ket is None: 
+            ket_col = None
+        else: ket_col = ket[col]
         if col == 0:
-            E[col,:] = calc_single_column_op(peps[col],ident_bmpo,right_bmpo[col],ops[col],normalize=normalize)
+            E[col,:] = calc_single_column_op(peps[col],ident_bmpo,right_bmpo[col],ops[col],normalize=normalize,ket_col=ket_col)
         elif col == Nx-1:
             # Use Identity on the right side
-            E[col,:] = calc_single_column_op(peps[col],left_bmpo[col-1],ident_bmpo,ops[col],normalize=normalize)
+            E[col,:] = calc_single_column_op(peps[col],left_bmpo[col-1],ident_bmpo,ops[col],normalize=normalize,ket_col=ket_col)
         else:
-            E[col,:] = calc_single_column_op(peps[col],left_bmpo[col-1],right_bmpo[col],ops[col],normalize=normalize)
+            E[col,:] = calc_single_column_op(peps[col],left_bmpo[col-1],right_bmpo[col],ops[col],normalize=normalize,ket_col=ket_col)
     mpiprint(8,'Energy [:,:] = \n{}'.format(E))
 
     if return_sum:
@@ -1379,12 +1451,12 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True):
     else:
         return E
 
-def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True):
+def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
     """
     Calculate the expectation value for a given operator
 
     Args:
-        peps : A list of lists of peps tensors
+        peps : A PEPS object
             The PEPS to be normalized
         ops :
             The operator to be contracted with the peps
@@ -1392,6 +1464,13 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True):
     Kwargs:
         chi : int
             The maximum bond dimension for the boundary mpo
+        normalize : bool
+            Whether to divide the resulting operator value by the peps norm
+        return_sum : bool
+            Whether to either return an array of the results, the same shape
+            as ops, or a summation of all operators
+        ket : PEPS Object
+            A second peps, to use as the ket, in the operator contraction
 
     Returns:
         val : float
@@ -1400,16 +1479,22 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True):
     # Absorb Lambda tensors if needed
     try:
         peps = peps_absorb_lambdas(peps.tensors,peps.ltensors,mk_copy=True)
-    except:
-        pass
+    except: pass
+    try:
+        ket = peps_absorb_lambdas(ket.tensors,ket.ltensors,mk_copy=True)
+    except: pass
 
     # Calculate contribution from interactions between columns
-    col_energy = calc_all_column_op(peps,ops[0],chi=chi,normalize=normalize,return_sum=return_sum)
+    col_energy = calc_all_column_op(peps,ops[0],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
 
     # Calculate contribution from interactions between rows
     peps = rotate_peps(peps,clockwise=True)
-    row_energy = calc_all_column_op(peps,ops[1],chi=chi,normalize=normalize,return_sum=return_sum)
+    if ket is not None: 
+        ket = rotate_peps(ket,clockwise=True)
+    row_energy = calc_all_column_op(peps,ops[1],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
     peps = rotate_peps(peps,clockwise=False)
+    if ket is not None: 
+        ket = rotate_peps(ket,clockwise=False)
 
     # Return Result
     if return_sum:
@@ -1460,7 +1545,7 @@ def increase_peps_mbd_lambda(Lambda,Dnew,noise=0.01):
     else: 
         return None
 
-def increase_peps_mbd(peps,Dnew,noise=0.01):
+def increase_peps_mbd(peps,Dnew,noise=1e-10):
     """
     Increase the bond dimension of a peps
 
@@ -1483,28 +1568,31 @@ def increase_peps_mbd(peps,Dnew,noise=0.01):
     Nx = len(peps)
     Ny = len(peps[0])
     Dold = peps[0][0].shape[3]
-
-    # Get unitary tensor for insertion
-    identity = zeros((Dnew,Dold),dtype=peps[0][0].dtype)
-    identity[:Dold,:] = eye(Dold,dtype=peps[0][0].dtype)
-    mat = identity + noise*rand((Dnew,Dold),dtype=peps[0][0].dtype)
-    mat = svd(mat)[0]
-
-    # Loop through all peps tensors
+    
     for col in range(Nx):
         for row in range(Ny):
-            # Increase left bond
+            # Determine tensor shape
+            old_shape = list(peps[row][col].shape)
+            new_shape = list(peps[row][col].shape)
+            # Increase left bond dimension
             if row != 0:
-                peps[row][col] = einsum('Ll,ldpru->Ldpru',mat,peps[row][col])
-            # Increase down bond
+                new_shape[0] = Dnew
             if col != 0:
-                peps[row][col] = einsum('Dd,ldpru->lDpru',mat,peps[row][col])
-            # Increase right bond
+                new_shape[1] = Dnew
             if row != Nx-1:
-                peps[row][col] = einsum('Rr,ldpru->ldpRu',mat,peps[row][col])
-            # Increase up bond
+                new_shape[3] = Dnew
             if col != Ny-1:
-                peps[row][col] = einsum('Uu,ldpru->ldprU',mat,peps[row][col])
+                new_shape[4] = Dnew
+            # Create an empty tensor
+            ten = zeros(new_shape,dtype=peps[row][col].dtype)
+            ten[:old_shape[0],:old_shape[1],:old_shape[2],:old_shape[3],:old_shape[4]] = peps[row][col].copy()
+            # Add some noise (if needed
+            ten_noise = noise*rand(new_shape,dtype=peps[row][col].dtype)
+            ten += ten_noise
+            # Put new tensor back into peps
+            peps[row][col] = ten
+
+    # Return result
     return peps
 
 def copy_peps_tensors(peps):
@@ -1576,7 +1664,7 @@ class PEPS:
 
     def __init__(self,Nx=10,Ny=10,d=2,D=2,
                  chi=None,norm_tol=20,canonical=False,
-                 singleLayer=True,max_norm_iter=100,
+                 singleLayer=True,max_norm_iter=50,
                  norm_BS_upper=1.0,norm_BS_lower=0.0,
                  norm_BS_print=1,dtype=float_,normalize=True):
         """
@@ -1813,7 +1901,7 @@ class PEPS:
 
         return norm
 
-    def calc_op(self,ops,chi=None,normalize=True,return_sum=True):
+    def calc_op(self,ops,chi=None,normalize=True,return_sum=True,ket=None):
         """
         Calculate the expectation value for a given operator
 
@@ -1826,6 +1914,13 @@ class PEPS:
         Kwargs:
             chi : int
                 The maximum bond dimension for the boundary mpo
+            normalize : bool
+                Whether to divide the resulting operator value by the peps norm
+            return_sum : bool
+                Whether to either return an array of the results, the same shape
+                as ops, or a summation of all operators
+            ket : PEPS Object
+                A second peps, to use as the ket, in the operator contraction
 
         Returns:
             val : float
@@ -1833,9 +1928,9 @@ class PEPS:
         """
         if chi is None: chi = self.chi
         # Calculate the operator's value
-        return calc_peps_op(self,ops,chi=chi,normalize=normalize,return_sum=return_sum)
+        return calc_peps_op(self,ops,chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
 
-    def increase_mbd(self,newD,chi=None,noise=0.01):
+    def increase_mbd(self,newD,chi=None,noise=0.01,normalize=True):
         """
         Increase the maximum bond dimension of the peps
 
@@ -1852,6 +1947,7 @@ class PEPS:
             self.chi = chi
         self.tensors = increase_peps_mbd(self.tensors,newD,noise=noise)
         self.ltensors = increase_peps_mbd_lambda(self.ltensors,newD,noise=noise)
+        self.normalize()
 
     def absorb_lambdas(self):
         """
@@ -1922,6 +2018,7 @@ class PEPS:
         Ny_ = self.Ny
         self.Nx = Ny_
         self.Ny = Nx_
+        self.shape = (self.Nx,self.Ny)
 
     def flip(self):
         """

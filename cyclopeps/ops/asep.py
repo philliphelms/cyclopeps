@@ -103,7 +103,7 @@ def make_op(row,ju,jd,cu,cd,du,dd,sy):
     op  = ju[row]*exp(sy[row])*quick_op(Sp,Sm)
     op -= ju[row]*quick_op(n,v)
     # Hop down
-    if DEBUG: mpiprint(0,'{} Sm_{}*Sp_{} - {} v_{}*n_{}'.format(jd[row]*exp(-sy[row]),row,row+1,jd[row],row,row+1))
+    if DEBUG: mpiprint(0,'{} Sm_{}*Sp_{} - {} v_{}*n_{}'.format(jd[row+1]*exp(-sy[row+1]),row,row+1,jd[row+1],row,row+1))
     op += jd[row+1]*exp(-sy[row+1])*quick_op(Sm,Sp)
     op -= jd[row+1]*quick_op(v,n)
 
@@ -153,7 +153,7 @@ def make_op(row,ju,jd,cu,cd,du,dd,sy):
 
 
 # Current operators ------------------------------------------------------------------------------
-def return_curr_op(Nx,Ny,params):
+def return_curr_op(Nx,Ny,params,include_edges=False):
     """
     Return the operators to calculate the current
 
@@ -205,7 +205,8 @@ def return_curr_op(Nx,Ny,params):
                               cd[x,:],
                               du[x,:],
                               dd[x,:],
-                              sy[x,:])
+                              sy[x,:],
+                              include_edges=include_edges)
             # Add to list of column operators
             col_ops.append(op)
         # Add column of operators to list of columns
@@ -225,7 +226,8 @@ def return_curr_op(Nx,Ny,params):
                               cl[:,y],
                               dr[:,y],
                               dl[:,y],
-                              sx[:,y])
+                              sx[:,y],
+                              include_edges=include_edges)
             # Add to list of row operators
             row_ops.append(op)
         # Add row of operators to list of rows
@@ -234,44 +236,52 @@ def return_curr_op(Nx,Ny,params):
     # Return Results
     return [columns,rows]
 
-def make_curr_op(row,ju,jd,cu,cd,du,dd,sy):
+def make_curr_op(row,ju,jd,cu,cd,du,dd,sy,include_edges=False):
     """
     Interaction between sites (row,row+1)
     """
     # -----------------------------------------
     # Hopping between sites
-
     # Hop up
+    if DEBUG: mpiprint(0,'{} Sp_{}*Sm_{}'.format(ju[row]*exp(sy[row]),row,row+1))
     op  = ju[row]*exp(sy[row])*quick_op(Sp,Sm)
     # Hop down
-    op += jd[row+1]*exp(-sy[row+1])*quick_op(Sm,Sp)
+    if DEBUG: mpiprint(0,'{} Sm_{}*Sp_{}'.format(jd[row]*exp(-sy[row]),row,row+1))
+    op -= jd[row+1]*exp(-sy[row+1])*quick_op(Sm,Sp)
 
-    """
-    # ----------------------------------------
-    # Top Site creation/Annihilation
-
-    # Destroy upwards
-    op += du[row+1]*exp(sy[row+1])*quick_op(I,Sp)
-    # Destroy downwards
-    op += dd[row+1]*exp(-sy[row+1])*quick_op(I,Sp)
-    # Create upwards
-    op += cu[row+1]*exp(sy[row+1])*quick_op(I,Sm)
-    # Create Downwards
-    op += cd[row+1]*exp(-sy[row+1])*quick_op(I,Sm)
-
-    if row == 0:
+    if include_edges:
         # ----------------------------------------
-        # Bottom Site Creation/Annihilation
+        # Top Site creation/Annihilation
 
         # Destroy upwards
-        op += du[row]*exp(sy[row])*quick_op(Sp,I)
+        if DEBUG: mpiprint(0,'{} Sp_{}'.format(du[row+1]*exp(sy[row+1]),row+1))
+        op += du[row+1]*exp(sy[row+1])*quick_op(I,Sp)
         # Destroy downwards
-        op += dd[row]*exp(-sy[row])*quick_op(Sp,I)
+        if DEBUG: mpiprint(0,'{} Sp_{}'.format(dd[row+1]*exp(-sy[row+1]),row+1))
+        op -= dd[row+1]*exp(-sy[row+1])*quick_op(I,Sp)
         # Create upwards
-        op += cu[row]*exp(sy[row])*quick_op(Sm,I)
+        if DEBUG: mpiprint(0,'{} Sm_{}'.format(cu[row+1]*exp(sy[row+1]),row+1))
+        op += cu[row+1]*exp(sy[row+1])*quick_op(I,Sm)
         # Create Downwards
-        op += cd[row]*exp(-sy[row])*quick_op(Sm,I)
-    """
+        if DEBUG: mpiprint(0,'{} Sm_{}'.format(cd[row+1]*exp(-sy[row+1]),row+1))
+        op -= cd[row+1]*exp(-sy[row+1])*quick_op(I,Sm)
+
+        if row == 0:
+            # ----------------------------------------
+            # Bottom Site Creation/Annihilation
+
+            # Destroy upwards
+            if DEBUG: mpiprint(0,'{} Sp_{}'.format(du[row]*exp(sy[row]),row))
+            op += du[row]*exp(sy[row])*quick_op(Sp,I)
+            # Destroy downwards
+            if DEBUG: mpiprint(0,'{} Sp_{}'.format(dd[row]*exp(-sy[row]),row))
+            op -= dd[row]*exp(-sy[row])*quick_op(Sp,I)
+            # Create upwards
+            if DEBUG: mpiprint(0,'{} Sm_{}'.format(cu[row]*exp(sy[row]),row))
+            op += cu[row]*exp(sy[row])*quick_op(Sm,I)
+            # Create Downwards
+            if DEBUG: mpiprint(0,'{} Sm_{}'.format(cd[row]*exp(-sy[row]),row))
+            op -= cd[row]*exp(-sy[row])*quick_op(Sm,I)
 
     # Return Result
     return -op

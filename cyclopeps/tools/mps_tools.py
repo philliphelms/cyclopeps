@@ -1214,6 +1214,16 @@ class MPS:
 
     def __len__(self):
         return len(self.tensors)
+
+    def max_elem(self,absolute=True):
+        maxval = 0
+        for i in range(len(self)):
+            if absolute:
+                maxval = max(maxx(abss(self.tensors[i])),maxval)
+            else:
+                maxval = max(maxx(self.tensors[i]),maxval)
+        return maxval
+
     # -----------------------------------------------------------------------
     # Yet to be implemented functions
     #def __add__(self, mps):
