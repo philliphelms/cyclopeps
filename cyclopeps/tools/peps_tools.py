@@ -13,12 +13,12 @@ Date: July 2019
              | \
     (2) bottom  (3) physical
 """
-from cyclopeps.tools.gen_ten import rand
 
+from cyclopeps.tools.gen_ten import rand
 from cyclopeps.tools.params import *
-#from cyclopeps.tools.utils import *
-#from cyclopeps.tools.mps_tools import MPS,contract_mps
-#from cyclopeps.tools.env_tools import *
+from cyclopeps.tools.utils import *
+from cyclopeps.tools.mps_tools import MPS,contract_mps
+from cyclopeps.tools.env_tools import *
 from numpy import float_
 #from numpy import isnan, power
 import copy
@@ -60,12 +60,12 @@ def rotate_peps(peps,clockwise=True):
         for y in range(Ny):
             if clockwise:
                 # Copy Correct Tensor
-                rpeps[y][Nx-1-x] = copy.deepcopy(peps[x][y])
+                rpeps[y][Nx-1-x] = peps[x][y].copy()
                 # Reorder Indices
                 rpeps[y][Nx-1-x] = transpose(rpeps[y][Nx-1-x],[1,3,2,4,0])
             else:
                 # Copy Correct Tensor
-                rpeps[Ny-1-y][x] = copy.deepcopy(peps[x][y])
+                rpeps[Ny-1-y][x] = peps[x][y].copy()
                 # Reorder Indices
                 rpeps[Ny-1-y][x] = transpose(rpeps[Ny-1-y][x],[4,0,2,1,3])
 
@@ -88,9 +88,9 @@ def rotate_lambda(Lambda,clockwise=True):
             tmp = []
             for y in range(Ny-1):
                 if clockwise:
-                    tmp += [copy.deepcopy(Lambda[1][Ny-2-y][x])]
+                    tmp += [Lambda[1][Ny-2-y][x].copy()]
                 else:
-                    tmp += [copy.deepcopy(Lambda[1][y][Nx-1-x])]
+                    tmp += [Lambda[1][y][Nx-1-x].copy()]
             vert += [tmp]
 
         # Lambda tensors along horizontal bonds
@@ -99,9 +99,9 @@ def rotate_lambda(Lambda,clockwise=True):
             tmp = []
             for y in range(Ny):
                 if clockwise:
-                    tmp += [copy.deepcopy(Lambda[0][Ny-1-y][x])]
+                    tmp += [Lambda[0][Ny-1-y][x].copy()]
                 else:
-                    tmp += [copy.deepcopy(Lambda[0][y][Nx-2-x])]
+                    tmp += [Lambda[0][y][Nx-2-x].copy()]
             horz += [tmp]
 
         # Combine vertical and horizontal lambdas
@@ -140,7 +140,7 @@ def flip_peps(peps):
     for x in range(Nx):
         for y in range(Ny):
             # Copy Correct Tensor
-            fpeps[x][y] = copy.deepcopy(peps[(Nx-1)-x][y])
+            fpeps[x][y] = peps[(Nx-1)-x][y].copy()
             # Reorder Indices
             fpeps[x][y] = transpose(fpeps[x][y],[3,1,2,0,4])
 
@@ -170,14 +170,14 @@ def flip_lambda(Lambda):
         for x in range(Nx):
             tmp = []
             for y in range(Ny-1):
-                tmp += [copy.deepcopy(Lambda[0][(Nx-1)-x][y])]
+                tmp += [Lambda[0][(Nx-1)-x][y].copy()]
             vert += [tmp]
         # Lambda tensors along horizontal bonds
         horz = []
         for x in range(Nx-1):
             tmp = []
             for y in range(Ny):
-                tmp += [copy.deepcopy(Lambda[1][(Nx-2)-x][y])]
+                tmp += [Lambda[1][(Nx-2)-x][y].copy()]
             horz += [tmp]
 
         # Add to tensors
@@ -213,18 +213,21 @@ def peps_col_to_mps(peps_col):
     Ny = len(peps_col)
 
     # Create a list to hold the copy
-    peps_col_copy = [None]*Ny
+    peps_col_cp = [None]*Ny
+    for i in range(len(peps_col)):
+        peps_col_cp[i] = peps_col[i].copy()
+    peps_col = peps_col_cp
+
     for row in range(Ny):
         # Copy the tensor
         (Dl,Dd,d,Dr,Du) = peps_col[row].shape
         # Transpose to put left, physical, and right bonds in middle
-        peps_col[row] = transpose(peps_col[row],axes=[1,0,2,3,4])
-        # Reshape (to lump left, physical, and right tensors)
-        peps_col[row] = reshape(peps_col[row],(Dd,Dl*d*Dr,Du))
+        peps_col[row].transpose([1,0,2,3,4])
+        # lump left, physical, and right tensors
+        peps_col[row].merge_inds([1,2,3])
 
     # Convert PEPS column into an MPS
-    mps = MPS()
-    mps.input_mps_list(peps_col)
+    mps = MPS(peps_col)
 
     # Return resulting mps
     return mps
@@ -327,7 +330,6 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,backend='numpy',dtype=float_):
     # Create the random tensor
     dims = (Dl,Dd,d,Dr,Du)
     ten = rand(dims,sym,backend=backend,dtype=dtype)
-    print(ten)
     
     # Return result
     return ten
@@ -792,16 +794,16 @@ def make_N_positive(N,hermitian=True,positive=True):
 
     # Get a hermitian approximation of the environment
     if hermitian:
-        N1 = copy.deepcopy(N)
+        N1 = N.copy()
         N1 = einsum('UuDd->UDud',N1) # Could be UduD and uDUd instead
         N = einsum('UuDd->udUD',N)
         N = (N+N1)/2.
-        N1 = copy.deepcopy(N)
+        N1 = N.copy()
         N = einsum('UDab,abud->UuDd',N,N1)
 
         # Check to ensure N is hermitian
         if DEBUG:
-            Ntmp = copy.deepcopy(N)
+            Ntmp = N.copy()
             Ntmp = einsum('UuDd->UDud',Ntmp)
             (n1_,n2_,n3_,n4_) = Ntmp.shape
             Ntmp = reshape(Ntmp,(n1_*n2_,n3_*n4_))
@@ -820,7 +822,7 @@ def make_N_positive(N,hermitian=True,positive=True):
 
         # Check to ensure N is positive
         if DEBUG:
-            Ntmp = copy.deepcopy(N)
+            Ntmp = N.copy()
             Ntmp = einsum('UuDd->UDud',Ntmp)
             (n1_,n2_,n3_,n4_) = Ntmp.shape
             Ntmp = reshape(Ntmp,(n1_*n2_,n3_*n4_))
@@ -917,9 +919,9 @@ def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
     """
     # Make some copies
     if phys_t_ket is None:
-        phys_t_ket = conj(copy.deepcopy(phys_t_bra))
+        phys_t_ket = phys_t_bra.copy().conj()
     if phys_b_ket is None:
-        phys_b_ket = conj(copy.deepcopy(phys_b_bra))
+        phys_b_ket = phys_b_bra.copy().conj()
 
     # Compute Energy (or op value
     if reduced:
@@ -1201,7 +1203,7 @@ def copy_peps_tensors(peps):
     for x in range(len(peps)):
         tmp = []
         for y in range(len(peps[0])):
-            tmp += [copy.deepcopy(peps[x][y])]
+            tmp += [peps[x][y].copy()]
         copy += [tmp]
     return copy
 
@@ -1587,14 +1589,14 @@ class PEPS:
         # Copy peps tensors
         for i in range(self.Nx):
             for j in range(self.Ny):
-                peps_copy.tensors[i][j] = copy.deepcopy(self.tensors[i][j])
+                peps_copy.tensors[i][j] = self.tensors[i][j].copy()
 
         # Copy lambda tensors (if there)
         if self.ltensors is not None:
             for ind in range(len(self.ltensors)):
                 for x in range(len(self.ltensors[ind])):
                     for y in range(len(self.ltensors[ind][x])):
-                        peps_copy.ltensors[ind][x][y] = copy.deepcopy(self.ltensors[ind][x][y])
+                        peps_copy.ltensors[ind][x][y] = self.ltensors[ind][x][y].copy()
 
         # Return result
         return peps_copy

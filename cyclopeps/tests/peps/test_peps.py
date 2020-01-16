@@ -10,7 +10,7 @@ class test_peps(unittest.TestCase):
         Nx  = 3
         Ny  = 3
         d   = 2
-        D   = 4
+        D   = 6
         chi = 10
         Zn  = 2 # Zn symmetry (here, Z2)
         backend  = 'numpy'
@@ -20,7 +20,8 @@ class test_peps(unittest.TestCase):
                     D=D,
                     chi=chi,
                     Zn=Zn,
-                    backend=backend)
+                    backend=backend,
+                    normalize=False)
         norm = peps.calc_norm(chi=chi) 
         mpiprint(0,'Norm = {}'.format(norm))
         self.assertTrue(abs(1.0-norm) < 1e-3)
@@ -32,7 +33,7 @@ class test_peps(unittest.TestCase):
         Nx  = 3
         Ny  = 3
         d   = 2
-        D   = 4
+        D   = 6
         chi = 10
         Zn  = None
         backend  = 'numpy'
@@ -42,7 +43,8 @@ class test_peps(unittest.TestCase):
                     D=D,
                     chi=chi,
                     Zn=Zn,
-                    backend=backend)
+                    backend=backend,
+                    normalize=False)
         norm = peps.calc_norm(chi=chi) 
         mpiprint(0,'Norm = {}'.format(norm))
         self.assertTrue(abs(1.0-norm) < 1e-3)

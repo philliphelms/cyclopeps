@@ -12,11 +12,6 @@ from shutil import copyfile as _copyfile
 import os
 import time
 
-if USE_CTF:
-    from cyclopeps.tools.utils_ctf import *
-else:
-    from cyclopeps.tools.utils_np import *
-
 def bytes2human(n):
     symbols = ('K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y')
     prefix = {}

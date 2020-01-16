@@ -7,6 +7,7 @@ Date: July 2019
 
 """
 
+from cyclopeps.tools.gen_ten import einsum,eye
 from cyclopeps.tools.utils import *
 from cyclopeps.tools.mps_tools import MPS
 from cyclopeps.tools.peps_tools import *
@@ -16,6 +17,15 @@ import copy
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # PEPS ENVIRONMENT FUNCTIONS 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+def copy_tensor_list(ten_list):
+    """
+    Create a copy of a list of tensors
+    """
+    ten_list_cp = [None]*len(ten_list)
+    for i in range(len(ten_list)):
+        ten_list_cp[i] = ten_list[i].copy()
+    return ten_list_cp
+
 def init_left_bmpo_sl(ket, bra=None, chi=4, truncate=True):
     """
     Create the initial boundary mpo for a peps
@@ -40,37 +50,52 @@ def init_left_bmpo_sl(ket, bra=None, chi=4, truncate=True):
     Ny = len(ket)
     _,_,d,D,_ = ket[0].shape
 
-    # Copy the ket column if needed
+    # Copy the bra and ket
+    ket = copy_tensor_list(ket)
     if bra is None:
-        bra = copy.deepcopy(ket)
+        bra = copy_tensor_list(ket)
 
     # Make list to hold resulting mpo
     bound_mpo = []
 
     for row in range(Ny):
-        # Add Bra-ket contraction
+        # Add Bra-ket contraction ------------------------------
         res = einsum('ldpru,LDpRU->lLdDRurU',ket[row],bra[row])
-        # Reshape so it is an MPO
-        (Dl,Dd,Dp,Dr,Du) = ket[row].shape
-        res = reshape(res,(Dl*Dl*Dd*Dd,Dr,Dr*Du*Du))
+        # Merge inds to make it an MPO
+        res.merge_inds([0,1,2,3])
+        res.merge_inds([2,3,4])
         # Append to boundary_mpo
         bound_mpo.append(res)
 
-        # Add correct identity
-        I1 = eye(Dr)
-        I2 = eye(Du)
-        I3 = eye(Du)
-        I = einsum('du,DU,lr->dlDruU',I1,I2,I3)
-        # Reshape so it is an MPO
-        I = reshape(I,(Du*Dr*Du,Dr,Du*Du))
+        # Add correct identity ---------------------------------
+        (Dl,Dd,Dp,Dr,Du) = ket[row].shape
+        (Zl,Zd,Zp,Zr,Zu) = ket[row].qn_sectors
+        I1 = eye(Dr,
+                 Zr,
+                 is_symmetric=ket[row].is_symmetric,
+                 backend=ket[row].backend)
+        I2 = eye(Du,
+                 Zu,
+                 is_symmetric=ket[row].is_symmetric,
+                 backend=ket[row].backend)
+        I3 = eye(Du,
+                 Zu,
+                 is_symmetric=ket[row].is_symmetric,
+                 backend=ket[row].backend)
+        Itmp = einsum('du,DU->dDuU',I1,I2)
+        I = einsum('dDuU,lr->dlDruU',Itmp,I3)
+        # Merge inds to make it an MPO
+        I.merge_inds([0,1,2])
+        I.merge_inds([2,3])
+        # Append to the boundary mpo
         bound_mpo.append(I)
 
     # Put result into an MPS -------------------------------------------
-    bound_mps = MPS()
-    bound_mps.input_mps_list(bound_mpo)
+    bound_mps = MPS(bound_mpo)
 
     # Reduce bond dimension
     if truncate:
+        print('Here?')
         norm0 = bound_mps.norm()
         bound_mps.apply_svd(chi)
         norm1 = bound_mps.norm()
@@ -210,7 +235,7 @@ def left_bmpo_sl(ket, bound_mpo, bra=None, chi=4,truncate=True):
     
     # Copy the ket column if needed
     if bra is None:
-        bra = copy.deepcopy(ket)
+        bra = ket.copy()
 
     # First Layer (ket) #####################################
     bound_mpo = left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=chi,truncate=truncate)

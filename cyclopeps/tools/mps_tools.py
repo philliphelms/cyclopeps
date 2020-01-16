@@ -6,8 +6,9 @@ Date: July 2019
 
 """
 
-from cyclopeps.tools.params import *
-from cyclopeps.tools.utils import *
+from cyclopeps.tools.gen_ten import einsum
+#from cyclopeps.tools.params import *
+#from cyclopeps.tools.utils import *
 from numpy import float_
 import copy
 
@@ -1048,26 +1049,15 @@ class MPS:
     """
     A class to hold and manipulate matrix product states.
     """
-    def __init__(self, d=2, D=2, N=10, fixed_bd=True, dtype=float_):
+    def __init__(self,tens):
         """
         Create a random MPS object
 
         Args:
             self : MPS Object
-
-        Kwargs:
-            d : int
-                The physical bond dimension
-            D : int 
-                The maximum auxilliary bond dimension
-            N : int
-                The number of tensors
-            fixed_bd : bool
-                ensures that all bond dimensions are constant
-                throughout the MPS, i.e. mps[0].dim = (1 x d[0] x mbd)
-                instead of mps[0].dim = (1 x d[0] x d[0]), and so forth.
-            dtype : dtype
-                The datatype for the tensors. Default is np.float_
+            tens : list
+                A list of the tensors (as gen_ten objects)
+                to put into the mps
 
         Returns:
             MPS : MPS Object
@@ -1078,63 +1068,22 @@ class MPS:
             * Store tensors on disk
         """
         # Collect input arguments
-        self.N = N
-        if isinstance(d,list):
-            self.d = d
-        else:
-            self.d = [d]*N
-        self.D = D
-        self.dtype = dtype
-
-        # Determine the MPS Shape
-        self.ten_dims = [None]*N
-        for site in range(self.N):
-            self.ten_dims[site] = calc_site_dims(site,self.d,self.D,fixed_bd=fixed_bd)
+        self.N = len(tens)
 
         # Create a list to hold all tensors
-        self.tensors = [None]*N
-
-        # Generate Random MPS
-        for site in range(self.N):
-            self.tensors[site] = rand(self.ten_dims[site],dtype=self.dtype)
-
-    def input_mps_list(self,mps_list):
-        """
-        Put an mps currently stored as a list into the MPS object
-        Args:
-            mps_list : 1D array of uni10 tensors
-                The MPS stored as a 1D array of uni10 tensors
-        """
-        # Change length of mps
-        self.N = len(mps_list)
         self.tensors = [None]*self.N
-        self.ten_dims = [None]*self.N
-        self.d = [None]*self.N
 
-        # Determine new dtype
-        self.dtype = mps_list[0].dtype
-        
         # Update tensors
-        for site in range(len(mps_list)):
+        for site in range(len(tens)):
 
             # Copy Tensor
-            self[site] = copy.deepcopy(mps_list[site])
-
-            # Update tensor shape
-            (DL,d,DR) = self[site].shape
-            self.ten_dims[site] = [DL,d,DR]
-
-            # Update local bond dimension
-            self.d[site] = d
+            self[site] = tens[site].copy()
 
     def copy(self):
         """
         Returns a copy of the current MPS
         """
-        mps_copy = MPS(self.d,self.D,self.N)
-        for site in range(self.N):
-            mps_copy[site] = copy.deepcopy(self[site])
-        return mps_copy
+        return MPS([self[site].copy() for site in range(self.N)])
 
     def __getitem__(self,i):
         """
@@ -1143,18 +1092,11 @@ class MPS:
         if not hasattr(i,'__len__'):
             return self.tensors[i]
         else:
-            res = []
-            for ind in range(len(i)):
-                res.append(self.tensors[i[ind]])
-            return res
+            return [self.tensors[i[ind]] for ind in range(len(i))]
 
     def __setitem__(self, site, ten):
         # Update tensor
         self.tensors[site] = ten
-        # Update tensor shape
-        (DL,d,DR) = self[site].shape
-        self.ten_dims[site] = [DL,d,DR]
-        self.d[site] = d
 
     def __mult__(self, const):
         """
@@ -1171,14 +1113,16 @@ class MPS:
         """
         Compute the norm of the MPS
         """
-        # Create "environment" to hold contraction 
-        norm_env = ones((1,1),dtype=self.dtype)
         # Move to the left, contracting env with bra and ket tensors
         for site in range(self.N):
-            tmp1 = einsum('Aa,apb->Apb',copy.deepcopy(norm_env),self[site])
-            norm_env = einsum('Apb,ApB->Bb',tmp1,conj(self.tensors[site]))
+            print('site = {}'.format(site))
+            if site == 0:
+                norm_env = einsum('apb,ApB->aAbB',self[site],self[site].conj())
+            else:
+                tmp1 = einsum('ZzAa,apb->ZzApb',norm_env,self[site])
+                norm_env = einsum('ZzApb,ApB->ZzBb',tmp1,self[site].conj())
         # Extract and return result
-        norm = norm_env[0,0]
+        norm = norm_env.to_val()
         return norm
 
     def apply_svd(self,chi):
