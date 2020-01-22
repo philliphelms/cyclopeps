@@ -8,9 +8,10 @@ Date: July 2019
 
 from cyclopeps.tools.gen_ten import einsum
 #from cyclopeps.tools.params import *
-#from cyclopeps.tools.utils import *
+from cyclopeps.tools.utils import *
 from numpy import float_
 import copy
+import numpy as np
 
 def calc_site_dims(site,d,mbd,fixed_bd=False):
     """
@@ -116,165 +117,6 @@ def calc_entanglement(S):
     # Return Results
     return EE,EEspec
 
-def qr_ten(ten,split_ind,rq=False):
-    """
-    Compute the QR Decomposition of an input tensor
-
-    Args:
-        ten : ctf or np array
-            Array for which the svd will be done
-        split_ind : int
-            The dimension where the split into a matrix will be made
-
-    Kwargs:
-        rq : bool
-            If True, then RQ decomposition will be done
-            instead of QR decomposition
-
-    Returns:
-        Q : ctf or np array
-            The resulting Q matrix 
-        R : ctf or np array
-            The resulting R matrix
-    """
-    mpiprint(9,'Performing qr on tensors')
-    # Reshape tensor into matrix
-    ten_shape = ten.shape
-    mpiprint(9,'First, reshape the tensor into a matrix')
-    ten = ten.reshape([int(prod(ten_shape[:split_ind])),int(prod(ten_shape[split_ind:]))])
-
-    # Perform svd
-    mpiprint(9,'Perform actual qr')
-    if not rq:
-        # Do the QR Decomposition
-        Q,R = qr(ten)
-
-        # Reshape to match correct tensor format
-        mpiprint(9,'Reshape to match original tensor dimensions')
-        new_dims = ten_shape[:split_ind]+(int(prod(Q.shape)/prod(ten_shape[:split_ind])),)
-        Q = Q.reshape(new_dims)
-        new_dims = (int(prod(R.shape)/prod(ten_shape[split_ind:])),)+ten_shape[split_ind:]
-        R = R.reshape(new_dims)
-
-        # Quick check to see if it worked
-        # assert(np.allclose(ten,np.reshape(np.dot(Q,R),ten.shape),rtol=1e-6))
-    else:
-        # Do the QR decomposition
-        ten_ = copy.deepcopy(ten[::-1,:])
-        Q_,R_ = qr(transpose(ten_))
-        Q = Q_[::-1,:]
-        R = transpose(R_)[::-1,::-1]
-
-        # Reshape to match correct tensor format
-        mpiprint(9,'Reshape to match original tensor dimensions')
-        new_dims = ten_shape[:split_ind]+(int(prod(R.shape)/prod(ten_shape[:split_ind])),)
-        R = R.reshape(new_dims)
-        new_dims = (int(prod(Q.shape)/prod(ten_shape[split_ind:])),)+ten_shape[split_ind:]
-        Q = Q.reshape(new_dims)
-
-        # Quick check to see if it worked...
-        # assert(np.allclose(ten,np.reshape(np.einsum('ij,jkl->ikl',R,Q),ten.shape),rtol=1e-6))
-
-    # Return results
-    if rq:
-        return R,Q
-    else:
-        return Q,R
-
-def svd_ten(ten,split_ind,truncate_mbd=1e100,return_ent=True,return_wgt=True):
-    """
-    Compute the Singular Value Decomposition of an input tensor
-
-    Args:
-        ten : ctf or np array
-            Array for which the svd will be done
-        split_ind : int
-            The dimension where the split into a matrix will be made
-
-    Kwargs:
-        return_ent : bool
-            Whether or not to return the entanglement 
-            entropy and entanglement spectrum
-            Default: True
-        return_wgt : bool
-            Whether or not to return the sum of the 
-            discarded weights.
-            Default: True
-        truncate_mbd : int
-            The Maximum retained Bond Dimension
-
-    Returns:
-        U : ctf or np array
-            The resulting U matrix from the svd
-        S : ctf or np array
-            The resulting singular values from the svd
-        V : ctf or np array
-            The resulting V matrix from the svd
-        EE : float
-            The von neumann entanglement entropy
-            Only returned if return_ent == True
-        EEs : 1D Array of floats
-            The von neumann entanglement spectrum
-            Only returned if return_ent == True
-        wgt : float
-            The sum of the discarded weigths
-            Only returned if return_wgt == True
-    """
-    mpiprint(8,'Performing svd on tensors')
-    # Reshape tensor into matrix
-    ten_shape = ten.shape
-    mpiprint(9,'First, reshape the tensor into a matrix')
-    ten = ten.reshape([int(prod(ten_shape[:split_ind])),int(prod(ten_shape[split_ind:]))])
-
-    # Perform svd
-    mpiprint(9,'Perform actual svd')
-    U,S,V = svd(ten)
-
-    # Compute Entanglement
-    mpiprint(9,'Calculate the entanglment')
-    EE,EEs = calc_entanglement(S)
-
-    # Truncate results (if necessary)
-    D = S.shape[0]
-
-    # Make sure D is not larger than allowed
-    if truncate_mbd is not None:
-        D = int(min(D,truncate_mbd))
-
-    # Compute amount of S discarded
-    wgt = S[D:].sum()
-
-    # Truncate U,S,V
-    mpiprint(9,'Limit tensor dimensions')
-    U = U[:,:D]
-    S = S[:D]
-    V = V[:D,:]
-
-    # Reshape to match correct tensor format
-    mpiprint(9,'Reshape to match original tensor dimensions')
-    new_dims = ten_shape[:split_ind]+(int(prod(U.shape)/prod(ten_shape[:split_ind])),)
-    U = U.reshape(new_dims)
-    new_dims = (int(prod(V.shape)/prod(ten_shape[split_ind:])),)+ten_shape[split_ind:]
-    V = V.reshape(new_dims)
-
-    # Print some results
-    mpiprint(10,'Entanglement Entropy = {}'.format(EE))
-    mpiprint(12,'EE Spectrum = ')
-    nEEs = EEs.shape[0]
-    for i in range(nEEs):
-        mpiprint(12,'   {}'.format(EEs[i]))
-    mpiprint(11,'Discarded weights = {}'.format(wgt))
-
-    # Return results
-    if return_wgt and return_ent:
-        return U,S,V,EE,EEs,wgt
-    elif return_wgt:
-        return U,S,V,wgt
-    elif return_ent:
-        return U,S,V,EE,EEs
-    else:
-        return U,S,V
-
 def move_gauge_right_qr(ten1,ten2):
     """
     Move the gauge via qr decomposition from ten1 to ten2
@@ -290,24 +132,13 @@ def move_gauge_right_qr(ten1,ten2):
         ten2 : np or ctf array
             The tensor now holding the gauge
     """
-    # Find tensor dimensions
-    (n1,n2,n3) = ten1.shape
-    (n4,n5,n6) = ten2.shape
-
     # Perform the svd on the tensor
-    Q,R = qr_ten(ten1,2)
-
-    # Pad result to keep bond dim fixed
-    mpiprint(8,'Padding tensors from svd')
-    Qpad = zeros((n1,n2,n3),dtype=type(Q[0,0,0]))
-    Qpad[:,:,:min(n1*n2,n3)] = Q
-    Rpad = zeros((n3,n4),dtype=type(R[0,0]))
-    Rpad[:min(n1*n2,n3),:] = R
-    ten1 = Qpad
+    print('Initial Shape = {}'.format(ten1.ten.array.shape))
+    Q,R = ten1.qr(2)
+    ten1 = Q
 
     # Multiply remainder into neighboring site
-    mpiprint(8,'Actually moving the gauge')
-    ten2 = einsum('ab,bpc->apc',Rpad,ten2)
+    ten2 = einsum('ab,bpc->apc',R,ten2)
 
     # Return results
     return ten1,ten2
@@ -327,26 +158,8 @@ def move_gauge_left_qr(ten1,ten2):
         ten2 : np or ctf array
             The tensor now holding the gauge
     """
-    # Find tensor dimensions
-    (n1,n2,n3) = ten1.shape
-    (n4,n5,n6) = ten2.shape
-
-    # Perform the svd on the tensor
-    R,Q = qr_ten(ten2,1,rq=True)
-
-    # Pad result to keep bond dim fixed
-    Qpad = zeros((n4,n5,n6),dtype=type(Q[0,0,0]))
-    Qpad[:min(n4,n5*n6),:,:] = Q
-    Rpad = zeros((n3,n4),dtype=type(R[0,0]))
-    Rpad[:,:min(n4,n5*n6)] = R
-    ten2 = Qpad
-
-    # Multiply remainder ininto neighboring site
-    mpiprint(8,'Actually moving the gauge')
-    ten1 = einsum('apb,bc->apc',ten1,Rpad)
-
-    # Return results
-    return ten1,ten2
+    mpiprint(0,'QR to the left not implemented yet')
+    raise NotImplemented
 
 def move_gauge_right_svd(ten1,ten2,truncate_mbd=1e100):
     """
@@ -377,26 +190,12 @@ def move_gauge_right_svd(ten1,ten2,truncate_mbd=1e100):
             The sum of the discarded weigths
             Only returned if return_wgt == True
     """
-    # Find tensor dimensions
-    (n1,n2,n3) = ten1.shape
-    (n4,n5,n6) = ten2.shape
-
     # Perform the svd on the tensor
-    U,S,V,EE,EEs,wgt = svd_ten(ten1,2,truncate_mbd=truncate_mbd)
-
-    # Pad result to keep bond dim fixed
-    mpiprint(8,'Padding tensors from svd')
-    Upad = zeros((n1,n2,min(n3,truncate_mbd)),dtype=type(U[0,0,0]))
-    Upad[:,:,:min(n1*n2,n3,truncate_mbd)] = U
-    Spad = zeros((min(n3,truncate_mbd)),dtype=type(S[0]))
-    Spad[:min(n1*n2,n3,truncate_mbd)] = S
-    Vpad = zeros((min(n3,truncate_mbd),n4),dtype=type(V[0,0]))
-    Vpad[:min(n1*n2,n3,truncate_mbd),:] = V
-    ten1 = Upad
+    U,S,V,EE,EEs,wgt = ten1.svd(2,truncate_mbd=truncate_mbd)
+    ten1 = U
 
     # Multiply remainder into neighboring site
-    mpiprint(8,'Actually moving the gauge')
-    gauge = einsum('a,ab->ab',Spad,Vpad)
+    gauge = einsum('ab,bc->ac',S,V)
     ten2 = einsum('ab,bpc->apc',gauge,ten2)
 
     # Return results
@@ -431,27 +230,14 @@ def move_gauge_left_svd(ten1,ten2,truncate_mbd=1e100):
             The sum of the discarded weigths
             Only returned if return_wgt == True
     """
-    (n1,n2,n3) = ten1.shape
-    (n4,n5,n6) = ten2.shape
-
     # Perform the svd on the tensor
-    U,S,V,EE,EEs,wgt = svd_ten(ten2,1,truncate_mbd=truncate_mbd)
-
-    # Pad result to keep bond dim fixed
-    mpiprint(8,'Padding tensors from svd')
-    Vpad = zeros((min(n4,truncate_mbd),n5,n6),dtype=type(V[0,0,0]))
-    Vpad[:min(n4,n5*n6,truncate_mbd),:,:] = V
-    Spad = zeros((min(n4,truncate_mbd)),dtype=type(S[0]))
-    Spad[:min(n4,n5*n6,truncate_mbd)] = S
-    Upad = zeros((n3,min(n4,truncate_mbd)),dtype=type(U[0,0]))
-    Upad[:,:min(n4,n5*n6,truncate_mbd)] = U
-    ten2 = Vpad
+    U,S,V,EE,EEs,wgt = ten2.svd(1,truncate_mbd=truncate_mbd)
+    ten2 = V
 
     # Multiply remainder into neighboring site
-    mpiprint(8,'Actually moving the gauge')
-    gauge = einsum('ab,b->ab',Upad,Spad)
+    gauge = einsum('ab,bc->ac',U,S)
     ten1 = einsum('apb,bc->apc',ten1,gauge)
-    
+
     # Return results
     return ten1,ten2,EE,EEs,wgt
 
@@ -503,6 +289,7 @@ def move_gauge_right_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wg
     # Do either svd or qr decomposition
     if truncate_mbd > ten1.shape[2]:
         ten1,ten2 = move_gauge_right_qr(ten1,ten2)
+        #ten1,ten2 = move_gauge_right_svd(ten1,ten2)
         EE,EEs,wgt = None,None,None
     else:
         ten1,ten2,EE,EEs,wgt = move_gauge_right_svd(ten1,ten2,truncate_mbd=truncate_mbd)
@@ -610,6 +397,7 @@ def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True
             The sum of the discarded weigths
             Only returned if return_wgt == True
     """
+    print('Moving Gauge from {} to {}'.format(site,site+1))
     # Retrieve the relevant tensors
     ten1 = mps[site]
     ten2 = mps[site+1]
@@ -1140,6 +928,16 @@ class MPS:
         res = mps_apply_svd(self.tensors,chi)
         self.input_mps_list(res)
 
+    def input_mps_list(self,new):
+        """
+        Take a list and put it into our MPS
+        """
+        # Update tensors
+        for site in range(len(new)):
+
+            # Copy Tensor
+            self[site] = new[site].copy()
+
     def contract(self,mps2):
         """
         Contract an mps with another mps
@@ -1158,6 +956,20 @@ class MPS:
 
     def __len__(self):
         return len(self.tensors)
+
+    def max_elem(self,absolute=True):
+        try: 
+            backend = self[0].backend
+        except:
+            backend = np
+        maxval = 0
+        for i in range(len(self)):
+            if absolute:
+                maxval = max(self.tensors[i].abs().max(),maxval)
+            else:
+                maxval = max(self.tensors[i].max(),maxval)
+        return maxval
+
     # -----------------------------------------------------------------------
     # Yet to be implemented functions
     #def __add__(self, mps):

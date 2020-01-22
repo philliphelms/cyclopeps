@@ -17,7 +17,8 @@ def quick_op(op1,op2):
     Convert two local operators (2 legs each)
     into an operator between sites (4 legs)
     """
-    return einsum('io,IO->iIoO',op1,op2)
+    #return einsum('io,IO->iIoO',op1,op2)
+    return einsum('io,IO->oOiI',op1,op2)
 
 def expm(m,a=1.):
     """
@@ -57,3 +58,71 @@ def take_exp(ops,a=1.):
     
     return exp_ops    
 
+def ops_conj_trans(ops,copy=True):
+    """
+    Return the conjugate transpose of the input ops
+
+    Args:
+        ops : Array of local gate operators
+            An array that contains a list of local gate operators, 
+
+    Kwargs:
+        copy : bool
+            Whether to copy the ops before conjugating
+
+    Returns:
+        mpoList : 1D Array
+            A conjugated, transposed version of the input mpo
+    """
+    mpiprint(5,'Taking the conjugate transpose of the ops')
+
+    # Copy the ops (if desired)
+    if copy: ops = copy_ops(ops)
+
+    # Sweep through all operators, conjugating and transposing each
+    for i in range(len(ops)):
+        for j in range(len(ops[i])):
+            for k in range(len(ops[i][j])):
+                ops[i][j][k] = ops[i][j][k].transpose(2,3,0,1).conj()
+    
+    # return result
+    return ops
+
+def copy_ops(ops):
+    """
+    Copy a set of local gate operators
+
+    Args:
+        ops : list of list of list
+            The trotter decomposed operators
+
+    Returns:
+        ops : list of list of list
+            A copy of the input operators
+    """
+    mpiprint(7,'Copying ops')
+
+    # Create list to copy ops into
+    opsCopy = []
+
+    # Loop over vertical operators
+    vert_ops = []
+    for i in range(len(ops[0])):
+        tmp = [None]*len(ops[0][i])
+        for j in range(len(ops[0][i])):
+            if ops[0][i][j] is not None:
+                tmp[j] = copy.deepcopy(ops[0][i][j])
+        vert_ops.append(tmp)
+    opsCopy.append(vert_ops)
+
+    # Loop over horizontal operators
+    horz_ops = []
+    for i in range(len(ops[1])):
+        tmp = [None]*len(ops[1][i])
+        for j in range(len(ops[1][i])):
+            if ops[1][i][j] is not None:
+                tmp[j] = copy.deepcopy(ops[1][i][j])
+        horz_ops.append(tmp)
+    opsCopy.append(horz_ops)
+    
+    return opsCopy

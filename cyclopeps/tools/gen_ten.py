@@ -7,14 +7,199 @@ Date: January 2020
 
 """
 from numpy import float_
+from cyclopeps.tools.utils import *
 import symtensor.sym as symlib
+from symtensor.tools.la import symqr, symsvd
 from symtensor.settings import load_lib
+import copy
 import itertools
 import sys
+import numpy as np
+
+LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 
 ###########################################################
 # Functions
 ###########################################################
+def calc_entanglement(S,backend=np):
+    """
+    Calculate entanglement given a vector of singular values
+
+    Args:
+        S : 1D Array
+            Singular Values
+
+    Returns:
+        EE : double
+            The von neumann entanglement entropy
+        EEspec : 1D Array
+            The von neumann entanglement spectrum
+            i.e. EEs[i] = S[i]^2*log_2(S[i]^2)
+    """
+    # Create a copy of S
+    S = S.copy()
+    # Ensure correct normalization
+    norm_fact = backend.sqrt(backend.dot(S,S.conj()))
+    S /= norm_fact
+
+    # Calc Entanglement Spectrum
+    EEspec = -S*S.conj()*backend.log2(S*S.conj())
+
+    # Sum to get Entanglement Entropy
+    EE = backend.sum(EEspec)
+
+    # Return Results
+    return EE,EEspec
+
+def qr_ten(ten,split_ind,rq=False,backend=np.linalg):
+    """
+    Compute the QR Decomposition of an input tensor
+
+    Args:
+        ten : ctf or np array
+            Array for which the svd will be done
+        split_ind : int
+            The dimension where the split into a matrix will be made
+
+    Kwargs:
+        rq : bool
+            If True, then RQ decomposition will be done
+            instead of QR decomposition
+
+    Returns:
+        Q : ctf or np array
+            The resulting Q matrix 
+        R : ctf or np array
+            The resulting R matrix
+    """
+    mpiprint(9,'Performing qr on tensors')
+    # Reshape tensor into matrix
+    ten_shape = ten.shape
+    mpiprint(9,'First, reshape the tensor into a matrix')
+    _ten = ten.copy()
+    _ten = _ten.reshape([int(np.prod(ten_shape[:split_ind])),int(np.prod(ten_shape[split_ind:]))])
+
+    # Perform svd
+    mpiprint(9,'Perform actual qr')
+    if not rq:
+        # Do the QR Decomposition
+        Q,R = backend.qr(_ten)
+
+        # Reshape to match correct tensor format
+        mpiprint(9,'Reshape to match original tensor dimensions')
+        new_dims = ten_shape[:split_ind]+(int(np.prod(Q.shape)/np.prod(ten_shape[:split_ind])),)
+        Q = Q.reshape(new_dims)
+        new_dims = (int(np.prod(R.shape)/np.prod(ten_shape[split_ind:])),)+ten_shape[split_ind:]
+        R = R.reshape(new_dims)
+
+        # Quick check to see if it worked
+        subscripts = LETTERS[:len(Q.shape)]+','+\
+                     LETTERS[len(Q.shape)-1:len(Q.shape)-1+len(R.shape)]+'->'+\
+                     LETTERS[:len(Q.shape)-1]+LETTERS[len(Q.shape):len(Q.shape)-1+len(R.shape)]
+        assert(np.allclose(ten,np.einsum(subscripts,Q,R),rtol=1e-6))
+    else:
+        raise NotImplemented
+    # Return results
+    if rq:
+        return R,Q
+    else:
+        return Q,R
+
+def svd_ten(ten,split_ind,truncate_mbd=1e100,return_ent=True,return_wgt=True,backend=np.linalg):
+    """
+    Compute the Singular Value Decomposition of an input tensor
+
+    Args:
+        ten : ctf or np array
+            Array for which the svd will be done
+        split_ind : int
+            The dimension where the split into a matrix will be made
+
+    Kwargs:
+        return_ent : bool
+            Whether or not to return the entanglement 
+            entropy and entanglement spectrum
+            Default: True
+        return_wgt : bool
+            Whether or not to return the sum of the 
+            discarded weights.
+            Default: True
+        truncate_mbd : int
+            The Maximum retained Bond Dimension
+
+    Returns:
+        U : ctf or np array
+            The resulting U matrix from the svd
+        S : ctf or np array
+            The resulting singular values from the svd
+        V : ctf or np array
+            The resulting V matrix from the svd
+        EE : float
+            The von neumann entanglement entropy
+            Only returned if return_ent == True
+        EEs : 1D Array of floats
+            The von neumann entanglement spectrum
+            Only returned if return_ent == True
+        wgt : float
+            The sum of the discarded weigths
+            Only returned if return_wgt == True
+    """
+    mpiprint(8,'Performing svd on tensors')
+    # Reshape tensor into matrix
+    ten_shape = ten.shape
+    mpiprint(9,'First, reshape the tensor into a matrix')
+    ten = ten.reshape([int(np.prod(ten_shape[:split_ind])),int(np.prod(ten_shape[split_ind:]))])
+
+    # Perform svd
+    mpiprint(9,'Perform actual svd')
+    U,S,V = backend.svd(ten)
+
+    # Compute Entanglement
+    mpiprint(9,'Calculate the entanglment')
+    EE,EEs = calc_entanglement(S)
+
+    # Truncate results (if necessary)
+    D = S.shape[0]
+
+    # Make sure D is not larger than allowed
+    if truncate_mbd is not None:
+        D = int(min(D,truncate_mbd))
+
+    # Compute amount of S discarded
+    wgt = S[D:].sum()
+
+    # Truncate U,S,V
+    mpiprint(9,'Limit tensor dimensions')
+    U = U[:,:D]
+    S = S[:D]
+    S = backend.diag(S)
+    V = V[:D,:]
+
+    # Reshape to match correct tensor format
+    mpiprint(9,'Reshape to match original tensor dimensions')
+    new_dims = ten_shape[:split_ind]+(int(np.prod(U.shape)/np.prod(ten_shape[:split_ind])),)
+    U = U.reshape(new_dims)
+    new_dims = (int(np.prod(V.shape)/np.prod(ten_shape[split_ind:])),)+ten_shape[split_ind:]
+    V = V.reshape(new_dims)
+
+    # Print some results
+    mpiprint(10,'Entanglement Entropy = {}'.format(EE))
+    mpiprint(12,'EE Spectrum = ')
+    nEEs = EEs.shape[0]
+    for i in range(nEEs):
+        mpiprint(12,'   {}'.format(EEs[i]))
+    mpiprint(11,'Discarded weights = {}'.format(wgt))
+
+    # Return results
+    if return_wgt and return_ent:
+        return U,S,V,EE,EEs,wgt
+    elif return_wgt:
+        return U,S,V,wgt
+    elif return_ent:
+        return U,S,V,EE,EEs
+    else:
+        return U,S,V
+
 def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_):
     """
     Create an identity tensor
@@ -76,6 +261,7 @@ def rand(shape,sym=None,backend='numpy',dtype=float_):
         dtype : dtype
             The data type for the tensor, i.e. np.float_,np.complex128,etc.
     """
+    sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
     ten = GEN_TEN(shape=shape,sym=sym,backend=backend,dtype=dtype)
     ten.randomize()
     return ten
@@ -130,6 +316,7 @@ def unmerge_subscripts(subscripts,Alegs,Blegs):
         if not (strB_locs == -1):
             nlegscomb = len(Blegs[strB_locs])
         if nlegscomb > 1:
+
             replacement_letters = unique_chars[i]
             for j in range(1,nlegscomb):
                 for k in range(len(LETTERS)):
@@ -167,20 +354,18 @@ def einsum(subscripts,opA,opB):
         output : ndarray
             The resulting array from the einsum calculation
     """
+    print_str = ''
     # Format String ------------------------------------
     _subscripts = subscripts
     subscripts = replace_caps(subscripts)
     subscripts = unmerge_subscripts(subscripts,opA.legs,opB.legs)
-    print('{}'.format(subscripts))
-    print('{},{}->'.format(opA.sym[0],opB.sym[0]))
-    #print(opA.shape,opA.legs)
-    #print(opB.shape,opB.legs)
     # Do einsum
     res = opA.lib.einsum(subscripts,opA.ten,opB.ten)
     # Create a new gen_ten (with correctly lumped legs) from the result
     # Find resulting sym
     if opA.sym is not None:
         sym = res.sym
+        sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
     else:
         sym = None
     # Find resulting legs
@@ -193,14 +378,15 @@ def einsum(subscripts,opA,opB):
         strB_loc = strB.find(strout[i])
         if not (strA_loc == -1):
             legs += [list(range(cnt,cnt+len(opA.legs[strA_loc])))]
+            cnt += len(opA.legs[strA_loc])
         else:
             legs += [list(range(cnt,cnt+len(opB.legs[strB_loc])))]
-        cnt += len(opA.legs[strA_loc])
+            cnt += len(opB.legs[strB_loc])
+        #print('\t\t\tcnt {}, legs {}'.format(cnt,legs))
     res = GEN_TEN(sym = sym,
                   backend = opA.backend,
                   ten = res,
                   legs = legs)
-    print('{},{}->{}'.format(opA.sym[0],opB.sym[0],res.sym[0]))
     return res
 
 ###########################################################
@@ -238,12 +424,17 @@ class GEN_TEN:
         if isinstance(backend,str):
             self.backend = load_lib(backend)
         else:
-            self.backend = backend
+            if ten is None:
+                self.backend = backend
+            else:
+                self.backend = ten.backend
         if ten is None:
             self.dtype   = dtype
         else:
             self.dtype   = ten.dtype
-        self.sym     = sym
+
+        if sym is not None:
+            self.sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
 
         if ten is None:
             # Create a zero tensor
@@ -253,6 +444,13 @@ class GEN_TEN:
                 self.ten = symlib.zeros(shape,sym=sym,backend=backend,dtype=dtype)
         else:
             self.ten = ten
+            try:
+                sym = self.ten.sym
+                sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
+                self.sym = self.ten.sym
+            except:
+                print('\n'*5+'Failed?'+'\n'*5)
+                pass
         
         # Create combined index
         if legs is None:
@@ -310,10 +508,12 @@ class GEN_TEN:
         """
         Return a copy of the gen_ten object
         """
-        return self._as_new_tensor(self.ten)
+        return self._as_new_tensor(self.ten.copy())
 
     def _as_new_tensor(self,ten):
-        newten = GEN_TEN(self.shape,ten=ten,sym=self.sym,backend=self.backend,dtype=self.dtype,legs=self.legs)
+        newsym = [(self.sym[0]+'.')[:-1],self.sym[1],self.sym[2],self.sym[3]]
+        newlegs= copy.deepcopy(self.legs)
+        newten = GEN_TEN(self.shape,ten=ten,sym=newsym,backend=self.backend,dtype=self.dtype,legs=self.legs)
         return newten
 
     def __str__(self):
@@ -336,6 +536,44 @@ class GEN_TEN:
         for i in range(len(axes)):
             newlegs.append(list(range(ind,ind+len(self.legs[axes[i]]))))
             ind += len(self.legs[axes[i]])
+        self.legs = newlegs
+
+    def remove_empty_ind(self,ind):
+        """
+        Remove an index of size 1
+        """
+        init_shape = self.ten.shape
+        # Check that we are summing over only one index
+        assert(len(self.legs[ind]) == 1)
+        assert(init_shape[self.legs[ind][0]] == 1)
+        # Separate cases for tensors with and without symmetry
+        if self.sym is None:
+            # Sum over the single index for tensor without symmetry
+            self.ten = self.ten.sum(ind)
+        else:
+            # More complex for symtensors
+            ten = self.ten.array
+            sym = self.ten.sym
+            sym = self.sym
+            assert(ten.shape[self.legs[ind][0]+len(sym[0])-1] == 1)
+            # Sum over correct legs
+            ten = ten.sum(self.legs[ind][0]+len(sym[0])-1)
+            ten = ten.sum(self.legs[ind][0])
+            sym[0] = (sym[0]+'.')[:-1]
+            sym[0] = sym[0][:self.legs[ind][0]]+sym[0][self.legs[ind][0]+1:]
+            sym[1] = sym[1][:self.legs[ind][0]]+sym[1][self.legs[ind][0]+1:]
+            # Create the correct symtensor
+            ten = symlib.SYMtensor(ten,sym=[(self.sym[0]+'.')[:-1],self.sym[1],self.sym[2],self.sym[3]],backend=self.backend)
+            # Put into this gen_ten
+            self.ten = ten
+            self.sym = sym
+        # Update legs
+        newlegs = []
+        cnt = 0
+        for i in range(len(init_shape)):
+            if not (i == ind):
+                newlegs += [list(range(cnt,cnt+len(self.legs[i])))]
+                cnt += len(self.legs[i])
         self.legs = newlegs
 
     def merge_inds(self,combinds,make_cp=True):
@@ -362,8 +600,82 @@ class GEN_TEN:
         # Actually change legs
         self.legs = newlegs
 
+    def qr(self,split):
+        """
+        Returns the Q and R from a qr decomposition of the tensor
+        """
+        #print('\tsplit = {}, Legs = {}, legs[split] = {}'.format(split,self.legs,self.legs[split][0]))
+        leg_split = split
+        split = self.legs[split][0]
+        if self.sym is None:
+            # Do qr on non-symmetric tensor
+            Q,R = qr_ten(self.ten,split,backend=self.backend)
+        else:
+            # Do qr on symtensor
+            Q,R = symqr(self.ten,[list(range(split)),list(range(split,self.ten.ndim))])
+        Q = GEN_TEN(ten=Q)
+        R = GEN_TEN(ten=R)
+        # Update Q legs
+        Qlegs = []
+        cnt = 0
+        for i in range(leg_split):
+            Qlegs += [list(range(cnt,cnt+len(self.legs[i])))]
+            cnt += len(self.legs[i])
+        Qlegs += [[cnt]]
+        Q.legs = Qlegs
+        # Update R legs
+        Rlegs = [[0]]
+        cnt = 1
+        for i in range(leg_split,len(self.legs)):
+            Rlegs += [list(range(cnt,cnt+len(self.legs[i])))]
+            cnt += len(self.legs[i])
+        R.legs = Rlegs
+        return Q,R
+
+    def svd(self,split,truncate_mbd=1e100,return_ent=True,return_wgt=True):
+        """
+        Returns the U,S, and V from an svd of the tensor
+        """
+        leg_split = split
+        split = self.legs[split][0]
+        if self.sym is None:
+            # Do qr
+            res = svd_ten(self.ten,split,backend=self.backend)
+        else:
+            res = symsvd(self.ten,[list(range(split)),list(range(split,self.ten.ndim))],return_ent=True,return_wgt=True)
+        U,S,V = res[0],res[1],res[2]
+        U = GEN_TEN(ten=U)
+        S = GEN_TEN(ten=S)
+        V = GEN_TEN(ten=V)
+        # Update U legs
+        Ulegs = []
+        cnt = 0
+        for i in range(leg_split):
+            Ulegs += [list(range(cnt,cnt+len(self.legs[i])))]
+            cnt += len(self.legs[i])
+        Ulegs += [[cnt]]
+        U.legs = Ulegs
+        # Update V legs
+        Vlegs = [[0]]
+        cnt = 1
+        for i in range(leg_split,len(self.legs)):
+            Vlegs += [list(range(cnt,cnt+len(self.legs[i])))]
+            cnt += len(self.legs[i])
+        V.legs = Vlegs
+        # Bundle results
+        ret = (U,S,V)
+        for i in range(3,len(res)):
+            ret += (res[i],)
+        return ret
+
     def conj(self):
         return self._as_new_tensor(self.ten.conj())
+
+    def abs(self):
+        return self._as_new_tensor(self.ten.abs())
+
+    def max(self):
+        return self._as_new_tensor(self.ten.max())
 
     def to_val(self):
         """

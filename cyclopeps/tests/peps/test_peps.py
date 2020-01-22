@@ -27,6 +27,7 @@ class test_peps(unittest.TestCase):
         self.assertTrue(abs(1.0-norm) < 1e-3)
         mpiprint(0,'Passed\n'+'='*50)
 
+    '''
     def test_normalization(self):
         from cyclopeps.tools.peps_tools import PEPS
         mpiprint(0,'\n'+'='*50+'\nPeps Normalization test without Symmetry\n'+'-'*50)
@@ -50,7 +51,6 @@ class test_peps(unittest.TestCase):
         self.assertTrue(abs(1.0-norm) < 1e-3)
         mpiprint(0,'Passed\n'+'='*50)
 
-    '''
     def test_rotate(self):
         mpiprint(0,'\n'+'='*50+'\nPeps Rotation test\n'+'-'*50)
         from cyclopeps.tools.peps_tools import PEPS

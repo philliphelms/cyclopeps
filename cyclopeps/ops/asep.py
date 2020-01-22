@@ -103,7 +103,7 @@ def make_op(row,ju,jd,cu,cd,du,dd,sy):
     op  = ju[row]*exp(sy[row])*quick_op(Sp,Sm)
     op -= ju[row]*quick_op(n,v)
     # Hop down
-    if DEBUG: mpiprint(0,'{} Sm_{}*Sp_{} - {} v_{}*n_{}'.format(jd[row]*exp(-sy[row]),row,row+1,jd[row],row,row+1))
+    if DEBUG: mpiprint(0,'{} Sm_{}*Sp_{} - {} v_{}*n_{}'.format(jd[row+1]*exp(-sy[row+1]),row,row+1,jd[row+1],row,row+1))
     op += jd[row+1]*exp(-sy[row+1])*quick_op(Sm,Sp)
     op -= jd[row+1]*quick_op(v,n)
 
@@ -151,6 +151,142 @@ def make_op(row,ju,jd,cu,cd,du,dd,sy):
     # Return Result
     return -op
 
+
+# Current operators ------------------------------------------------------------------------------
+def return_curr_op(Nx,Ny,params,include_edges=False):
+    """
+    Return the operators to calculate the current
+
+    Args:
+        Nx : int
+            Lattice size in the x direction
+        Ny : int
+            Lattixe size in the y direction
+        params : 1D Array
+            The parameters for the hamiltonian.
+            Here, the first four entries are the
+            bulk hopping rates:
+                params[0] = jump right
+                params[1] = jump left
+                params[2] = jump up
+                params[3] = jump down
+            The next four are the insertion rates:
+                params[4] = insert to the right (left boundary)
+                params[5] = insert to the left (right boundary)
+                params[6] = insert upwards (bottom boundary)
+                params[7] = insert downards (top boundary)
+            The next four are the removal rates:
+                params[8] = remove to the right (right boundary)
+                params[9] = remove to the left (left boundary)
+                params[10]= remove upwards (top boundary)
+                params[11]= remove downwards (bottom boundary)
+            The last two are the biasing parameters:
+                params[12]= Bias in the x-direction
+                params[13]= Bias in the y-direction
+
+    Returns:
+        ops
+    """
+    # Convert params to matrices
+    params = val2mat_params(Nx,Ny,params)
+    (jr,jl,ju,jd, cr,cl,cu,cd, dr,dl,du,dd, sx,sy) = params
+
+    # Operators within columns
+    columns = []
+    for x in range(Nx):
+        # Create operator for single column
+        col_ops = []
+        for y in range(Ny-1):
+            # Create operator for intereaction between sites (y,y+1)
+            op = make_curr_op(y,
+                              ju[x,:],
+                              jd[x,:],
+                              cu[x,:],
+                              cd[x,:],
+                              du[x,:],
+                              dd[x,:],
+                              sy[x,:],
+                              include_edges=include_edges)
+            # Add to list of column operators
+            col_ops.append(op)
+        # Add column of operators to list of columns
+        columns.append(col_ops)
+
+    # Operators within Rows
+    rows = []
+    for y in range(Ny):
+        # Create operator for single row
+        row_ops = []
+        for x in range(Nx-1):
+            # Create operator for interaction between sites (x,x+1)
+            op = make_curr_op(x,
+                              jr[:,y],
+                              jl[:,y],
+                              cr[:,y],
+                              cl[:,y],
+                              dr[:,y],
+                              dl[:,y],
+                              sx[:,y],
+                              include_edges=include_edges)
+            # Add to list of row operators
+            row_ops.append(op)
+        # Add row of operators to list of rows
+        rows.append(row_ops)
+
+    # Return Results
+    return [columns,rows]
+
+def make_curr_op(row,ju,jd,cu,cd,du,dd,sy,include_edges=False):
+    """
+    Interaction between sites (row,row+1)
+    """
+    # -----------------------------------------
+    # Hopping between sites
+    # Hop up
+    if DEBUG: mpiprint(0,'{} Sp_{}*Sm_{}'.format(ju[row]*exp(sy[row]),row,row+1))
+    op  = ju[row]*exp(sy[row])*quick_op(Sp,Sm)
+    # Hop down
+    if DEBUG: mpiprint(0,'{} Sm_{}*Sp_{}'.format(jd[row]*exp(-sy[row]),row,row+1))
+    op -= jd[row+1]*exp(-sy[row+1])*quick_op(Sm,Sp)
+
+    if include_edges:
+        # ----------------------------------------
+        # Top Site creation/Annihilation
+
+        # Destroy upwards
+        if DEBUG: mpiprint(0,'{} Sp_{}'.format(du[row+1]*exp(sy[row+1]),row+1))
+        op += du[row+1]*exp(sy[row+1])*quick_op(I,Sp)
+        # Destroy downwards
+        if DEBUG: mpiprint(0,'{} Sp_{}'.format(dd[row+1]*exp(-sy[row+1]),row+1))
+        op -= dd[row+1]*exp(-sy[row+1])*quick_op(I,Sp)
+        # Create upwards
+        if DEBUG: mpiprint(0,'{} Sm_{}'.format(cu[row+1]*exp(sy[row+1]),row+1))
+        op += cu[row+1]*exp(sy[row+1])*quick_op(I,Sm)
+        # Create Downwards
+        if DEBUG: mpiprint(0,'{} Sm_{}'.format(cd[row+1]*exp(-sy[row+1]),row+1))
+        op -= cd[row+1]*exp(-sy[row+1])*quick_op(I,Sm)
+
+        if row == 0:
+            # ----------------------------------------
+            # Bottom Site Creation/Annihilation
+
+            # Destroy upwards
+            if DEBUG: mpiprint(0,'{} Sp_{}'.format(du[row]*exp(sy[row]),row))
+            op += du[row]*exp(sy[row])*quick_op(Sp,I)
+            # Destroy downwards
+            if DEBUG: mpiprint(0,'{} Sp_{}'.format(dd[row]*exp(-sy[row]),row))
+            op -= dd[row]*exp(-sy[row])*quick_op(Sp,I)
+            # Create upwards
+            if DEBUG: mpiprint(0,'{} Sm_{}'.format(cu[row]*exp(sy[row]),row))
+            op += cu[row]*exp(sy[row])*quick_op(Sm,I)
+            # Create Downwards
+            if DEBUG: mpiprint(0,'{} Sm_{}'.format(cd[row]*exp(-sy[row]),row))
+            op -= cd[row]*exp(-sy[row])*quick_op(Sm,I)
+
+    # Return Result
+    return -op
+
+# Helpful Functions ------------------------------------------------------------------------------
 def val2mat_params(Nx,Ny,params):
     # Extract values
     jr = params[0]

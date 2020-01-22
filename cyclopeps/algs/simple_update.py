@@ -313,7 +313,7 @@ def run_tebd(Nx,Ny,d,ham,
     # Loop over all (bond dims/step sizes/number of steps)
     for Dind in range(len(D)):
 
-        mpiprint(0,'\nStarting Calculation for (D,chi,dt) = ({},{},{})'.format(D[Dind],chi[Dind],step_size[Dind]))
+        mpiprint(0,'\nSU Calculation for (D,chi,dt) = ({},{},{})'.format(D[Dind],chi[Dind],step_size[Dind]))
         
         # Do a tebd evolution for given step size
         E,peps = tebd_steps(peps,

@@ -21,6 +21,7 @@ from numpy import real as npreal
 from numpy import imag as npimag
 from numpy.linalg import eigh as npeigh
 from numpy import amax as npamax
+from numpy import amin as npamin
 
 # Tensor Allocation
 def array(tens,dtype=None,copy=True,subok=False,ndimin=0):
@@ -90,6 +91,10 @@ def inv(ten):
 def maxx(ten):
     ten = to_nparray(ten)
     val = npamax(ten)
+    return val
+def minn(ten):
+    ten = to_nparray(ten)
+    val = npamin(ten)
     return val
 
 # Tensor Manipulation

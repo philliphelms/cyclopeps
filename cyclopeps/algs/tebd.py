@@ -1,5 +1,6 @@
 from cyclopeps.tools.params import *
 from cyclopeps.tools.utils import *
+from cyclopeps.tools.mps_tools import *
 from cyclopeps.tools.peps_tools import *
 from cyclopeps.tools.ops_tools import *
 from cyclopeps.algs.simple_update import run_tebd as su
@@ -69,6 +70,12 @@ def optimize_bottom(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
     # Take inverse of R
     (n1,n2,n3,n4) = R.shape
     R = reshape(R,(n1*n2,n3*n4))
+    try:
+        R_ = inv(R)
+    except:
+        print(R)
+        import sys
+        sys.exit()
     R_ = inv(R)
     R_ = reshape(R_,(n1,n2,n3,n4))
 
@@ -100,7 +107,12 @@ def optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
     # Take inverse of R
     (n1,n2,n3,n4) = R.shape
     R = reshape(R,(n1*n2,n3*n4))
-    R_ = inv(R)
+    try:
+        R_ = inv(R)
+    except:
+        print(R)
+        import sys
+        sys.exit()
     R_ = reshape(R_,(n1,n2,n3,n4))
 
     # Compute new phys_t_new
@@ -164,10 +176,10 @@ def make_equal_distance(peps1,peps2,D=None):
 
     # Pull the physical index off each tensor
     peps1 = einsum('LDPRU->LDRPU',peps1)
-    (ub,sb,vb) = mps_tools.svd_ten(peps1,3,return_ent=False,return_wgt=False)
+    (ub,sb,vb) = svd_ten(peps1,3,return_ent=False,return_wgt=False)
     phys_b = einsum('a,aPU->aPU',sb,vb)
     peps2 = einsum('LDPRU->DPLRU',peps2)
-    (ut,st,vt) = mps_tools.svd_ten(peps2,2,return_ent=False,return_wgt=False)
+    (ut,st,vt) = svd_ten(peps2,2,return_ent=False,return_wgt=False)
     phys_t = einsum('DPa,a->DPa',ut,st)
     vt = einsum('aLRU->LaRU',vt)
 
@@ -175,7 +187,7 @@ def make_equal_distance(peps1,peps2,D=None):
     theta = einsum('aPU,UQb->aPQb',phys_b,phys_t)
 
     # Take svd of result and truncate D if needed
-    (u,s,v) = mps_tools.svd_ten(theta,2,truncate_mbd=D,return_ent=False,return_wgt=False)
+    (u,s,v) = svd_ten(theta,2,truncate_mbd=D,return_ent=False,return_wgt=False)
     phys_b = einsum('aPU,U->aPU',u,sqrt(s))
     phys_t = einsum('D,DPa->DPa',sqrt(s),v)
 
@@ -202,7 +214,7 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,als_iter=10
     for row in range(len(ham)):
         
         # Calculate environment aroudn reduced tensors
-        peps_b,phys_b,phys_t,peps_t,N = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs)
+        peps_b,phys_b,phys_t,peps_t,_,_,_,_,N = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs)
 
         # Take the exponential of the hamiltonian
         eH = exp_ham(ham[row],-step_size)
@@ -211,7 +223,7 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,als_iter=10
         phys_b,phys_t = alternating_least_squares(phys_b,phys_t,N,eH,als_iter=als_iter,als_tol=als_tol)
 
         # Calculate Energy & Norm
-        E[row] = calc_local_op(phys_b,phys_t,N,ham[row])
+        E[row],norm = calc_local_op(phys_b,phys_t,N,ham[row],return_norm=True)
 
         # Update peps_col tensors
         peps_col[row]   = einsum('LDRa,aPU->LDPRU',peps_b,phys_b)
@@ -222,12 +234,24 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,als_iter=10
         peps_col[row],peps_col[row+1] = make_equal_distance(peps_col[row],peps_col[row+1])
 
         # Update top and bottom environments
+        #print('Bottom Envs before = {}'.format(summ(abss(bot_envs[row-1]))))
+        #print('max peps 1 {}, bot_envs {}'.format(maxx(abss(peps_col[row])),maxx(abss(bot_envs[row-1]))))
+        #print('min peps 1 {}, bot_envs {}'.format(minn(abss(peps_col[row])),minn(abss(bot_envs[row-1]))))
         bot_envs[row] = update_bot_env(peps_col[row],
+                                       peps_col[row].conj(), 
                                        left_bmpo[2*row],
                                        left_bmpo[2*row+1],
                                        right_bmpo[2*row],
                                        right_bmpo[2*row+1],
                                        bot_envs[row-1])
+        
+        # Normalize the bottom envs as well (just for safety
+        #print('PH - Fix this norm stuff')
+        norm_fact = maxx(bot_envs[row])
+        #print('Bottom Envs middl = {}'.format(summ(abss(bot_envs[row]))))
+        bot_envs[row] /= norm_fact
+        #print('Bottom Envs after = {}'.format(summ(abss(bot_envs[row]))))
+        peps_col[row] /= sqrt(norm_fact)
 
     # Return the result
     return E,peps_col
@@ -241,7 +265,7 @@ def tebd_step_col(peps,ham,step_size,chi=None,als_iter=100,als_tol=1e-10):
     # Compute the boundary MPOs
     right_bmpo = calc_right_bound_mpo(peps, 0,chi=chi,return_all=True)
     left_bmpo  = calc_left_bound_mpo (peps,Nx,chi=chi,return_all=True)
-    ident_bmpo = mps_tools.identity_mps(len(right_bmpo[0]),dtype=peps[0][0].dtype)
+    ident_bmpo = identity_mps(len(right_bmpo[0]),dtype=peps[0][0].dtype)
 
     # Loop through all columns
     E = zeros((len(ham),len(ham[0])),dtype=peps[0][0].dtype)
@@ -284,6 +308,7 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None,als_iter=100,als_tol=
     nSite = len(peps)*len(peps[0])
 
     # Compute Initial Energy
+    mpiprint(3,'Calculation Initial Energy/site')
     Eprev = peps.calc_op(ham,chi=chi)
     mpiprint(0,'Initial Energy/site = {}'.format(Eprev/nSite))
 
@@ -316,7 +341,11 @@ def run_tebd(Nx,Ny,d,ham,
              norm_tol=20,singleLayer=True,
              max_norm_iter=20,
              dtype=float_,
-             step_size=0.2,n_step=5,conv_tol=1e-8,
+             step_size=[0.1,0.01,0.001],
+             su_step_size=None,
+             n_step=5,
+             su_n_step=None,
+             conv_tol=1e-8,
              als_iter=5,als_tol=1e-10):
     """
     Run the TEBD algorithm for a PEPS
@@ -411,21 +440,22 @@ def run_tebd(Nx,Ny,d,ham,
     
     # Create a random peps (if one is not provided)
     if peps is None:
-        
+        if su_step_size is None: su_step_size = step_size
+        if su_n_step is None: su_n_step = n_step
         _,peps = su(Nx,Ny,d,ham,
                     D=D[0],
                     chi=5,
                     singleLayer=singleLayer,
                     max_norm_iter=max_norm_iter,
                     dtype=dtype,
-                    step_size=[1,0.1,0.01],
-                    n_step=[5,5,5],
-                    conv_tol=1e-4)
+                    step_size=su_step_size,
+                    n_step=su_n_step,
+                    conv_tol=conv_tol)
     
     # Loop over all (bond dims/step sizes/number of steps)
     for Dind in range(len(D)):
 
-        mpiprint(0,'\nStarting Calculation for (D,chi,dt) = ({},{},{})'.format(D[Dind],chi[Dind],step_size[Dind]))
+        mpiprint(0,'\nFU Calculation for (D,chi,dt) = ({},{},{})'.format(D[Dind],chi[Dind],step_size[Dind]))
         
         # Do a tebd evolution for given step size
         E,peps = tebd_steps(peps,
@@ -440,10 +470,12 @@ def run_tebd(Nx,Ny,d,ham,
         # Increase MBD if needed
         if (len(D)-1 > Dind) and (D[Dind+1] > D[Dind]):
             peps.increase_mbd(D[Dind+1],chi=chi[Dind+1])
+            peps.normalize()
+
 
     # Print out results
     mpiprint(0,'\n\n'+'#'*50)
-    mpiprint(0,'TEBD Complete')
+    mpiprint(0,'FU TEBD Complete')
     mpiprint(0,'-------------')
     mpiprint(0,'Total time = {} s'.format(time.time()-t0))
     mpiprint(0,'Per Site Energy = {}'.format(E/(Nx*Ny)))
