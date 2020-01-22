@@ -529,14 +529,14 @@ class GEN_TEN:
         # Get actual transpose indices
         _axes = [self.legs[i] for i in axes]
         _axes = list(itertools.chain(*_axes))
-        self.ten.transpose(*_axes)
+        newten = self.ten.transpose(*_axes)
         # Update legs
         newlegs = []
         ind = 0
         for i in range(len(axes)):
             newlegs.append(list(range(ind,ind+len(self.legs[axes[i]]))))
             ind += len(self.legs[axes[i]])
-        self.legs = newlegs
+        return GEN_TEN(ten=newten,legs=newlegs)
 
     def remove_empty_ind(self,ind):
         """
@@ -544,37 +544,39 @@ class GEN_TEN:
         """
         init_shape = self.ten.shape
         # Check that we are summing over only one index
-        assert(len(self.legs[ind]) == 1)
-        assert(init_shape[self.legs[ind][0]] == 1)
+        for i in range(len(self.legs[ind])):
+            assert(init_shape[self.legs[ind][i]] == 1)
         # Separate cases for tensors with and without symmetry
         if self.sym is None:
             # Sum over the single index for tensor without symmetry
-            self.ten = self.ten.sum(ind)
+            newten = self.ten.copy()
+            for i in range(len(self.legs[ind]))[::-1]:
+                newten = newten.sum(self.legs[ind][i])
         else:
             # More complex for symtensors
-            ten = self.ten.array
-            sym = self.ten.sym
+            newten = self.ten.array.copy()
             sym = self.sym
-            assert(ten.shape[self.legs[ind][0]+len(sym[0])-1] == 1)
+            for i in range(len(self.legs[ind])):
+                assert(newten.shape[self.legs[ind][i]+len(sym[0])-1] == 1)
             # Sum over correct legs
-            ten = ten.sum(self.legs[ind][0]+len(sym[0])-1)
-            ten = ten.sum(self.legs[ind][0])
+            for i in range(len(self.legs[ind]))[::-1]:
+                newten = newten.sum(self.legs[ind][i]+len(sym[0])-1)
+            for i in range(len(self.legs[ind]))[::-1]:
+                newten = newten.sum(self.legs[ind][i])
+            # Adjust symmetry specifications
             sym[0] = (sym[0]+'.')[:-1]
-            sym[0] = sym[0][:self.legs[ind][0]]+sym[0][self.legs[ind][0]+1:]
-            sym[1] = sym[1][:self.legs[ind][0]]+sym[1][self.legs[ind][0]+1:]
+            sym[0] = sym[0][:self.legs[ind][0]]+sym[0][self.legs[ind][-1]+1:]
+            sym[1] = sym[1][:self.legs[ind][0]]+sym[1][self.legs[ind][-1]+1:]
             # Create the correct symtensor
-            ten = symlib.SYMtensor(ten,sym=[(self.sym[0]+'.')[:-1],self.sym[1],self.sym[2],self.sym[3]],backend=self.backend)
-            # Put into this gen_ten
-            self.ten = ten
-            self.sym = sym
+            newten = symlib.SYMtensor(newten,sym=[(self.sym[0]+'.')[:-1],self.sym[1],self.sym[2],self.sym[3]],backend=self.backend)
         # Update legs
         newlegs = []
         cnt = 0
-        for i in range(len(init_shape)):
+        for i in range(len(self.legs)):
             if not (i == ind):
                 newlegs += [list(range(cnt,cnt+len(self.legs[i])))]
                 cnt += len(self.legs[i])
-        self.legs = newlegs
+        return GEN_TEN(ten=newten,legs=newlegs)
 
     def merge_inds(self,combinds,make_cp=True):
         """

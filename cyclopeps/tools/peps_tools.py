@@ -71,8 +71,8 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
 
     for row in range(Ny):
         # Remove l and L empty indices
-        ket[row].remove_empty_ind(0)
-        bra[row].remove_empty_ind(0)
+        ket[row] = ket[row].remove_empty_ind(0)
+        bra[row] = bra[row].remove_empty_ind(0)
         # Add Bra-ket contraction
         res = einsum('dpru,DpRU->dDRurU',ket[row],bra[row])
         # Merge inds to make it an MPO
@@ -657,7 +657,7 @@ def peps_col_to_mps(peps_col):
         # Copy the tensor
         (Dl,Dd,d,Dr,Du) = peps_col[row].shape
         # Transpose to put left, physical, and right bonds in middle
-        peps_col[row].transpose([1,0,2,3,4])
+        peps_col[row] = peps_col[row].transpose([1,0,2,3,4])
         # lump left, physical, and right tensors
         peps_col[row].merge_inds([1,2,3])
 
@@ -906,7 +906,6 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
 
         if istep == max_iter:
             mpiprint(4, 'binarySearch normalization exceeds max_iter... terminating')
-            print('Exceeded normalization!')
             break
 
         peps_try = multiply_peps_elements(peps.copy(),scale)
@@ -1273,7 +1272,7 @@ def make_N_positive(N,hermitian=True,positive=True):
             N = reshape(Nmat,(n1,n2,n3,n4))
             N = einsum('UDud->UuDd',N)
         except Exception as e:
-            print('Failed to make N positive, eigenvalues did not converge')
+            mpiprint(0,'Failed to make N positive, eigenvalues did not converge')
 
         # Check to ensure N is positive
         if DEBUG:

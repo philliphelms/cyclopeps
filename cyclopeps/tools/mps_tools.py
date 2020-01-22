@@ -133,7 +133,6 @@ def move_gauge_right_qr(ten1,ten2):
             The tensor now holding the gauge
     """
     # Perform the svd on the tensor
-    print('Initial Shape = {}'.format(ten1.ten.array.shape))
     Q,R = ten1.qr(2)
     ten1 = Q
 
@@ -397,7 +396,6 @@ def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True
             The sum of the discarded weigths
             Only returned if return_wgt == True
     """
-    print('Moving Gauge from {} to {}'.format(site,site+1))
     # Retrieve the relevant tensors
     ten1 = mps[site]
     ten2 = mps[site+1]
@@ -903,12 +901,14 @@ class MPS:
         """
         # Move to the left, contracting env with bra and ket tensors
         for site in range(self.N):
-            print('site = {}'.format(site))
             if site == 0:
                 norm_env = einsum('apb,ApB->aAbB',self[site],self[site].conj())
+                # Remove initial empty indices
+                norm_env = norm_env.remove_empty_ind(0)
+                norm_env = norm_env.remove_empty_ind(0)
             else:
-                tmp1 = einsum('ZzAa,apb->ZzApb',norm_env,self[site])
-                norm_env = einsum('ZzApb,ApB->ZzBb',tmp1,self[site].conj())
+                tmp1 = einsum('Aa,apb->Apb',norm_env,self[site])
+                norm_env = einsum('Apb,ApB->Bb',tmp1,self[site].conj())
         # Extract and return result
         norm = norm_env.to_val()
         return norm
