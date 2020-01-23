@@ -229,6 +229,10 @@ def move_gauge_left_svd(ten1,ten2,truncate_mbd=1e100):
             The sum of the discarded weigths
             Only returned if return_wgt == True
     """
+    if DEBUG:
+        init_cont = einsum('abc,cde->abde',ten1,ten2)
+        mpiprint(0,'\t\tInitial Shape ten1 = {}'.format(ten1.ten.shape))
+        mpiprint(0,'\t\tInitial Shape ten2 = {}'.format(ten2.ten.shape))
     # Perform the svd on the tensor
     U,S,V,EE,EEs,wgt = ten2.svd(1,truncate_mbd=truncate_mbd)
     ten2 = V
@@ -237,6 +241,18 @@ def move_gauge_left_svd(ten1,ten2,truncate_mbd=1e100):
     gauge = einsum('ab,bc->ac',U,S)
     ten1 = einsum('apb,bc->apc',ten1,gauge)
 
+    if DEBUG:
+        fin_cont = einsum('abc,cde->abde',ten1,ten2)
+        if fin_cont.sym is None:
+            diff = init_cont.backend.sum(init_cont.backend.abs(init_cont.ten-fin_cont.ten))
+            mpiprint(0,'\t\tFinal   Shape ten1 = {}'.format(ten1.ten.shape))
+            mpiprint(0,'\t\tFinal   Shape ten2 = {}'.format(ten2.ten.shape))
+            mpiprint(0,'\t\tDifference before/after SVD = {}'.format(diff))
+        else:
+            diff = init_cont.backend.sum(init_cont.backend.abs(init_cont.ten.array-fin_cont.ten.array))
+            mpiprint(0,'\t\tFinal   Shape ten1 = {}'.format(ten1.ten.array.shape))
+            mpiprint(0,'\t\tFinal   Shape ten2 = {}'.format(ten2.ten.array.shape))
+            mpiprint(0,'\t\tDifference before/after SVD = {}'.format(diff))
     # Return results
     return ten1,ten2,EE,EEs,wgt
 
@@ -288,8 +304,8 @@ def move_gauge_right_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wg
     # Do either svd or qr decomposition
     if truncate_mbd > ten1.shape[2]:
         ten1,ten2 = move_gauge_right_qr(ten1,ten2)
-        #ten1,ten2 = move_gauge_right_svd(ten1,ten2)
         EE,EEs,wgt = None,None,None
+        #ten1,ten2,EE,EEs,wgt = move_gauge_right_svd(ten1,ten2)
     else:
         ten1,ten2,EE,EEs,wgt = move_gauge_right_svd(ten1,ten2,truncate_mbd=truncate_mbd)
 
@@ -343,8 +359,9 @@ def move_gauge_left_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wgt
     mpiprint(9,'Moving loaded tensors gauge right')
     
     # Do either svd or qr decomposition
-    if False: # PH - This is not working!!! #truncate_mbd > ten1.shape[2]:
-        ten1,ten2 = move_gauge_left_qr(ten1,ten2)
+    if truncate_mbd > ten1.shape[2]:
+        #ten1,ten2 = move_gauge_left_qr(ten1,ten2)
+        ten1,ten2,_,_,_ = move_gauge_left_svd(ten1,ten2)
         EE,EEs,wgt = None,None,None
     else:
         ten1,ten2,EE,EEs,wgt = move_gauge_left_svd(ten1,ten2,truncate_mbd=truncate_mbd)
@@ -400,6 +417,16 @@ def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True
     ten1 = mps[site]
     ten2 = mps[site+1]
 
+    # Check to make sure everything is done correctly
+    if DEBUG:
+        init_cont = einsum('abc,cde->abde',mps[site],mps[site+1])
+        if ten1.sym is None:
+            mpiprint(0,'\tInitial Shape ten1 = {}, {}'.format(mps[site].ten.shape,mps[site].legs))
+            mpiprint(0,'\tInitial Shape ten2 = {}, {}'.format(mps[site+1].ten.shape,mps[site+1].legs))
+        else:
+            mpiprint(0,'\tInitial Shape ten1 = {}, {}, {}, {}'.format(mps[site].ten.array.shape,mps[site].legs,mps[site].sym[0],mps[site].sym[1]))
+            mpiprint(0,'\tInitial Shape ten2 = {}, {}, {}, {}'.format(mps[site+1].ten.array.shape,mps[site+1].legs,mps[site+1].sym[0],mps[site+1].sym[1]))
+
     # Move the gauge
     ten1,ten2,EE,EEs,wgt = move_gauge_right_tens(ten1,ten2,
                                                 truncate_mbd=truncate_mbd,
@@ -409,6 +436,19 @@ def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True
     # Put back into the mps
     mps[site] = ten1
     mps[site+1] = ten2
+
+    if DEBUG:
+        fin_cont = einsum('abc,cde->abde',mps[site],mps[site+1])
+        if fin_cont.sym is None:
+            diff = init_cont.backend.sum(init_cont.backend.abs(init_cont.ten-fin_cont.ten))
+            mpiprint(0,'\tFinal   Shape ten1 = {}, {}'.format(mps[site].ten.shape,mps[site].legs))
+            mpiprint(0,'\tFinal   Shape ten2 = {}, {}'.format(mps[site+1].ten.shape,mps[site+1].legs))
+            mpiprint(0,'\tDifference before/after QR/SVD = {}'.format(diff))
+        else:
+            diff = init_cont.backend.sum(init_cont.backend.abs(init_cont.ten.make_sparse()-fin_cont.ten.make_sparse()))
+            mpiprint(0,'\tFinal   Shape ten1 = {}, {}, {}, {}'.format(mps[site].ten.array.shape,mps[site].legs,mps[site].sym[0],mps[site].sym[1]))
+            mpiprint(0,'\tFinal   Shape ten2 = {}, {}, {}, {}'.format(mps[site+1].ten.array.shape,mps[site+1].legs,mps[site+1].sym[0],mps[site+1].sym[1]))
+            mpiprint(0,'\tDifference before/after QR/SVD = {}'.format(diff))
 
     # Return results
     if return_wgt and return_ent:
@@ -461,6 +501,15 @@ def move_gauge_left(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True)
     ten1 = mps[site-1]
     ten2 = mps[site]
 
+    if DEBUG:
+        init_cont = einsum('abc,cde->abde',mps[site-1],mps[site])
+        if ten1.sym is None:
+            mpiprint(0,'\tInitial Shape ten1 = {}, {}'.format(mps[site-1].ten.shape,mps[site-1].legs))
+            mpiprint(0,'\tInitial Shape ten2 = {}, {}'.format(mps[site].ten.shape,mps[site].legs))
+        else:
+            mpiprint(0,'\tInitial Shape ten1 = {}, {}, {}, {}'.format(mps[site-1].ten.array.shape,mps[site-1].legs,mps[site-1].sym[0],mps[site-1].sym[1]))
+            mpiprint(0,'\tInitial Shape ten2 = {}, {}, {}, {}'.format(mps[site].ten.array.shape,mps[site].legs,mps[site].sym[0],mps[site].sym[1]))
+
     # Move the gauge
     ten1,ten2,EE,EEs,wgt = move_gauge_left_tens(ten1,ten2,
                                                 truncate_mbd=truncate_mbd,
@@ -470,6 +519,19 @@ def move_gauge_left(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True)
     # Put back into the mps
     mps[site-1] = ten1
     mps[site] = ten2
+
+    if DEBUG:
+        fin_cont = einsum('abc,cde->abde',mps[site-1],mps[site])
+        if fin_cont.sym is None:
+            diff = init_cont.backend.sum(init_cont.backend.abs(init_cont.ten-fin_cont.ten))
+            mpiprint(0,'\tFinal   Shape ten1 = {}, {}'.format(mps[site-1].ten.shape,mps[site-1].legs))
+            mpiprint(0,'\tFinal   Shape ten2 = {}, {}'.format(mps[site].ten.shape,mps[site].legs))
+            mpiprint(0,'\tDifference before/after QR/SVD = {}'.format(diff))
+        else:
+            diff = init_cont.backend.sum(init_cont.backend.abs(init_cont.ten.make_sparse()-fin_cont.ten.make_sparse()))
+            mpiprint(0,'\tFinal   Shape ten1 = {}, {}, {}, {}'.format(mps[site-1].ten.array.shape,mps[site-1].legs,mps[site-1].sym[0],mps[site-1].sym[1]))
+            mpiprint(0,'\tFinal   Shape ten2 = {}, {}, {}, {}'.format(mps[site].ten.array.shape,mps[site].legs,mps[site].sym[0],mps[site].sym[1]))
+            mpiprint(0,'\tDifference before/after QR/SVD = {}'.format(diff))
 
     # Return results
     if return_wgt and return_ent:
@@ -906,9 +968,13 @@ class MPS:
                 # Remove initial empty indices
                 norm_env = norm_env.remove_empty_ind(0)
                 norm_env = norm_env.remove_empty_ind(0)
+            elif site == self.N-1:
+                # NOTE - Only here because of symtensor contraction problem
+                tmp = einsum('apb,ApB->aAbB',self[site],self[site].conj())
+                norm_env = einsum('aA,aAbB->bB',norm_env,tmp)
             else:
-                tmp1 = einsum('Aa,apb->Apb',norm_env,self[site])
-                norm_env = einsum('Apb,ApB->Bb',tmp1,self[site].conj())
+                tmp1 = einsum('aA,apb->Apb',norm_env,self[site])
+                norm_env = einsum('Apb,ApB->bB',tmp1,self[site].conj())
         # Extract and return result
         norm = norm_env.to_val()
         return norm
@@ -925,8 +991,83 @@ class MPS:
             chi : int
                 The new maximum bond dimension
         """
-        res = mps_apply_svd(self.tensors,chi)
-        self.input_mps_list(res)
+        res = self.copy()
+        res = mps_apply_svd(res.tensors,chi)
+        return MPS(res)
+
+    def make_left_canonical(self,chi=1e100):
+        """
+        Make the MPS Left canonical (and possibly truncate bond dim)
+
+        Args:
+            self : MPS Object
+                The mps which will be used
+
+        Kwargs:
+            chi : int
+                The new maximum bond dimension
+        """
+        res = self.copy()
+        res = make_mps_left(res.tensors,truncate_mbd=chi)
+        return MPS(res)
+
+    def make_right_canonical(self,chi=1e100):
+        """
+        Make the MPS Right canonical (and possibly truncate bond dim)
+
+        Args:
+            self : MPS Object
+                The mps which will be used
+
+        Kwargs:
+            chi : int
+                The new maximum bond dimension
+        """
+        res = self.copy()
+        res = make_mps_right(res.tensors,truncate_mbd=chi)
+        return MPS(res)
+
+    def move_gauge_right(self,site,truncate_mbd=1e100):
+        """
+        Do a tensor decomposition on site to move the gauge to site+1
+
+        Args:
+            self : MPS Object
+                The mps which will be used
+            site : int
+                The starting location of the MPS gauge
+
+        Kwargs:
+            truncate_mbd : int
+                The bond dimension to be truncated to
+        """
+        res = self.copy()
+        res = move_gauge_right(res.tensors,site,
+                               truncate_mbd=truncate_mbd,
+                               return_ent=False,
+                               return_wgt=False)
+        return MPS(res)
+
+    def move_gauge_left(self,site,truncate_mbd=1e100):
+        """
+        Do a tensor decomposition on site to move the gauge to site-1
+
+        Args:
+            self : MPS Object
+                The mps which will be used
+            site : int
+                The starting location of the MPS gauge
+
+        Kwargs:
+            truncate_mbd : int
+                The bond dimension to be truncated to
+        """
+        res = self.copy()
+        res = move_gauge_left(res.tensors,site,
+                               truncate_mbd=truncate_mbd,
+                               return_ent=False,
+                               return_wgt=False)
+        return MPS(res)
 
     def input_mps_list(self,new):
         """

@@ -229,6 +229,7 @@ def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_):
         return ten
     else:
         # Create a symmetric tensor
+        #sym = ['+-',[Z,Z],None,None]
         sym = ['+-',[Z,Z],None,None]
         ten = GEN_TEN(shape=(D,D),sym=sym,backend=backend,dtype=dtype)
         for i in range(ten.ten.array.shape[0]):
@@ -261,7 +262,8 @@ def rand(shape,sym=None,backend='numpy',dtype=float_):
         dtype : dtype
             The data type for the tensor, i.e. np.float_,np.complex128,etc.
     """
-    sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
+    if sym is not None:
+        sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
     ten = GEN_TEN(shape=shape,sym=sym,backend=backend,dtype=dtype)
     ten.randomize()
     return ten
@@ -356,9 +358,11 @@ def einsum(subscripts,opA,opB):
     """
     print_str = ''
     # Format String ------------------------------------
+    #print('Initial Subscripts = {}, {}, {}'.format(subscripts,opA.legs,opB.legs))
     _subscripts = subscripts
     subscripts = replace_caps(subscripts)
     subscripts = unmerge_subscripts(subscripts,opA.legs,opB.legs)
+    #print('Final   Subscripts = {}'.format(subscripts))
     # Do einsum
     res = opA.lib.einsum(subscripts,opA.ten,opB.ten)
     # Create a new gen_ten (with correctly lumped legs) from the result
@@ -420,22 +424,28 @@ class GEN_TEN:
         dtype : dtype
             The data type for the tensor, i.e. np.float_,np.complex128,etc.
         """
-        # Collect settings
-        if isinstance(backend,str):
-            self.backend = load_lib(backend)
+        # Load Backend
+        if ten is None:
+            self.backend = backend
+        elif sym is None:
+            self.backend = backend
         else:
-            if ten is None:
-                self.backend = backend
-            else:
-                self.backend = ten.backend
+            self.backend = ten.backend
+        self.backend = load_lib(self.backend)
+
+        # Set Tensor dtype
         if ten is None:
             self.dtype   = dtype
         else:
             self.dtype   = ten.dtype
 
+        # Set Symmetry
         if sym is not None:
             self.sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
+        else:
+            self.sym = None
 
+        # Set actual tensor
         if ten is None:
             # Create a zero tensor
             if sym is None:
@@ -446,10 +456,9 @@ class GEN_TEN:
             self.ten = ten
             try:
                 sym = self.ten.sym
-                sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
-                self.sym = self.ten.sym
+                self.sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
             except:
-                print('\n'*5+'Failed?'+'\n'*5)
+                self.sym = None
                 pass
         
         # Create combined index
@@ -511,9 +520,9 @@ class GEN_TEN:
         return self._as_new_tensor(self.ten.copy())
 
     def _as_new_tensor(self,ten):
-        newsym = [(self.sym[0]+'.')[:-1],self.sym[1],self.sym[2],self.sym[3]]
-        newlegs= copy.deepcopy(self.legs)
-        newten = GEN_TEN(self.shape,ten=ten,sym=newsym,backend=self.backend,dtype=self.dtype,legs=self.legs)
+        newten = GEN_TEN(ten=ten,
+                         backend=self.backend,
+                         legs=copy.deepcopy(self.legs))
         return newten
 
     def __str__(self):
@@ -642,9 +651,18 @@ class GEN_TEN:
         split = self.legs[split][0]
         if self.sym is None:
             # Do qr
-            res = svd_ten(self.ten,split,backend=self.backend)
+            res = svd_ten(self.ten,
+                          split,
+                          backend=self.backend,
+                          truncate_mbd=truncate_mbd,
+                          return_ent=return_ent,
+                          return_wgt=return_wgt)
         else:
-            res = symsvd(self.ten,[list(range(split)),list(range(split,self.ten.ndim))],return_ent=True,return_wgt=True)
+            res = symsvd(self.ten,
+                         [list(range(split)),list(range(split,self.ten.ndim))],
+                         truncate_mbd=truncate_mbd,
+                         return_ent=True,
+                         return_wgt=True)
         U,S,V = res[0],res[1],res[2]
         U = GEN_TEN(ten=U)
         S = GEN_TEN(ten=S)

@@ -96,8 +96,9 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
                  Zu,
                  is_symmetric=ket[row].is_symmetric,
                  backend=ket[row].backend)
-        Itmp = einsum('du,UD->dDuU',I1,I2)
-        I = einsum('dDuU,lr->dlDruU',Itmp,I3)
+        Itmp = einsum('du,UD->dDuU',I3,I2)
+        I = einsum('dDuU,lr->dlDruU',Itmp,I1)
+
         # Merge inds to make it an MPO
         I.merge_inds([0,1,2])
         I.merge_inds([2,3])
@@ -111,9 +112,11 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
     if truncate:
         norm0 = bound_mps.norm()
         print('norm0 = {}'.format(norm0))
-        bound_mps.apply_svd(chi)
+        bound_mps = bound_mps.apply_svd(chi)
         norm1 = bound_mps.norm()
-        print('norm0 = {}'.format(norm0))
+        print('norm1 = {}'.format(norm1))
+        import sys
+        sys.exit()
         mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
     return bound_mps
 
