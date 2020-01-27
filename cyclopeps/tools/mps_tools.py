@@ -621,266 +621,6 @@ def mps_apply_svd(mps,chi):
     mps = make_mps_right(mps,truncate_mbd=chi)
     return mps
 
-def alloc_mps_env(mps,mpoL,dtype=float_):
-    """ 
-    Allocate tensors for the mps|mpo|mps sandwich environment tensors
-
-    Args:
-        mps : 1D List of MPS tensors
-            The matrix product state
-        mpoL : List of list of MPO tensors
-            A list of mpos
-
-    Returns:
-        envL : 1D Array
-            An environment
-    """
-    mpiprint(9,'Allocating mps environment')
-
-    # Get details about mpo and mps
-    nSite  = len(mps)
-    nOps   = len(mpoL)
-
-    # Initialize empty list to hold envL
-    envL = []
-    
-    # Loop over all operators in mpo List
-    for op in range(nOps):
-        # Create an environment (in a list) for given operator
-        env = []
-
-        # Initial entry (for edge) PH - Does not work for periodic
-        dims = (1,1,1)
-        ten = zeros(dims,dtype=dtype)
-        ten[0,0,0] = 1.
-        # Add to env list
-        env.append(ten)
-        
-        # Central Entries 
-        for site in range(nSite-1):
-            # Find required dimensions
-            mps_D = mps[site].shape[2]
-            for op in range(nOps):
-                mpo_D=1
-                if mpoL[op][site] is not None:
-                    _,_,_,mpo_D = mpoL[op][site].shape
-            # Create tensor
-            dims = (mps_D,mpo_D,mps_D)
-            ten = zeros(dims,dtype=dtype)
-            # Add to env list
-            env.append(ten)
-
-        # Final entry (for right edge) PH - Does not work for periodic
-        dims = (1,1,1)
-        ten = zeros(dims,dtype=dtype)
-        ten[0,0,0] = 1.
-        # Add to env list
-        env.append(ten)
-
-        # Add new env to the overall env list
-        envL.append(env)
-
-    # Return list of environments
-    return envL
-
-def update_env_left(mpsList,mpoList,envList,site,mpslList=None):
-    """
-    Update the environment tensors for an mps|mpo|mps sandwich
-    as we move to the left
-
-    Args:
-        mpsList : 1D Array of Matrix Product States
-            A list containing a matrix product 
-            states        
-        mpoList : 1D Array of MPOs
-            A list containing multiple MPOs
-        envList : 1D Array of an environment
-            A list containing multiple environments,
-        site : int
-            The current site
-
-    Kwargs:
-        mpslList : 1D Array of Matrix Product State
-            An optional mpsList representing the left state of the 
-            system if you would like different left and right vectors
-            used in computing the environment
-
-    Returns:
-        envList : 1D Array of an environment
-            This returns the same environmnet you started with, though
-            the entries have been updated
-    """
-    mpiprint(8,'\tUpdating Environment moving from site {} to {}'.format(site,site-1))
-
-    # Get useful info
-    nOp = len(mpoList)
-    nSite = len(mpsList)
-
-    # Get a left MPS, 
-    if mpslList is None: mpslList = mpsList
-    
-    # Loop through all operators
-    for op in range(nOp):
-        # Load environment and mps
-        envLoc = envList[op][site+1]
-        mpsLoc = mpsList[site]
-        mpslLoc= mpslList[site]
-
-        # Do Contraction to update env
-        if mpoList[op][site] is None:
-            envNew = einsum('apb,Bcb->apcB',mpsLoc,envLoc)
-            envNew = einsum('apcB,ApB->Aca',envNew,conj(mpslLoc))
-        else:
-            envNew = einsum('apb,Bcb->apcB',mpsLoc,envLoc)
-            envNew = einsum('apcB,dqpc->adqB',envNew,mpoList[op][site]) # PH - Might be dpqc?
-            envNew = einsum('adqB,AqB->Ada',envNew,conj(mpslLoc))
-
-        # Save resulting new environment
-        envList[op][site] = envNew
-    
-    # Return environment list
-    return envList
-
-def update_env_right(mpsList,mpoList,envList,site,mpslList=None):
-    """
-    Update the environment tensors for an mps|mpo|mps sandwich
-    as we move to the right
-
-    Args:
-        mpsList : 1D Array of Matrix Product States
-            A list containing multiple matrix product 
-            states 
-        mpoList : 1D Array of MPOs
-            A list containing multiple MPOs
-        envList : 1D Array of an environment
-            A list containing multiple environments,
-        site : int
-            The current site
-
-    Kwargs:
-        mpslList : 1D Array of Matrix Product State
-            An optional mpsList representing the left state of the 
-            system if you would like left and right vectors
-            used in computing the environment
-
-    Returns:
-        envList : 1D Array of an environment
-            This returns the same environmnet you started with, though
-            the entries have been updated
-    """
-    mpiprint(8,'\tUpdating Environment moving from site {} to {}'.format(site,site+1))
-
-    # Get useful info
-    nOp = len(mpoList)
-    nSite = len(mpsList)
-
-    # Get a left MPS, 
-    if mpslList is None: mpslList = mpsList
-    
-    # Loop through all operators
-    for op in range(nOp):
-        # Load environment and mps
-        envLoc = envList[op][site]
-        mpsLoc = mpsList[site]
-        mpslLoc= mpslList[site]
-
-        # Do Contraction to update env
-        if mpoList[op][site] is None:
-            envNew = einsum('Ala,APB->alPB',envLoc,conj(mpslLoc))
-            envNew = einsum('aPb,alPB->Blb',mpsLoc,envNew)
-        else:
-            envNew = einsum('Ala,APB->alPB',envLoc,conj(mpslLoc))
-            envNew = einsum('lPpr,alPB->aprB',mpoList[op][site],envNew)
-            envNew = einsum('apb,aprB->Brb',mpsLoc,envNew)
-
-        # Save resulting new environment
-        envList[op][site+1] = envNew
-    
-    # Return environment list
-    return envList
-
-def calc_mps_env(mpsList,mpoList,mpslList=None,dtype=None,gSite=0,state=0):
-    """
-    Calculate all the environment tensors for an mps|mpo|mps sandwich
-
-    Args:
-        mpsList : 1D Array of Matrix Product States
-            A list containing multiple matrix product 
-            states, each of which is a list of a dictionary,
-            which contains the filename and dimensions of 
-            the local MPS tensor. 
-        mpoList : 1D Array of MPOs
-            A list containing multiple MPOs
-
-    Kwargs:
-        mpslList : 1D Array of Matrix Product State
-            An optional mpsList representing the left state of the 
-            system if you would like left and right vectors
-            used in computing the environment
-        dtype : dtype
-            Specify the data type, if None, then this will use the 
-            same datatype as the mpsList.
-        gSite : int
-            The site where the gauge is currently located. The default
-            is gSite=0, meaning the mps is right canonical.
-
-    Returns:
-        envList : 1D Array of an environment
-            This returns the same environmnet you started with, though
-            the entries have been updated
-    """
-    mpiprint(8,'Calculating full mps environment')
-    nSite = len(mpsList)
-    # Make env same dtype as mps
-    if dtype is None: dtype = mpsList[0].dtype
-    # Allocate Environment
-    envList = alloc_mps_env(mpsList,mpoList,dtype=dtype)
-    # Calculate Environment from the right
-    for site in range(nSite-1,gSite,-1):
-        envList = update_env_left(mpsList,mpoList,envList,site,mpslList=mpslList)
-    # Calculate Environment from the left
-    for site in range(gSite):
-        envList = update_env_right(mpsList,mpoList,envList,site,mpslList=mpslList)
-    return envList
-
-def contract_mps(mps1,mps2=None,mpo=None):
-    """
-    Contract 2 MPSs to give scalar product
-
-    Args:
-        mps1 : List of mps tensors
-            The first MPS to be contracted
-
-    Kwargs:
-        mps2 : List of mps tensors
-            The second MPS to be contracted. If None
-            then will be set as conj(mps1)
-        mpo : List of mpo tensors
-            The mpo to be sandwhiched between
-            the two mps. If None, then the mpo
-            will be set as identities. 
-
-    Returns:
-        res : float
-            The resulting value of the contraction
-    """
-    # Figure out mps size
-    N = len(mps1)
-
-    # Make MPO if needed
-    if mpo is None:
-        mpo = [[None]*N]
-
-    # Calculate mps env from right
-    env = calc_mps_env(mps1,mpo,mpslList=mps2,gSite=-1)
-
-    # Extract and Return Result
-    nOps = len(mpo)
-    res = 0.
-    for opind in range(nOps):
-        res += env[opind][0][0,0,0]
-    return res
-
 def identity_mps(N,dtype=float_):
     """
     Create an identity mps (currently limited to physical and 
@@ -964,15 +704,13 @@ class MPS:
         # Move to the left, contracting env with bra and ket tensors
         for site in range(self.N):
             if site == 0:
+                # Form initial norm environment
                 norm_env = einsum('apb,ApB->aAbB',self[site],self[site].conj())
                 # Remove initial empty indices
                 norm_env = norm_env.remove_empty_ind(0)
                 norm_env = norm_env.remove_empty_ind(0)
-            elif site == self.N-1:
-                # NOTE - Only here because of symtensor contraction problem
-                tmp = einsum('apb,ApB->aAbB',self[site],self[site].conj())
-                norm_env = einsum('aA,aAbB->bB',norm_env,tmp)
             else:
+                # Add next mps tensors to norm environment
                 tmp1 = einsum('aA,apb->Apb',norm_env,self[site])
                 norm_env = einsum('Apb,ApB->bB',tmp1,self[site].conj())
         # Extract and return result
@@ -1093,7 +831,27 @@ class MPS:
             res : float
                 The resulting scalar from the contraction
         """
-        return contract_mps(self.tensors,mps2=mps2.tensors)
+        # Move to the left, contracting env with bra and ket tensors
+        for site in range(self.N):
+            if site == 0:
+                # Form initial norm environment
+                norm_env = einsum('apb,ApB->aAbB',self[site],mps2[site])
+                # Remove initial empty indices
+                norm_env = norm_env.remove_empty_ind(0)
+                norm_env = norm_env.remove_empty_ind(0)
+            else:
+                # Add next mps tensors to norm environment
+                tmp1 = einsum('aA,apb->Apb',norm_env,self[site])
+                norm_env = einsum('Apb,ApB->bB',tmp1,mps2[site])
+        # Extract and return result
+        norm = norm_env.to_val()
+        return norm
+
+    def norm(self):
+        """
+        Compute the norm of the MPS
+        """
+        return self.contract(self.conj())
 
     def __len__(self):
         return len(self.tensors)
@@ -1110,6 +868,12 @@ class MPS:
             else:
                 maxval = max(self.tensors[i].max(),maxval)
         return maxval
+
+    def conj(self):
+        mpsconj = self.copy()
+        for site in range(len(mpsconj.tensors)):
+            mpsconj[site] = mpsconj[site].conj()
+        return mpsconj
 
     # -----------------------------------------------------------------------
     # Yet to be implemented functions

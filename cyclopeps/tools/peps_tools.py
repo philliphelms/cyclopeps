@@ -84,10 +84,12 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
         # Add correct identity
         (_,_,Dr,Du) = ket[row].shape
         (_,_,Zr,Zu) = ket[row].qn_sectors
+        order = res.sym[0][4] if ket[row].is_symmetric else '+'
         I1 = eye(Dr,
                  Zr,
                  is_symmetric=ket[row].is_symmetric,
-                 backend=ket[row].backend)
+                 backend=ket[row].backend,
+                 order=order)
         I2 = eye(Du,
                  Zu,
                  is_symmetric=ket[row].is_symmetric,
@@ -110,14 +112,15 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
 
     # Reduce bond dimension
     if truncate:
-        norm0 = bound_mps.norm()
-        print('norm0 = {}'.format(norm0))
+        mpiprint(5,'Truncating Boundary MPS')
+        if DEBUG:
+            mpiprint(6,'Computing initial bmpo norm')
+            norm0 = bound_mps.norm()
         bound_mps = bound_mps.apply_svd(chi)
-        norm1 = bound_mps.norm()
-        print('norm1 = {}'.format(norm1))
-        import sys
-        sys.exit()
-        mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+        if DEBUG:
+            mpiprint(6,'Computing resulting bmpo norm')
+            norm1 = bound_mps.norm()
+            mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
     return bound_mps
 
 def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
@@ -132,43 +135,46 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
     for row in range(Ny):
         mpiprint(5,'Adding Site {} to Ket'.format(row))
 
-        # Add correct identity
+        # Add Correct Identity
         mpiprint(6,'Adding Identity to ket boundary mps')
         (Dl,Dd,Dp,Dr,Du) = ket[row].shape
-        I1 = eye(Dd)
+        (Zl,Zd,Zp,Zr,Zu) = ket[row].qn_sectors
+        I1 = eye(Dd,
+                 Zd,
+                 is_symmetric=ket[row].is_symmetric,
+                 backend=ket[row].backend)
         I = einsum('mLn,du->mdLnu',bound_mpo[2*row],I1)
         # Reshape it into an MPO
-        (Dm,DL,Dn) = bound_mpo[2*row].shape
-        I = reshape(I,(Dm*Dd,DL,Dn*Dd))
-        # Append to new boundary mpo
+        I.merge_inds([0,1])
+        I.merge_inds([2,3])
+        # Append to boundary MPO
         bound_mpo_new.append(I)
 
         # Add ket contraction
-        mpiprint(6,'Adding Identity ket tensor to boundary mps')
+        mpiprint(6,'Adding ket tensor to boundary mps')
         res = einsum('mln,ldpru->mdrpnu',bound_mpo[2*row+1],ket[row])
         # Reshape it into an MPO
-        (Dm,_,Dn) = bound_mpo[2*row+1].shape
-        res = reshape(res,(Dm*Dd,Dr*Dp,Dn*Du))
-        # Append to new boundary mpo
+        res.merge_inds([0,1])
+        res.merge_inds([1,2])
+        res.merge_inds([2,3])
+        # Append to boundary MPO
         bound_mpo_new.append(res)
 
-    # Put result into an MPS -------------------------
-    mpiprint(7,'Putting MPS list into MPS object')
-    bound_mps = MPS()
-    bound_mps.input_mps_list(bound_mpo_new)
+    # Put result into an MPS -------------------------------------------
+    bound_mps = MPS(bound_mpo_new)
 
     # Reduce bond dimension
     if truncate:
         mpiprint(5,'Truncating Boundary MPS')
         if DEBUG:
-            mpiprint(6,'Computing initial norm')
+            mpiprint(6,'Computing initial bmpo norm')
             norm0 = bound_mps.norm()
-        mpiprint(6,'Applying SVD')
-        bound_mps.apply_svd(chi)
+        bound_mps = bound_mps.apply_svd(chi)
         if DEBUG:
-            mpiprint(6,'Computing Resulting norm')
+            mpiprint(6,'Computing resulting bmpo norm')
             norm1 = bound_mps.norm()
             mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+
     return bound_mps
 
 def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
@@ -186,41 +192,43 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
         mpiprint(6,'Adding bra tensor to boundary mps')
         res = einsum('mLn,LDPRU->mDRnUP',bound_mpo[2*row],bra[row])
         # Reshape it into an MPO
-        (Dm,_,Dn) = bound_mpo[2*row].shape
-        (DL,DD,DP,DR,DU) = bra[row].shape
-        res = reshape(res,(Dm*DD,DR,Dn*DU*DP))
+        res.merge_inds([0,1])
+        res.merge_inds([2,3,4])
         # Append to new boundary MPO
         bound_mpo_new.append(res)
 
         # Add correct identity
-        mpiprint(6,'Adding Identity boundary mps')
+        mpiprint(6,'Adding Identity to boundary mps')
+        # Unmerge bmps tensor
         bound_tens = bound_mpo[2*row+1]
-        (Dm,Dp,Dn) = bound_tens.shape
-        d = int(Dp/D)
-        bound_tens = reshape(bound_tens,(Dm,D,d,Dn))
-        I = eye(DU)
+        bound_tens.unmerge_ind(1)
+        # Create identity tensor
+        (Dl,Dd,Dp,Dr,Du) = bra[row].shape
+        (Zl,Zd,Zp,Zr,Zu) = bra[row].qn_sectors
+        I = eye(Du,
+                Zu,
+                is_symmetric=bra[row].is_symmetric,
+                backend=bra[row].backend)
         # Contract with previous bound_mpo tensor
-        res = einsum('mrpn,DU->mDprnU',bound_tens,I)
+        res = einsum('mrpn,UD->mDprnU',bound_tens,I)
         # Reshape it back into an MPO
-        res = reshape(res,(Dm*DU*d,D,Dn*DU))
+        res.merge_inds([0,1,2])
+        res.merge_inds([2,3])
         # Append to new boundary MPO
         bound_mpo_new.append(res)
 
-    # Put result into an MPS -------------------------
-    bound_mps = MPS()
-    bound_mps.input_mps_list(bound_mpo_new)
+    # Put result into an MPS -------------------------------------------
+    bound_mps = MPS(bound_mpo_new)
 
     # Reduce bond dimension
-    mpiprint(7,'Putting MPS list into MPS object')
     if truncate:
         mpiprint(5,'Truncating Boundary MPS')
         if DEBUG:
-            mpiprint(6,'Computing initial norm')
+            mpiprint(6,'Computing initial bmpo norm')
             norm0 = bound_mps.norm()
-        mpiprint(6,'Applying SVD')
-        bound_mps.apply_svd(chi)
+        bound_mps = bound_mps.apply_svd(chi)
         if DEBUG:
-            mpiprint(6,'Computing Resulting norm')
+            mpiprint(6,'Computing resulting bmpo norm')
             norm1 = bound_mps.norm()
             mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
     return bound_mps
@@ -261,8 +269,6 @@ def left_bmpo_sl(bra, bound_mpo, chi=4,truncate=True,ket=None):
     if ket is None:
         ket = copy_tensor_list(bra)
 
-    import sys
-    sys.exit()
     # First Layer (ket) #####################################
     bound_mpo = left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=chi,truncate=truncate)
     # Second Layer (bra) ####################################
@@ -580,7 +586,7 @@ def flip_peps(peps,mk_copy=True):
             # Copy Correct Tensor
             fpeps[x][y] = peps[(Nx-1)-x][y].copy()
             # Reorder Indices
-            fpeps[x][y] = transpose(fpeps[x][y],[3,1,2,0,4])
+            fpeps[x][y] = fpeps[x][y].transpose([3,1,2,0,4])
 
     # Return Flipped peps
     return fpeps
@@ -863,6 +869,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
     # Figure out peps size
     Nx = peps.Nx
     Ny = peps.Ny
+    be = peps[0][0].backend
 
     pwr = -1.0 / (2*Nx*Ny) # NOTE: if trying to use this procedure to 
                            # normalize a partition function, remove
@@ -894,8 +901,8 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
             if abs(z-1.0) < 1e-6:
                 mpiprint(2, 'converged scale = {}, norm = {}'.format(scale,z))
                 break
-            if z < 10.0**(-1*norm_tol) or z > 10.0**(norm_tol) or isnan(z):
-                if z > 1.0 or isnan(z):
+            if z < 10.0**(-1*norm_tol) or z > 10.0**(norm_tol) or be.isnan(z):
+                if z > 1.0 or be.isnan(z):
                     up = scale
                     scale = (up+down)/2.0
                 else:
@@ -903,7 +910,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
                     scale = (up+down)/2.0
             # close to convergence, apply "exact" scale
             else:
-                sfac = power(z,pwr)
+                sfac = z**pwr
                 scale = sfac*scale
                 mpiprint(2, 'apply exact scale: {}'.format(scale))
 
@@ -953,7 +960,7 @@ def calc_peps_norm(peps,chi=4,singleLayer=True):
     right_bound_mpo = calc_right_bound_mpo(peps,Nx-2,chi=chi,singleLayer=singleLayer)
 
     # Contract the two MPOs
-    norm = contract_mps(left_bound_mpo,right_bound_mpo)
+    norm = left_bound_mpo.contract(right_bound_mpo)
 
     # Return result
     return norm

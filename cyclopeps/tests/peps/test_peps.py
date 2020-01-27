@@ -21,7 +21,7 @@ class test_peps(unittest.TestCase):
                     chi=chi,
                     Zn=Zn,
                     backend=backend,
-                    normalize=False)
+                    normalize=True)
         norm = peps.calc_norm(chi=chi) 
         mpiprint(0,'Norm = {}'.format(norm))
         self.assertTrue(abs(1.0-norm) < 1e-3)
@@ -44,7 +44,7 @@ class test_peps(unittest.TestCase):
                     chi=chi,
                     Zn=Zn,
                     backend=backend,
-                    normalize=False)
+                    normalize=True)
         norm = peps.calc_norm(chi=chi) 
         mpiprint(0,'Norm = {}'.format(norm))
         self.assertTrue(abs(1.0-norm) < 1e-3)

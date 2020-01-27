@@ -200,7 +200,7 @@ def svd_ten(ten,split_ind,truncate_mbd=1e100,return_ent=True,return_wgt=True,bac
     else:
         return U,S,V
 
-def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_):
+def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_,order='+'):
     """
     Create an identity tensor
 
@@ -219,6 +219,10 @@ def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_):
             'numpy'    - a numpy tensor
         dtype : dtype
             The data type for the tensor, i.e. np.float_,np.complex128,etc.
+        order : string
+            Determine the order of symmetry string applied, 
+            if order = '+' -> sym[0] = '+-'
+            otherwise, sym[0] = '-+'.
     """
     if isinstance(backend,str):
         backend = load_lib(backend)
@@ -230,7 +234,10 @@ def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_):
     else:
         # Create a symmetric tensor
         #sym = ['+-',[Z,Z],None,None]
-        sym = ['+-',[Z,Z],None,None]
+        if order == '+':
+            sym = ['+-',[Z,Z],None,None]
+        else:
+            sym = ['-+',[Z,Z],None,None]
         ten = GEN_TEN(shape=(D,D),sym=sym,backend=backend,dtype=dtype)
         for i in range(ten.ten.array.shape[0]):
             ten.ten.array[i,:,:] = backend.eye(ten.ten.array.shape[1])
@@ -608,6 +615,28 @@ class GEN_TEN:
         # Add the rest of the unaffected legs
         for i in range(combinds[-1]+1,len(self.legs)):
             newlegs.append(self.legs[i])
+        # Actually change legs
+        self.legs = newlegs
+
+    def unmerge_ind(self,ind,make_cp=True):
+        """
+        Unlump a single index of a tensor into its component indices
+        # Note also, we are not doing any actual tensor manipulation, i.e. reshaping, etc.
+        """
+        # Legs that are not affected by merging
+        newlegs = []
+        cnt = 0
+        for i in range(ind):
+            newlegs.append(self.legs[i])
+            cnt += len(self.legs[i])
+        # Add the unmerged legs
+        for i in range(len(self.legs[ind])):
+            newlegs.append([cnt])
+            cnt += 1
+        # Add the rest of the unaffected legs
+        for i in range(ind+1,len(self.legs)):
+            newlegs.append(list(range(cnt,cnt+len(self.legs[i]))))
+            cnt += len(self.legs[i])
         # Actually change legs
         self.legs = newlegs
 
