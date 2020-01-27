@@ -520,6 +520,30 @@ class GEN_TEN:
         else:
             self.ten += self.backend.random(self.ten.array.shape)
 
+    def make_sparse(self):
+        """
+        Convert the symmetric tensor into a sparse tensor
+        """
+        if not self.is_symmetric:
+            return self.copy()
+        else:
+            # Make a copy of the tensor
+            newten = self.copy()
+            # Convert the tensor to a sparse one
+            nind = len(newten.ten.shape)
+            newten.ten = newten.ten.make_sparse()
+            newten.sym = None
+            # Reshape the resulting sparse tensor
+            order = []
+            newshape = []
+            shape = newten.ten.shape
+            for i in range(nind):
+                order += [i,nind+i]
+                newshape += [shape[i]*shape[nind+i]]
+            newten.ten = newten.backend.transpose(newten.ten,order)
+            newten.ten = newten.backend.reshape(newten.ten,newshape)
+            return newten
+
     def copy(self):
         """
         Return a copy of the gen_ten object

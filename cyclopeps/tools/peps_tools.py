@@ -2133,3 +2133,31 @@ class PEPS:
         """
         self.tensors = flip_peps(self.tensors)
         self.ltensors= flip_lambda(self.ltensors)
+
+    def make_sparse(self):
+        """
+        Convert the densely stored symmetric PEPS to a sparsely stored symmetric PEPS
+        """
+        # Create the new peps objects
+        speps = PEPS(Nx            = self.Nx,
+                     Ny            = self.Ny,
+                     d             = self.d,
+                     D             = self.D,
+                     chi           = self.chi,
+                     Zn            = None,
+                     canonical     = False,
+                     backend       = self.backend,
+                     singleLayer   = self.singleLayer,
+                     dtype         = self.dtype,
+                     norm_tol      = self.norm_tol,
+                     max_norm_iter = self.max_norm_iter,
+                     norm_bs_upper = self.norm_bs_upper,
+                     norm_bs_lower = self.norm_bs_lower,
+                     normalize=False)
+
+        # Loop through all sites converting tensors to sparse
+        for x in range(speps.Nx):
+            for y in range(speps.Ny):
+                # Get a sparse version of the tensors
+                speps[x][y] = self.tensors[x][y].copy().make_sparse()
+        return speps
