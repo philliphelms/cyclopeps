@@ -359,7 +359,7 @@ def move_gauge_left_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wgt
     mpiprint(9,'Moving loaded tensors gauge right')
     
     # Do either svd or qr decomposition
-    if truncate_mbd > ten1.shape[2]:
+    if False: # NOTE - Figure out how to do this correctly #truncate_mbd > ten1.shape[2]:
         #ten1,ten2 = move_gauge_left_qr(ten1,ten2)
         ten1,ten2,_,_,_ = move_gauge_left_svd(ten1,ten2)
         EE,EEs,wgt = None,None,None

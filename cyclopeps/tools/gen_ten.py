@@ -755,9 +755,16 @@ class GEN_TEN:
         Returns a singular value
         """
         if self.sym is not None:
-            return self.ten.lib.einsum('abcdefghijklmnopqrstuvwxyz'[:len(self.ten.array.shape)]+'->',self.ten.array)
+            tmp = self.ten.array
+            es = self.ten.lib.einsum
         else:
-            return self.lib.einsum('abcdefghijklmnopqrstuvwxyz'[:len(self.ten.shape)]+'->',self.ten)
+            tmp = self.ten
+            es = self.lib.einsum
+        while True:
+            if len(tmp.shape) > 26:
+                tmp = es('abcdefghijklmnopqrstuvwxyz...->...',tmp)
+            else:
+                return es('abcdefghijklmnopqrstuvwxyz'[:len(tmp.shape)]+'->',tmp)
 
     def __mul__(self,x):
         return self._as_new_tensor(self.ten*x)
