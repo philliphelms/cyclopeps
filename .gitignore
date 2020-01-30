@@ -5,6 +5,7 @@
 *.out
 *.job
 *.npz
+*.sh
 /cyclopeps/scripts/jobs
 
 .vscode
