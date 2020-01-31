@@ -1,10 +1,12 @@
 import os, sys
-from mpi4py import MPI
+#from mpi4py import MPI
 
 # MPI Global Variables
-COMM = MPI.COMM_WORLD
-RANK = COMM.Get_rank()
-SIZE = COMM.size
+#COMM = MPI.COMM_WORLD
+#RANK = COMM.Get_rank()
+RANK=0
+#SIZE = COMM.size
+SIZE=1
 #print('Rank = {}'.format(RANK))
 
 # Temporary directories for calculation
