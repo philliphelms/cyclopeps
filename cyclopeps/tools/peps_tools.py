@@ -1477,12 +1477,11 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
             The resulting observable's expectation value
     """
     # Absorb Lambda tensors if needed
-    try:
+    if peps.ltensors is not None:
         peps = peps_absorb_lambdas(peps.tensors,peps.ltensors,mk_copy=True)
-    except: pass
-    try:
-        ket = peps_absorb_lambdas(ket.tensors,ket.ltensors,mk_copy=True)
-    except: pass
+    if ket is not None:
+        if ket.ltensors is not None:
+            ket = peps_absorb_lambdas(ket.tensors,ket.ltensors,mk_copy=True)
 
     # Calculate contribution from interactions between columns
     col_energy = calc_all_column_op(peps,ops[0],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
@@ -1581,8 +1580,8 @@ def increase_peps_mbd(peps,Dnew,noise=1e-10):
                 new_shape[1] = Dnew
             if row != Nx-1:
                 new_shape[3] = Dnew
-            if col != Ny-1:
-                new_shape[4] = Dnew
+                if col != Ny-1:
+                    new_shape[4] = Dnew
             # Create an empty tensor
             ten = zeros(new_shape,dtype=peps[row][col].dtype)
             ten[:old_shape[0],:old_shape[1],:old_shape[2],:old_shape[3],:old_shape[4]] = peps[row][col].copy()
@@ -1599,13 +1598,13 @@ def copy_peps_tensors(peps):
     """
     Create a copy of the PEPS tensors
     """
-    copy = []
+    newpeps = []
     for x in range(len(peps)):
         tmp = []
         for y in range(len(peps[0])):
             tmp += [copy.deepcopy(peps[x][y])]
-        copy += [tmp]
-    return copy
+        newpeps += [tmp]
+    return newpeps
 
 def peps_absorb_lambdas(Gamma,Lambda,mk_copy=False):
     """
@@ -1654,6 +1653,65 @@ def peps_absorb_lambdas(Gamma,Lambda,mk_copy=False):
     # Return results
     return Gamma
 
+def load_peps(fname):
+    """
+    Load a saved PEPS into a new PEPS object
+
+    Args:
+        fname : str
+            The file which holds the saved PEPS object
+
+    Returns:
+        peps : PEPS object
+            A peps object with the saved PEPS loaded
+    """
+    # Open File
+    f = open_file(fname,'r')
+
+    # Get PEPS info
+    Nx = get_dataset('Nx')
+    Ny = get_dataset('Ny')
+    shape = get_dataset('shape')
+    d = get_dataset('d')
+    D = get_dataset('D')
+    chi = get_dataset('chi')
+    norm_tol = get_dataset('norm_tol')
+    canonical = get_dataset('canonical')
+    singleLayer = get_dataset('singleLayer')
+    max_norm_iter = get_dataset('max_norm_iter')
+    norm_BS_upper = get_dataset('norm_BS_upper')
+    norm_BS_lower = get_dataset('norm_BS_lower')
+    norm_BS_print = get_dataset('norm_BS_print')
+    dtype = get_dataset('tensor_0_0').dtype
+    fname = get_dataset('fname')
+    fdir = get_dataset('fdir')
+
+    # Create new PEPS object
+    peps = PEPS(Nx=Nx,Ny=Ny,d=d,D=D,
+                chi=chi,norm_tol=norm_tol,
+                canonical=canonical,
+                singleLayer=singleLayer,
+                max_norm_iter=max_norm_iter,
+                norm_BS_upper=norm_BS_upper,
+                norm_BS_lower=norm_BS_lower,
+                dtype=dtype,normalize=False,
+                fdir=fdir,fname=fname+'_loaded')
+
+    # Load PEPS Tensors
+    for i in range(Nx):
+        for j in range(Ny):
+            peps.tensors[i][j] = get_dataset('tensor_{}_{}'.format(i,j))
+
+    # Load lambda tensors (if there)
+    if canonical:
+        for ind in range(len(self.ltensors)):
+            for x in range(len(self.ltensors[ind])):
+                for y in range(len(self.ltensors[ind][x])):
+                    peps.ltensors[ind][x][y] = get_dataset('ltensor_{}_{}_{}'.format(ind,x,y))
+
+    # Return resulting PEPS
+    return peps
+
 # -----------------------------------------------------------------
 # PEPS Class
 
@@ -1666,7 +1724,8 @@ class PEPS:
                  chi=None,norm_tol=20,canonical=False,
                  singleLayer=True,max_norm_iter=50,
                  norm_BS_upper=1.0,norm_BS_lower=0.0,
-                 norm_BS_print=1,dtype=float_,normalize=True):
+                 norm_BS_print=1,dtype=float_,normalize=True,
+                 fname=None,fdir='./'):
         """
         Create a random PEPS object
 
@@ -1710,6 +1769,12 @@ class PEPS:
                 The data type for the PEPS
             normalize : bool
                 Whether the initial random peps should be normalized
+            fname : str
+                Where the PEPS will be saved as an .npz file, if None,
+                then the default is 'peps_Nx{}_Ny{}_D{}'
+            fdir : str
+                The directory where the PEPS will be saved, default is
+                current working directory
 
         Returns:
             PEPS : PEPS Object
@@ -1732,6 +1797,12 @@ class PEPS:
         self.norm_BS_upper = norm_BS_upper
         self.norm_BS_lower = norm_BS_lower
         self.norm_BS_print = norm_BS_print
+        if fname is None:
+            self.fname = 'peps_Nx{}_Ny{}_D{}'.format(Nx,Ny,D)
+        else:
+            self.fname = fname
+        self.fdir          = fdir
+
 
         # Make a random PEPS
         self.tensors = make_rand_peps(self.Nx,
@@ -1981,7 +2052,8 @@ class PEPS:
                          max_norm_iter=self.max_norm_iter,
                          norm_BS_upper=self.norm_BS_upper,
                          norm_BS_lower=self.norm_BS_lower,
-                         dtype=self.dtype,normalize=False)
+                         dtype=self.dtype,normalize=False,
+                         fdir=self.fdir,fname=self.fname+'_cp')
 
         # Copy peps tensors
         for i in range(self.Nx):
@@ -1994,6 +2066,7 @@ class PEPS:
                 for x in range(len(self.ltensors[ind])):
                     for y in range(len(self.ltensors[ind][x])):
                         peps_copy.ltensors[ind][x][y] = copy.deepcopy(self.ltensors[ind][x][y])
+
 
         # Return result
         return peps_copy
@@ -2026,3 +2099,39 @@ class PEPS:
         """
         self.tensors = flip_peps(self.tensors)
         self.ltensors= flip_lambda(self.ltensors)
+
+    def save(self):
+        """
+        Save the PEPS tensors
+        """
+        # Create file
+        f = open_file(self.fdir+self.fname,'w')
+        # Add PEPS Info
+        create_dataset(f,'Nx',self.Nx)
+        create_dataset(f,'Ny',self.Ny)
+        create_dataset(f,'shape',self.shape)
+        create_dataset(f,'d',self.d)
+        create_dataset(f,'D',self.D)
+        create_dataset(f,'chi',self.chi)
+        create_dataset(f,'norm_tol',self.norm_tol)
+        create_dataset(f,'canonical',self.canonical)
+        create_dataset(f,'singleLayer',self.singleLayer)
+        create_dataset(f,'max_norm_iter',self.max_norm_iter)
+        create_dataset(f,'norm_BS_upper',self.norm_BS_upper)
+        create_dataset(f,'norm_BS_lower',self.norm_BS_lower)
+        create_dataset(f,'norm_BS_print',self.norm_BS_print)
+        #create_dataset(f,'dtype',self.dtype) # NOTE - Not able to save dtype...
+        create_dataset(f,'fname',self.fname)
+        create_dataset(f,'fdir',self.fdir)
+        # Add PEPS Tensors
+        for i in range(len(self.tensors)):
+            for j in range(len(self.tensors[i])):
+                create_dataset(f,'tensor_{}_{}'.format(i,j),self.tensors[i][j])
+        # Add Lambda Tensors (if Canonical)
+        if self.ltensors is not None:
+            for ind in range(len(self.ltensors)):
+                for x in range(len(self.ltensors[ind])):
+                    for y in range(len(self.ltensors[ind][x])):
+                        create_dataset(f,'ltensor_{}_{}_{}'.format(ind,x,y),self.ltensors[ind][x][y])
+        # Close file
+        close_file(f)

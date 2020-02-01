@@ -320,6 +320,9 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None,als_iter=100,als_tol=
 
         # Normalize just in case
         peps.normalize()
+
+        # Save PEPS
+        peps.save()
         
         # Compute Resulting Energy
         E2 = peps.calc_op(ham,chi=chi)
@@ -346,7 +349,9 @@ def run_tebd(Nx,Ny,d,ham,
              n_step=5,
              su_n_step=None,
              conv_tol=1e-8,
-             als_iter=5,als_tol=1e-10):
+             als_iter=5,als_tol=1e-10,
+             peps_fname=None,
+             peps_fdir='./'):
     """
     Run the TEBD algorithm for a PEPS
 
@@ -402,7 +407,10 @@ def run_tebd(Nx,Ny,d,ham,
             len(D) == len(n_step) must both be True.
         conv_tol : float
             The convergence tolerance
-
+        peps_fname : str
+            The name of the saved peps file
+        peps_fdir : str
+            The location where the peps will be saved
     """
     t0 = time.time()
     mpiprint(0,'\n\nStarting TEBD Calculation')
@@ -450,7 +458,9 @@ def run_tebd(Nx,Ny,d,ham,
                     dtype=dtype,
                     step_size=su_step_size,
                     n_step=su_n_step,
-                    conv_tol=conv_tol)
+                    conv_tol=conv_tol,
+                    peps_fname=peps_fname,
+                    peps_fdir=peps_fdir)
     
     # Loop over all (bond dims/step sizes/number of steps)
     for Dind in range(len(D)):

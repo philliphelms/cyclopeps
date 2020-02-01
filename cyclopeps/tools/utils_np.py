@@ -7,6 +7,7 @@ Date: June 2019
 """
 from cyclopeps.tools.params import *# import params
 import numpy as np
+import h5py
 
 # -------------------------------------------------
 # Tensor Allocation
@@ -31,6 +32,18 @@ def from_nparray(arr):
 
 def to_nparray(arr):
     return arr
+
+def open_file(fname,rw):
+    return h5py.File(fname,rw)
+
+def create_dataset(f,data_label,data):
+    f.create_dataset(data_label,data=data)
+
+def get_dataset(f,data_label):
+    return f[data_label][:]
+
+def close_file(f):
+    f.close()
 
 # -------------------------------------------------
 # Linear Algebra

@@ -207,7 +207,9 @@ def run_tebd(Nx,Ny,d,ham,
              norm_tol=20,singleLayer=True,
              max_norm_iter=20,
              dtype=float_,
-             step_size=0.2,n_step=5,conv_tol=1e-8):
+             step_size=0.2,n_step=5,conv_tol=1e-8,
+             peps_fname=None,
+             peps_fdir='./'):
     """
     Run the TEBD algorithm for a PEPS
 
@@ -261,7 +263,10 @@ def run_tebd(Nx,Ny,d,ham,
             len(D) == len(n_step) must both be True.
         conv_tol : float
             The convergence tolerance
-
+        peps_fname : str
+            The name of the saved peps file
+        peps_fdir : str
+            The location where the peps will be saved
     """
     t0 = time.time()
     mpiprint(0,'\n\nStarting SU TEBD Calculation')
@@ -308,7 +313,9 @@ def run_tebd(Nx,Ny,d,ham,
                     canonical=True,
                     singleLayer=singleLayer,
                     max_norm_iter=max_norm_iter,
-                    dtype=dtype)
+                    dtype=dtype,
+                    fname=peps_fname,
+                    fdir=peps_fdir)
     
     # Loop over all (bond dims/step sizes/number of steps)
     for Dind in range(len(D)):
