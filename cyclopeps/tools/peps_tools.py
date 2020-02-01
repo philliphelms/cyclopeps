@@ -22,7 +22,7 @@ from numpy import isnan, power
 import copy
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-# PEPS ENVIRONMENT FUNCTIONS 
+# PEPS ENVIRONMENT FUNCTIONS
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
     """
@@ -223,7 +223,7 @@ def left_bmpo_sl(bra, bound_mpo, chi=4,truncate=True,ket=None):
     # Find size of peps column and dims of tensors
     Ny = len(bra)
     _,_,d,D,_ = bra[0].shape
-    
+
     # Copy the ket column if needed
     if ket is None:
         ket = copy.deepcopy(bra)
@@ -240,7 +240,7 @@ def left_update_sl(peps_col, bound_mpo, chi=4,truncate=True,ket=None):
     """
     Update the boundary mpo, from the left, moving right, using single layer
 
-    Args: 
+    Args:
         peps_col : list
             A list containing the tensors for a single peps column
         bound_mpo : list
@@ -277,7 +277,7 @@ def update_left_bound_mpo(peps_col, bound_mpo, chi=4, singleLayer=True,truncate=
     """
     Update the boundary mpo, from the left, moving right
 
-    Args: 
+    Args:
         peps_col : list
             A list containing the tensors for a single peps column
         bound_mpo : list
@@ -331,7 +331,7 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all
 
     returns:
         bound_mpo : list
-            An mpo stored as a list, corresponding to the 
+            An mpo stored as a list, corresponding to the
             resulting boundary mpo.
 
     """
@@ -344,7 +344,7 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all
     bound_mpo = [None]*(col-1)
     for colind in range(col-1):
         mpiprint(4,'Updating left boundary mpo')
-        if ket is not None: 
+        if ket is not None:
             ket_col = ket[colind][:]
         else: ket_col = None
         if colind == 0:
@@ -385,7 +385,7 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
 
     returns:
         bound_mpo : list
-            An mpo stored as a list, corresponding to the 
+            An mpo stored as a list, corresponding to the
             resulting boundary mpo.
 
     """
@@ -397,7 +397,7 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
 
     # Flip the peps
     peps = flip_peps(peps)
-    if ket is not None: 
+    if ket is not None:
         ket = flip_peps(ket)
     col = Nx-col
 
@@ -405,7 +405,7 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
     bound_mpo = [None]*(col-1)
     for colind in range(col-1):
         mpiprint(4,'Updating boundary mpo')
-        if ket is not None: 
+        if ket is not None:
             ket_col = ket[colind][:]
         else: ket_col = None
         if colind == 0:
@@ -415,9 +415,9 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
 
     # Unflip the peps
     peps = flip_peps(peps)
-    if ket is not None: 
+    if ket is not None:
         ket = flip_peps(ket)
-    
+
     # Return results
     if return_all:
         return bound_mpo[::-1]
@@ -559,10 +559,10 @@ def flip_lambda(Lambda):
     Flip the lambda tensors (part of the canonical peps) horizontally
 
     Args:
-        Lambda : 
+        Lambda :
 
     Returns:
-        Lambda : 
+        Lambda :
             The horizontally flipped version of the lambda
             tensor. This is flipped such that ...
     """
@@ -801,7 +801,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
     Nx = peps.Nx
     Ny = peps.Ny
 
-    pwr = -1.0 / (2*Nx*Ny) # NOTE: if trying to use this procedure to 
+    pwr = -1.0 / (2*Nx*Ny) # NOTE: if trying to use this procedure to
                            # normalize a partition function, remove
                            # the factor of 2 in this denominator
     mpiprint(4, '\n[binarySearch] shape=({},{}), chi={}'.format(Nx,Ny,chi))
@@ -875,10 +875,8 @@ def calc_peps_norm(peps,chi=4,singleLayer=True):
     """
     # TODO Add - separate bra and ket
     # Absorb Lambda tensors if needed
-    try:
+    if peps.ltensors is not None:
         peps = peps_absorb_lambdas(peps.tensors,peps.ltensors,mk_copy=True)
-    except:
-        pass
 
     # Get PEPS Dims
     Nx = len(peps)
@@ -939,7 +937,7 @@ def make_rand_lambdas(Nx,Ny,D,dtype=float_):
     horz = []
     for x in range(Nx-1):
         tmp = []
-        for x in range(Ny):
+        for y in range(Ny):
             tmp += [rand((D),dtype=dtype)]
         horz += [tmp]
 
@@ -1018,7 +1016,7 @@ def calc_top_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
     Ny = len(bra_col)
 
     # Copy bra if needed
-    if ket_col is None: 
+    if ket_col is None:
         ket_col = copy.deepcopy(bra_col)
     # TODO - Conjugate this ket col
 
@@ -1097,7 +1095,7 @@ def calc_bot_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
     Ny = len(bra_col)
 
     # Copy bra if needed
-    if ket_col is None: 
+    if ket_col is None:
         ket_col = copy.deepcopy(bra_col)
     # TODO - Conjugate this ket column
 
@@ -1312,7 +1310,7 @@ def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,pos
     """
     # Copy bra if needed
     _ket_col = ket_col
-    if ket_col is None: 
+    if ket_col is None:
         ket_col = copy.deepcopy(bra_col)
     # TODO - Conjugate this ket column
 
@@ -1434,7 +1432,7 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
     # Loop through all columns
     E = zeros((len(ops),len(ops[0])),dtype=peps[0][0].dtype)
     for col in range(Nx):
-        if ket is None: 
+        if ket is None:
             ket_col = None
         else: ket_col = ket[col]
         if col == 0:
@@ -1477,23 +1475,21 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
             The resulting observable's expectation value
     """
     # Absorb Lambda tensors if needed
-    try:
+    if peps.ltensors is not None:
         peps = peps_absorb_lambdas(peps.tensors,peps.ltensors,mk_copy=True)
-    except: pass
-    try:
+    if ket is not None and ket.ltensors is not None:
         ket = peps_absorb_lambdas(ket.tensors,ket.ltensors,mk_copy=True)
-    except: pass
 
     # Calculate contribution from interactions between columns
     col_energy = calc_all_column_op(peps,ops[0],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
 
     # Calculate contribution from interactions between rows
     peps = rotate_peps(peps,clockwise=True)
-    if ket is not None: 
+    if ket is not None:
         ket = rotate_peps(ket,clockwise=True)
     row_energy = calc_all_column_op(peps,ops[1],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
     peps = rotate_peps(peps,clockwise=False)
-    if ket is not None: 
+    if ket is not None:
         ket = rotate_peps(ket,clockwise=False)
 
     # Return Result
@@ -1504,7 +1500,7 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
 
 def increase_peps_mbd_lambda(Lambda,Dnew,noise=0.01):
     """
-    Increase the bond dimension of lambda tensors in a 
+    Increase the bond dimension of lambda tensors in a
     canonical peps
 
     Args:
@@ -1517,7 +1513,7 @@ def increase_peps_mbd_lambda(Lambda,Dnew,noise=0.01):
         noise : float
             The maximum magnitude of random noise to be incorporated
             in increasing the bond dimension
-    
+
     Returns:
         Lambda : 3D array
             Lists of lambda tensors with increased bond dimensions
@@ -1542,7 +1538,7 @@ def increase_peps_mbd_lambda(Lambda,Dnew,noise=0.01):
 
         # Return result
         return Lambda
-    else: 
+    else:
         return None
 
 def increase_peps_mbd(peps,Dnew,noise=1e-10):
@@ -1559,7 +1555,7 @@ def increase_peps_mbd(peps,Dnew,noise=1e-10):
         noise : float
             The maximum magnitude of random noise to be incorporated
             in increasing the bond dimension
-    
+
     Returns:
         peps : 2D Array
             The new peps tensors with increased bond dimensions
@@ -1568,7 +1564,7 @@ def increase_peps_mbd(peps,Dnew,noise=1e-10):
     Nx = len(peps)
     Ny = len(peps[0])
     Dold = peps[0][0].shape[3]
-    
+
     for col in range(Nx):
         for row in range(Ny):
             # Determine tensor shape
@@ -1599,13 +1595,13 @@ def copy_peps_tensors(peps):
     """
     Create a copy of the PEPS tensors
     """
-    copy = []
+    cp = []
     for x in range(len(peps)):
         tmp = []
         for y in range(len(peps[0])):
             tmp += [copy.deepcopy(peps[x][y])]
-        copy += [tmp]
-    return copy
+        cp += [tmp]
+    return cp
 
 def peps_absorb_lambdas(Gamma,Lambda,mk_copy=False):
     """
@@ -1618,8 +1614,8 @@ def peps_absorb_lambdas(Gamma,Lambda,mk_copy=False):
             A list of a list of the peps gamma tensors
         Lambda : list of lists of lists
             The lambda tensors (singular value vectors)
-            with Lambda[0] being the lambda vecs on the vertical bonds and 
-            Lambda[1] being the lambda vecs on the horizontal bonds. 
+            with Lambda[0] being the lambda vecs on the vertical bonds and
+            Lambda[1] being the lambda vecs on the horizontal bonds.
 
     Returns:
         peps : list of lists
@@ -1638,19 +1634,12 @@ def peps_absorb_lambdas(Gamma,Lambda,mk_copy=False):
         # loop through all sites, absorbing the "singular values"
         for x in range(Nx):
             for y in range(Ny):
-                # Absorb left lambda
-                if x is not 0:
-                    Gamma[x][y] = einsum('ldpru,l->ldpru',Gamma[x][y],sqrt(Lambda[1][x-1][y]))
-                # Absorb down lambda
-                if y is not 0:
-                    Gamma[x][y] = einsum('ldpru,d->ldpru',Gamma[x][y],sqrt(Lambda[0][x][y-1]))
-                # Absorb right lambda
-                if x is not (Nx-1):
-                    Gamma[x][y] = einsum('ldpru,r->ldpru',Gamma[x][y],sqrt(Lambda[1][x][y]))
-                # Absorb up lambda
-                if y is not (Ny-1):
-                    Gamma[x][y] = einsum('ldpru,u->ldpru',Gamma[x][y],sqrt(Lambda[0][x][y]))
-
+                # Absorb lambdas that are to the right and above (not symmetric
+                # but better for precision)
+                if x is not Nx-1:
+                    Gamma[x][y] = einsum('ldpru,r->ldpru',Gamma[x][y],Lambda[1][x][y])
+                if y is not Ny-1:
+                    Gamma[x][y] = einsum('ldpru,u->ldpru',Gamma[x][y],Lambda[0][x][y])
     # Return results
     return Gamma
 
