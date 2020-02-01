@@ -5,7 +5,7 @@ from cyclopeps.tools.peps_tools import *
 from cyclopeps.tools.ops_tools import *
 from cyclopeps.algs.simple_update import run_tebd as su
 from numpy import float_
-import copy 
+import copy
 
 def cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,U):
     """
@@ -30,15 +30,15 @@ def cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,U):
         U : Rank-3 Array
             The time evolution gate between the two sites
 
-    Returns : 
+    Returns :
         d : float
             The cost function's value
 
     Note:
-        implemented according to Equation 14 in 
+        implemented according to Equation 14 in
         https://arxiv.org/pdf/1503.05345.pdf
     """
-    
+
     # Calculate a^+ * R * a
     aRa = calc_local_op(phys_b_new,phys_t_new,N,None,normalize=False)
     # Calculate a^+ * S
@@ -47,7 +47,7 @@ def cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,U):
     # Calculate S^+ * a
     # (currently just using a copy)
     aS  = Sa
-    
+
     return aRa-aS-Sa
 
 def optimize_bottom(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
@@ -116,7 +116,7 @@ def optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
     R_ = reshape(R_,(n1,n2,n3,n4))
 
     # Compute new phys_t_new
-    # PH - Might be 
+    # PH - Might be
     #phys_t_new = einsum('UAua,uqa->UqA',R_,S)
     phys_t_new = einsum('uaUA,uqa->UqA',R_,S)
 
@@ -135,7 +135,7 @@ def alternating_least_squares(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
     #print('Cost = {}'.format(cost_prev))
 
     for i in range(als_iter):
-        
+
         # Optimize Bottom Site
         phys_b_new = optimize_bottom(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
 
@@ -150,7 +150,7 @@ def alternating_least_squares(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
             break
         else:
             cost_prev = cost
-    
+
     # Return result
     return phys_b_new,phys_t_new
 
@@ -212,7 +212,7 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,als_iter=10
     # Loop through rows in the column
     E = zeros(len(ham),dtype=peps_col[0].dtype)
     for row in range(len(ham)):
-        
+
         # Calculate environment aroudn reduced tensors
         peps_b,phys_b,phys_t,peps_t,_,_,_,_,N = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs)
 
@@ -238,13 +238,13 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,als_iter=10
         #print('max peps 1 {}, bot_envs {}'.format(maxx(abss(peps_col[row])),maxx(abss(bot_envs[row-1]))))
         #print('min peps 1 {}, bot_envs {}'.format(minn(abss(peps_col[row])),minn(abss(bot_envs[row-1]))))
         bot_envs[row] = update_bot_env(peps_col[row],
-                                       peps_col[row].conj(), 
+                                       peps_col[row].conj(),
                                        left_bmpo[2*row],
                                        left_bmpo[2*row+1],
                                        right_bmpo[2*row],
                                        right_bmpo[2*row+1],
                                        bot_envs[row-1])
-        
+
         # Normalize the bottom envs as well (just for safety
         #print('PH - Fix this norm stuff')
         norm_fact = maxx(bot_envs[row])
@@ -320,10 +320,10 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None,als_iter=100,als_tol=
 
         # Normalize just in case
         peps.normalize()
-        
+
         # Compute Resulting Energy
         E2 = peps.calc_op(ham,chi=chi)
-        
+
         # Check for convergence
         mpiprint(0,'Energy/site = {} ({})'.format(E/nSite,E2/nSite))
         if abs((E-Eprev)/E) < conv_tol:
@@ -361,15 +361,15 @@ def run_tebd(Nx,Ny,d,ham,
             The suzuki-trotter decomposition of the
             Hamiltonian. An example of how this is constructed
             for the ising transverse field model
-            is found in /mpo/itf.py 
+            is found in /mpo/itf.py
 
     Kwargs:
         peps : PEPS object
-            The initial guess for the PEPS. If this is not 
+            The initial guess for the PEPS. If this is not
             provided, then a random peps will be initialized,
-            then a few iterations will be performed using 
-            the simple update algorithm to arrive at a good 
-            initial guess. 
+            then a few iterations will be performed using
+            the simple update algorithm to arrive at a good
+            initial guess.
             Note that the bond dimension D should be the same
             as the initial calculation bond dimension, since
             no bond reduction or initial increase of bond dimension
@@ -383,7 +383,7 @@ def run_tebd(Nx,Ny,d,ham,
         norm_tol : float
             How close to 1. the norm should be before
             exact arithmetic is used in the normalization
-            procedure. See documentation of 
+            procedure. See documentation of
             peps_tool.normalize_peps() function for more details.
         singleLayer : bool
             Whether to use a single layer environment
@@ -393,12 +393,12 @@ def run_tebd(Nx,Ny,d,ham,
         dtype : dtype
             The data type for the PEPS
         step_size : float
-            The trotter step size, may be a list of 
+            The trotter step size, may be a list of
             step sizes
         n_step : int
             The number of steps to be taken for each
-            trotter step size. If it is a list, then 
-            len(step_size) == len(n_step) and 
+            trotter step size. If it is a list, then
+            len(step_size) == len(n_step) and
             len(D) == len(n_step) must both be True.
         conv_tol : float
             The convergence tolerance
@@ -437,26 +437,26 @@ def run_tebd(Nx,Ny,d,ham,
         conv_tol = [conv_tol]*n_calcs
     if not hasattr(chi,'__len__'):
         chi = [chi]*n_calcs
-    
+
     # Create a random peps (if one is not provided)
     if peps is None:
         if su_step_size is None: su_step_size = step_size
         if su_n_step is None: su_n_step = n_step
         _,peps = su(Nx,Ny,d,ham,
                     D=D[0],
-                    chi=5,
+                    chi=20,
                     singleLayer=singleLayer,
                     max_norm_iter=max_norm_iter,
                     dtype=dtype,
                     step_size=su_step_size,
                     n_step=su_n_step,
                     conv_tol=conv_tol)
-    
+
     # Loop over all (bond dims/step sizes/number of steps)
     for Dind in range(len(D)):
 
         mpiprint(0,'\nFU Calculation for (D,chi,dt) = ({},{},{})'.format(D[Dind],chi[Dind],step_size[Dind]))
-        
+
         # Do a tebd evolution for given step size
         E,peps = tebd_steps(peps,
                             ham,

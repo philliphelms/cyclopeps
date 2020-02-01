@@ -3,7 +3,7 @@ from cyclopeps.tools.utils import *
 from cyclopeps.tools.peps_tools import *
 from cyclopeps.tools.ops_tools import *
 from numpy import float_
-import copy 
+import copy
 from cyclopeps.tools.mps_tools import svd_ten
 
 def exp_ham(ham,a=1.):
@@ -16,6 +16,7 @@ def exp_ham(ham,a=1.):
     eH = expm(ham,a)
     eH = reshape(eH,(d,d,d,d))
     return eH
+
 
 def absorb_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas):
     """
@@ -81,6 +82,7 @@ def remove_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas):
     # Return result
     return peps_col
 
+
 def tebd_step_single_col(peps_col,vert_lambdas,left_lambdas,right_lambdas,step_size,ham):
     """
     """
@@ -105,7 +107,7 @@ def tebd_step_single_col(peps_col,vert_lambdas,left_lambdas,right_lambdas,step_s
         peps1,Lambda,peps2 = separate_sites(result,D)
         #comparison2 = einsum('ldpru,LuPRU,u->ldprLPRU',peps1,peps2,Lambda)
         #print(summ(abss(comparison2-result)))
-        
+
         # Put result back into vectors
         vert_lambdas[row] = Lambda
         peps_col[row]   = peps1
@@ -115,13 +117,14 @@ def tebd_step_single_col(peps_col,vert_lambdas,left_lambdas,right_lambdas,step_s
         peps_col = remove_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas)
 
 
-        peps1,peps2 = absorb_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas)
+        #peps1,peps2 = absorb_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas)
         #comparison = einsum('ldpru,LuPRU->ldprLPRU',peps1,peps2)
         #print(summ(abss(comparison-result)))
         #print('\n'+'#'*50)
 
     # Return the result
     return peps_col,vert_lambdas
+
 
 def tebd_step_col(peps,ham,step_size):
     """
@@ -186,10 +189,10 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None):
 
         # Normalize just in case
         peps.normalize()
-        
+
         # Compute Resulting Energy
         E = peps.calc_op(ham,chi=chi)
-        
+
         # Check for convergence
         mpiprint(0,'Energy/site = {} '.format(E/nSite))
         if abs((E-Eprev)/E) < conv_tol:
@@ -222,13 +225,13 @@ def run_tebd(Nx,Ny,d,ham,
             The suzuki-trotter decomposition of the
             Hamiltonian. An example of how this is constructed
             for the ising transverse field model
-            is found in /mpo/itf.py 
+            is found in /mpo/itf.py
 
     Kwargs:
         peps : PEPS object
             The initial guess for the PEPS, in the "Gamma-Lambda"
-            formalism. If this is not 
-            provided, then a random peps will be used. 
+            formalism. If this is not
+            provided, then a random peps will be used.
             Note that the bond dimension D should be the same
             as the initial calculation bond dimension, since
             no bond reduction or initial increase of bond dimension
@@ -242,7 +245,7 @@ def run_tebd(Nx,Ny,d,ham,
         norm_tol : float
             How close to 1. the norm should be before
             exact arithmetic is used in the normalization
-            procedure. See documentation of 
+            procedure. See documentation of
             peps_tool.normalize_peps() function for more details.
         singleLayer : bool
             Whether to use a single layer environment
@@ -252,12 +255,12 @@ def run_tebd(Nx,Ny,d,ham,
         dtype : dtype
             The data type for the PEPS
         step_size : float
-            The trotter step size, may be a list of 
+            The trotter step size, may be a list of
             step sizes
         n_step : int
             The number of steps to be taken for each
-            trotter step size. If it is a list, then 
-            len(step_size) == len(n_step) and 
+            trotter step size. If it is a list, then
+            len(step_size) == len(n_step) and
             len(D) == len(n_step) must both be True.
         conv_tol : float
             The convergence tolerance
@@ -296,7 +299,7 @@ def run_tebd(Nx,Ny,d,ham,
         conv_tol = [conv_tol]*n_calcs
     if not hasattr(chi,'__len__'):
         chi = [chi]*n_calcs
-    
+
     # Create a random peps (if one is not provided)
     if peps is None:
         peps = PEPS(Nx=Nx,
@@ -309,12 +312,12 @@ def run_tebd(Nx,Ny,d,ham,
                     singleLayer=singleLayer,
                     max_norm_iter=max_norm_iter,
                     dtype=dtype)
-    
+
     # Loop over all (bond dims/step sizes/number of steps)
     for Dind in range(len(D)):
 
         mpiprint(0,'\nSU Calculation for (D,chi,dt) = ({},{},{})'.format(D[Dind],chi[Dind],step_size[Dind]))
-        
+
         # Do a tebd evolution for given step size
         E,peps = tebd_steps(peps,
                             ham,
