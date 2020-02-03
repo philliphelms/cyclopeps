@@ -741,6 +741,15 @@ def normalize_peps_col(peps_col):
 def multiply_peps_elements(peps,const):
     """
     Multiply all elements in a peps by a constant
+
+    Args:
+        peps : A PEPS object or a list of lists containing the peps tensors
+
+        const : float
+            The constant with which to multiply each peps tensor
+
+    Returns:
+        peps : a PEPS object, or list of lists, depending on input
     """
 
     Nx = len(peps)
@@ -759,7 +768,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=10.,
     with norm equal to 1.0.
 
     Args:
-        peps : List
+        peps : A PEPS object
             The PEPS to be normalized, given as a PEPS object
 
     Kwargs:
@@ -792,8 +801,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=10.,
             The approximate norm of the PEPS after the normalization
             procedure
         peps : list
-            The normalized version of the PEPS, stored as a
-            list of lists
+            The normalized version of the PEPS, given as a PEPS object
 
     """
 
@@ -868,9 +876,8 @@ def calc_peps_norm(peps,chi=4,singleLayer=True):
     Calculate the norm of the PEPS
 
     Args:
-        peps : List
-            A list of a list of tensors, corresponding to
-            the PEPS for which we will compute the norm
+        peps : A PEPS object
+            The PEPS for which we will compute the norm
 
     Kwargs:
         chi : int
@@ -887,6 +894,12 @@ def calc_peps_norm(peps,chi=4,singleLayer=True):
     # Absorb Lambda tensors if needed
     if peps.ltensors is not None:
         peps = peps_absorb_lambdas(peps.tensors,peps.ltensors,mk_copy=True)
+    else:
+        peps = copy.deepcopy(peps.tensors)
+    if ket is not None and ket.ltensors is not None:
+        ket = peps_absorb_lambdas(ket.tensors,ket.ltensors,mk_copy=True)
+    elif ket is not None:
+        ket = copy.deepcopy(ket.tensors)
 
     # Get PEPS Dims
     Nx = len(peps)
@@ -1421,7 +1434,7 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
         return_sum : bool
             Whether to return the summation of all energies or
             a 2D array showing the energy contribution from each bond.
-        ket : PEPS Object
+        ket : A list of lists of ket tensors
             A second peps, to use as the ket, in the operator contraction
 
     Returns:
@@ -1487,8 +1500,12 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
     # Absorb Lambda tensors if needed
     if peps.ltensors is not None:
         peps = peps_absorb_lambdas(peps.tensors,peps.ltensors,mk_copy=True)
+    else:
+        peps = copy.deepcopy(peps.tensors)
     if ket is not None and ket.ltensors is not None:
         ket = peps_absorb_lambdas(ket.tensors,ket.ltensors,mk_copy=True)
+    elif ket is not None:
+        ket = copy.deepcopy(ket.tensors)
 
     # Calculate contribution from interactions between columns
     col_energy = calc_all_column_op(peps,ops[0],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
@@ -1962,13 +1979,14 @@ class PEPS:
         if down is None: down = self.norm_BS_lower
         if singleLayer is None: singleLayer = self.singleLayer
         # Run the normalization procedure
-        norm, self.tensors = normalize_peps(self,
+        norm, normpeps = normalize_peps(self,
                                       max_iter = max_iter,
                                       norm_tol = norm_tol,
                                       chi = chi,
                                       up = up,
                                       down = down,
                                       singleLayer=singleLayer)
+        self.tensors = copy.deepcopy(normpeps.tensors)
 
         return norm
 
