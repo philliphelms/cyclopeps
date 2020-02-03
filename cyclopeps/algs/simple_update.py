@@ -190,6 +190,9 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None):
         # Normalize just in case
         peps.normalize()
 
+        # Save PEPS
+        peps.save()
+
         # Compute Resulting Energy
         E = peps.calc_op(ham,chi=chi)
 

@@ -750,7 +750,7 @@ def multiply_peps_elements(peps,const):
             peps[xind][yind] *= const
     return peps
 
-def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
+def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=10.,
                     down=0.0,singleLayer=True):
     """
     Normalize the full PEPS by doing a binary search on the
@@ -806,6 +806,15 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
                            # the factor of 2 in this denominator
     mpiprint(4, '\n[binarySearch] shape=({},{}), chi={}'.format(Nx,Ny,chi))
 
+    # Check if state is already easily normalized
+    init_norm = calc_peps_norm(peps,chi=chi,singleLayer=singleLayer)
+    if not (init_norm < 10.**(-1*norm_tol) or init_norm > 10.**(norm_tol) or isnan(init_norm)):
+        sfac = power(init_norm,pwr)
+        peps_try = multiply_peps_elements(peps.copy(),sfac)
+        z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer)
+        if abs(z-1.) < 1e-6: 
+            return z, peps_try
+
     # get initial scale factor
     scale = (up+down)/2.0
 
@@ -819,6 +828,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
             z = None
             z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer)
         except:
+            print('Failed to calculate peps norm')
             pass
         mpiprint(2, 'step={}, (down,up)=({},{}), scale={}, norm={}'.format(
                                                         istep,down,up,scale,z))
@@ -846,7 +856,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
 
         if istep == max_iter:
             mpiprint(4, 'binarySearch normalization exceeds max_iter... terminating')
-            print('Exceeded normalization!')
+            print('Exceeded normalization maxiter = {}!'.format(z))
             break
 
         peps_try = multiply_peps_elements(peps.copy(),scale)
@@ -1713,7 +1723,7 @@ class PEPS:
     def __init__(self,Nx=10,Ny=10,d=2,D=2,
                  chi=None,norm_tol=20,canonical=False,
                  singleLayer=True,max_norm_iter=50,
-                 norm_BS_upper=1.0,norm_BS_lower=0.0,
+                 norm_BS_upper=10.,norm_BS_lower=0.0,
                  norm_BS_print=1,dtype=float_,normalize=True,
                  fname=None,fdir='./'):
         """
@@ -2021,6 +2031,7 @@ class PEPS:
         """
         self.tensors = peps_absorb_lambdas(self.tensors,self.ltensors)
         self.ltensors = None
+        self.canonical = False
 
     def __len__(self):
         return self.Nx
