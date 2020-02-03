@@ -594,21 +594,44 @@ class GEN_TEN:
                 newten = newten.sum(self.legs[ind][i])
         else:
             # More complex for symtensors
-            newten = self.ten.array.copy()
             sym = self.sym
-            for i in range(len(self.legs[ind])):
-                assert(newten.shape[self.legs[ind][i]+len(sym[0])-1] == 1)
-            # Sum over correct legs
-            for i in range(len(self.legs[ind]))[::-1]:
-                newten = newten.sum(self.legs[ind][i]+len(sym[0])-1)
-            for i in range(len(self.legs[ind]))[::-1]:
-                newten = newten.sum(self.legs[ind][i])
-            # Adjust symmetry specifications
-            sym[0] = (sym[0]+'.')[:-1]
-            sym[0] = sym[0][:self.legs[ind][0]]+sym[0][self.legs[ind][-1]+1:]
-            sym[1] = sym[1][:self.legs[ind][0]]+sym[1][self.legs[ind][-1]+1:]
-            # Create the correct symtensor
-            newten = symlib.SYMtensor(newten,sym=[(self.sym[0]+'.')[:-1],self.sym[1],self.sym[2],self.sym[3]],backend=self.backend)
+            if ind == len(self.legs)-1:
+                # Number of indices to be removed
+                ntrunc = len(self.legs[-1])
+                # Transpose tensor (so removed inds are in fromt
+                neworder = [self.legs[ind]]+self.legs[0:ind]
+                neworder = [item for sublist in neworder for item in sublist]
+                newten = self.ten.copy()
+                newten = newten.transpose(*neworder)
+                newten = newten.array.copy()
+                for i in range(ntrunc):
+                    assert(newten.shape[i+len(sym[0])-1] == 1)
+                # Sum over correct legs
+                for i in range(ntrunc):
+                    newten = newten.sum(i+len(sym[0])-1)
+                for i in range(ntrunc):
+                    newten = newten.sum(i)
+                # Adjust Symmetry Specifications
+                sym[0] = (sym[0]+'.')[:-1]
+                sym[0] = sym[0][:self.legs[ind][0]]+sym[0][self.legs[ind][-1]+1:]
+                sym[1] = sym[1][:self.legs[ind][0]]+sym[1][self.legs[ind][-1]+1:]
+                # Create the correct symtensor
+                newten = symlib.SYMtensor(newten,sym=[(self.sym[0]+'.')[:-1],self.sym[1],self.sym[2],self.sym[3]],backend=self.backend)
+            else:
+                newten = self.ten.array.copy()
+                for i in range(len(self.legs[ind])):
+                    assert(newten.shape[self.legs[ind][i]+len(sym[0])-1] == 1)
+                # Sum over correct legs
+                for i in range(len(self.legs[ind]))[::-1]:
+                    newten = newten.sum(self.legs[ind][i]+len(sym[0])-1)
+                for i in range(len(self.legs[ind]))[::-1]:
+                    newten = newten.sum(self.legs[ind][i])
+                # Adjust symmetry specifications
+                sym[0] = (sym[0]+'.')[:-1]
+                sym[0] = sym[0][:self.legs[ind][0]]+sym[0][self.legs[ind][-1]+1:]
+                sym[1] = sym[1][:self.legs[ind][0]]+sym[1][self.legs[ind][-1]+1:]
+                # Create the correct symtensor
+                newten = symlib.SYMtensor(newten,sym=[(self.sym[0]+'.')[:-1],self.sym[1],self.sym[2],self.sym[3]],backend=self.backend)
         # Update legs
         newlegs = []
         cnt = 0

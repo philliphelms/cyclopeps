@@ -104,6 +104,7 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
         # Merge inds to make it an MPO
         I.merge_inds([0,1,2])
         I.merge_inds([2,3])
+
         # Append to the boundary mpo
         bound_mpo.append(I)
 
@@ -154,11 +155,22 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
         mpiprint(6,'Adding ket tensor to boundary mps')
         res = einsum('mln,ldpru->mdrpnu',bound_mpo[2*row+1],ket[row])
         # Reshape it into an MPO
-        res.merge_inds([0,1])
-        res.merge_inds([1,2])
-        res.merge_inds([2,3])
+        if True:
+            if row == Ny-1:
+                res = res.remove_empty_ind(len(res.legs)-1)
+                res.merge_inds([0,1])
+                res.merge_inds([1,2])
+            else:
+                res.merge_inds([0,1])
+                res.merge_inds([1,2])
+                res.merge_inds([2,3])
+        else:
+            res.merge_inds([0,1])
+            res.merge_inds([1,2])
+            res.merge_inds([2,3])
         # Append to boundary MPO
         bound_mpo_new.append(res)
+        #print('\t{}\t{}'.format(res.legs,res.shape))
 
     # Put result into an MPS -------------------------------------------
     bound_mps = MPS(bound_mpo_new)
@@ -192,8 +204,16 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
         mpiprint(6,'Adding bra tensor to boundary mps')
         res = einsum('mLn,LDPRU->mDRnUP',bound_mpo[2*row],bra[row])
         # Reshape it into an MPO
-        res.merge_inds([0,1])
-        res.merge_inds([2,3,4])
+        if True:
+            if row == 0:
+                res = res.remove_empty_ind(0)
+                res.merge_inds([2,3,4])
+            else:
+                res.merge_inds([0,1])
+                res.merge_inds([2,3,4])
+        else:
+            res.merge_inds([0,1])
+            res.merge_inds([2,3,4])
         # Append to new boundary MPO
         bound_mpo_new.append(res)
 
@@ -205,17 +225,25 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
         # Create identity tensor
         (Dl,Dd,Dp,Dr,Du) = bra[row].shape
         (Zl,Zd,Zp,Zr,Zu) = bra[row].qn_sectors
-        I = eye(Du,
+        I1 = eye(Du,
                 Zu,
                 is_symmetric=bra[row].is_symmetric,
                 backend=bra[row].backend)
         # Contract with previous bound_mpo tensor
-        res = einsum('mrpn,UD->mDprnU',bound_tens,I)
+        I = einsum('mrpn,UD->mDprnU',bound_tens,I1)
         # Reshape it back into an MPO
-        res.merge_inds([0,1,2])
-        res.merge_inds([2,3])
+        if True:
+            if row == Ny-1:
+                I = I.remove_empty_ind(len(I.legs)-1)
+                I.merge_inds([0,1,2])
+            else:
+                I.merge_inds([0,1,2])
+                I.merge_inds([2,3])
+        else:
+            I.merge_inds([0,1,2])
+            I.merge_inds([2,3])
         # Append to new boundary MPO
-        bound_mpo_new.append(res)
+        bound_mpo_new.append(I)
 
     # Put result into an MPS -------------------------------------------
     bound_mps = MPS(bound_mpo_new)
