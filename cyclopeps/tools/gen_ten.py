@@ -200,7 +200,7 @@ def svd_ten(ten,split_ind,truncate_mbd=1e100,return_ent=True,return_wgt=True,bac
     else:
         return U,S,V
 
-def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_,order='+'):
+def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_,order='+',legs=None):
     """
     Create an identity tensor
 
@@ -229,7 +229,7 @@ def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_,order='+'):
     if not is_symmetric:
         # Create a dense tensor
         ten = backend.eye(D,dtype=dtype)
-        ten = GEN_TEN(ten=ten,backend=backend)
+        ten = GEN_TEN(ten=ten,backend=backend,legs=legs)
         return ten
     else:
         # Create a symmetric tensor
@@ -238,12 +238,12 @@ def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_,order='+'):
             sym = ['+-',[Z,Z],None,None]
         else:
             sym = ['-+',[Z,Z],None,None]
-        ten = GEN_TEN(shape=(D,D),sym=sym,backend=backend,dtype=dtype)
+        ten = GEN_TEN(shape=(D,D),sym=sym,backend=backend,dtype=dtype,legs=legs)
         for i in range(ten.ten.array.shape[0]):
             ten.ten.array[i,:,:] = backend.eye(ten.ten.array.shape[1])
         return ten
 
-def rand(shape,sym=None,backend='numpy',dtype=float_):
+def rand(shape,sym=None,backend='numpy',dtype=float_,legs=None):
     """
     Create a random gen_ten tensor
 
@@ -271,8 +271,72 @@ def rand(shape,sym=None,backend='numpy',dtype=float_):
     """
     if sym is not None:
         sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
-    ten = GEN_TEN(shape=shape,sym=sym,backend=backend,dtype=dtype)
+    ten = GEN_TEN(shape=shape,sym=sym,backend=backend,dtype=dtype,legs=legs)
     ten.randomize()
+    return ten
+
+def ones(shape,sym=None,backend='numpy',dtype=float_,legs=None):
+    """
+    Create a gen_ten tensor filled with ones
+
+    Args:
+        shape : tuple
+            The dimensions of each leg of the random tensor created
+
+    Kwargs:
+        sym : 
+            If None, then a non-symmetric tensor will be created (default).
+            Otherwise, this will create a symmetric tensor. 
+            sym should be a list of length four with:
+            sym[0] -> str of signs, i.e. '++--', for direction of symmetry arrows
+            sym[1] -> list of ranges, i.e. [range(2)]*4, for number of sectors per tensor leg
+            sym[2] -> integer, i.e. 0, for net value
+            sym[3] -> integer, i.e. 2, for modulo values in the symmetry
+        backend : str
+            A string indicating the backend to be used
+            for tensor creation and operations. 
+            Options include:
+            'ctf'      - a ctf tensor
+            'numpy'    - a numpy tensor
+        dtype : dtype
+            The data type for the tensor, i.e. np.float_,np.complex128,etc.
+    """
+    if sym is not None:
+        sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
+    ten = GEN_TEN(shape=shape,sym=sym,backend=backend,dtype=dtype,legs=legs)
+    ten.fill_all(1.)
+    return ten
+
+def zeros(shape,sym=None,backend='numpy',dtype=float_,legs=None):
+    """
+    Create a gen_ten tensor filled with zeros
+
+    Args:
+        shape : tuple
+            The dimensions of each leg of the random tensor created
+
+    Kwargs:
+        sym : 
+            If None, then a non-symmetric tensor will be created (default).
+            Otherwise, this will create a symmetric tensor. 
+            sym should be a list of length four with:
+            sym[0] -> str of signs, i.e. '++--', for direction of symmetry arrows
+            sym[1] -> list of ranges, i.e. [range(2)]*4, for number of sectors per tensor leg
+            sym[2] -> integer, i.e. 0, for net value
+            sym[3] -> integer, i.e. 2, for modulo values in the symmetry
+        backend : str
+            A string indicating the backend to be used
+            for tensor creation and operations. 
+            Options include:
+            'ctf'      - a ctf tensor
+            'numpy'    - a numpy tensor
+        dtype : dtype
+            The data type for the tensor, i.e. np.float_,np.complex128,etc.
+    """
+    if sym is not None:
+        sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
+    ten = GEN_TEN(shape=shape,sym=sym,backend=backend,dtype=dtype,legs=legs)
+    ten.fill_all(0.)
     return ten
 
 def find_all(s,ch):
@@ -515,10 +579,21 @@ class GEN_TEN:
         """
         Fill the tensor with random elements
         """
+        self.ten[:] = 0.
         if self.sym is None:
             self.ten += self.backend.random(self.ten.shape)
         else:
             self.ten += self.backend.random(self.ten.array.shape)
+
+    def fill_all(self,value):
+        """
+        Fill the tensor with a given value
+        """
+        self.ten[:] = 0.
+        if self.sym is None:
+            self.ten += value*self.backend.ones(self.ten.shape)
+        else:
+            self.ten += value*self.backend.ones(self.ten.array.shape)
 
     def make_sparse(self):
         """
@@ -768,14 +843,17 @@ class GEN_TEN:
         return self._as_new_tensor(self.ten.conj())
 
     def abs(self):
-        return self._as_new_tensor(self.ten.abs())
+        return self._as_new_tensor(abs(self.ten))
+
+    def sum(self):
+        return self.ten.sum()
 
     def max(self):
         return self._as_new_tensor(self.ten.max())
 
     def to_val(self):
         """
-        Returns a singular value
+        Returns a single valued tensor's value
         """
         if self.sym is not None:
             tmp = self.ten.array
@@ -791,6 +869,9 @@ class GEN_TEN:
 
     def __mul__(self,x):
         return self._as_new_tensor(self.ten*x)
+
+    def __rmul__(self,x):
+        return self*x
 
     def __neg__(self,x):
         return self._as_new_tensor(-self.ten)
@@ -809,3 +890,9 @@ class GEN_TEN:
             return self._as_new_tensor(self.ten-x.ten)
         else:
             return self._as_new_tensor(self.tem-x)
+
+    def __setitem__(self, key, value):
+        if self.sym:
+            self.ten.array[key] = value
+        else:
+            self.ten[key] = value

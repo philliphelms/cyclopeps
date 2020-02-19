@@ -14,10 +14,11 @@ Date: July 2019
     (2) bottom  (3) physical
 """
 
-from cyclopeps.tools.gen_ten import rand,einsum,eye
+from cyclopeps.tools.gen_ten import rand,einsum,eye,ones,svd_ten
 #from cyclopeps.tools.params import *
+from symtensor.settings import load_lib
 from cyclopeps.tools.utils import *
-from cyclopeps.tools.mps_tools import MPS
+from cyclopeps.tools.mps_tools import MPS,identity_mps
 from numpy import float_
 import copy
 
@@ -530,12 +531,12 @@ def rotate_peps(peps,clockwise=True):
                 # Copy Correct Tensor
                 rpeps[y][Nx-1-x] = peps[x][y].copy()
                 # Reorder Indices
-                rpeps[y][Nx-1-x] = transpose(rpeps[y][Nx-1-x],[1,3,2,4,0])
+                rpeps[y][Nx-1-x] = rpeps[y][Nx-1-x].transpose([1,3,2,4,0])
             else:
                 # Copy Correct Tensor
                 rpeps[Ny-1-y][x] = peps[x][y].copy()
                 # Reorder Indices
-                rpeps[Ny-1-y][x] = transpose(rpeps[Ny-1-y][x],[4,0,2,1,3])
+                rpeps[Ny-1-y][x] = rpeps[Ny-1-y][x].transpose([4,0,2,1,3])
 
     # Return Rotated peps
     return rpeps
@@ -1082,25 +1083,24 @@ def update_top_env(bra,ket,left1,left2,right1,right2,prev_env):
      +---L---+---R---^-------+
      |       |\      |       |
      |       | \     |       |
-     N       D   P   u       n
+     N       D   p   u       n
      |             \ |       |
      |              \|       |
      +-------l-------+---r---+
      |               |       |
      M               d       m
 
-
-     Where the tensor with legs :
-        "aehmo" is the left boundary tensor
-        "eijfb" is the peps tensor
-        "mpjnk" is the conj of the peps tensor
-        "dglnq" is the right boundary tensor
-        "abcd" is the previous top enviromnent
-        "oipq" is the new top environment
-
     """
     if prev_env is None:
-        prev_env = ones((1,1,1,1),dtype=bra.dtype)
+        ninds = len(ket.legs[4])+len(left2.legs[2])+len(bra.legs[4])+len(right2.legs[2])
+        legs = []
+        legs.append(list(range(len(left2.legs[2]))))
+        legs.append(list(range(len(legs[0]),len(legs[0])+len(ket.legs[4]))))
+        legs.append(list(range(len(legs[0])+len(legs[1]),len(legs[0])+len(legs[1])+len(bra.legs[4]))))
+        legs.append(list(range(len(legs[0])+len(legs[1])+len(legs[2]),len(legs[0])+len(legs[1])+len(legs[2])+len(right2.legs[2]))))
+        prev_env = ones((1,)*ninds,
+                        dtype=bra.dtype,
+                        legs=legs)
     tmp = einsum('ldpru,OuUo->OldprUo',ket,prev_env)
     tmp = einsum('OldprUo,NlO->NdprUo',tmp,left2)
     tmp = einsum('NdprUo,nro->NdpUn',tmp,right2)
@@ -1127,15 +1127,6 @@ def calc_top_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
      |               |       |
      M               d       m
 
-
-     Where the tensor with legs :
-        "aehmo" is the left boundary tensor
-        "eijfb" is the peps tensor
-        "mpjnk" is the conj of the peps tensor
-        "dglnq" is the right boundary tensor
-        "abcd" is the previous top enviromnent
-        "oipq" is the new top environment
-
     """
 
     # Figure out height of peps column
@@ -1143,8 +1134,10 @@ def calc_top_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
 
     # Copy bra if needed
     if ket_col is None: 
-        ket_col = copy.deepcopy(bra_col)
-    # TODO - Conjugate this ket col
+        ket_col = [None]*len(bra_col)
+        for i in range(len(ket_col)):
+            ket_col[i] = bra_col[i].copy()
+    # TODO - Conjugate this ket col?
 
     # Compute top environment
     top_env = [None]*Ny
@@ -1164,8 +1157,6 @@ def update_bot_env(bra,ket,left1,left2,right1,right2,prev_env):
     """
     Doing the following contraction:
 
-     +-------+-------+-------+
-     |       |       |       |
      O       u       |       o
      |       |       |       |
      |       |       |       |
@@ -1184,7 +1175,15 @@ def update_bot_env(bra,ket,left1,left2,right1,right2,prev_env):
 
     """
     if prev_env is None:
-        prev_env = ones((1,1,1,1),dtype=bra.dtype)
+        ninds = len(ket.legs[1])+len(left1.legs[0])+len(bra.legs[1])+len(right1.legs[0])
+        legs = []
+        legs.append(list(range(len(left1.legs[0]))))
+        legs.append(list(range(len(legs[0]),len(legs[0])+len(ket.legs[1]))))
+        legs.append(list(range(len(legs[0])+len(legs[1]),len(legs[0])+len(legs[1])+len(bra.legs[1]))))
+        legs.append(list(range(len(legs[0])+len(legs[1])+len(legs[2]),len(legs[0])+len(legs[1])+len(legs[2])+len(right1.legs[0]))))
+        prev_env = ones((1,)*ninds,
+                        dtype=bra.dtype,
+                        legs=legs)
     tmp = einsum('LDPRU,MdDm->MdLPURm',bra,prev_env)
     tmp = einsum('MdLPURm,MLN->NdPURm',tmp,left1)
     tmp = einsum('NdPURm,mRn->NdPUn',tmp,right1)
@@ -1197,8 +1196,6 @@ def calc_bot_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
     """
     Doing the following contraction:
 
-     +-------+-------+-------+
-     |       |       |       |
      O       u       |       o
      |       |       |       |
      |       |       |       |
@@ -1222,8 +1219,10 @@ def calc_bot_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
 
     # Copy bra if needed
     if ket_col is None: 
-        ket_col = copy.deepcopy(bra_col)
-    # TODO - Conjugate this ket column
+        ket_col = [None]*len(bra_col)
+        for i in range(len(ket_col)):
+            ket_col[i] = bra_col[i].copy()
+    # TODO - Conjugate this ket col?
 
     # Compute the bottom environment
     bot_env = [None]*Ny
@@ -1249,20 +1248,22 @@ def reduce_tensors(peps1,peps2):
         original = einsum('LDPRU,lUpru->lLDPRpru',peps1,peps2)
 
     # Reduce bottom tensor
-    peps1 = einsum('LDPRU->LDRPU',peps1)
-    (ub,sb,vb) = svd_ten(peps1,3,return_ent=False,return_wgt=False)
-    phys_b = einsum('a,aPU->aPU',sb,vb)
+    peps1 = peps1.transpose([0,1,3,2,4])
+    (ub,sb,vb) = peps1.svd(3,return_ent=False,return_wgt=False)
+    phys_b = einsum('ab,bPU->aPU',sb,vb)
 
     # Reduce top tensor
-    peps2 = einsum('LDPRU->DPLRU',peps2)
-    (ut,st,vt) = svd_ten(peps2,2,return_ent=False,return_wgt=False)
-    phys_t = einsum('DPa,a->DPa',ut,st)
-    vt = einsum('aLRU->LaRU',vt)
+    peps2 = peps2.transpose([1,2,0,3,4])
+    (ut,st,vt) = peps2.svd(2,return_ent=False,return_wgt=False)
+    phys_t = einsum('DPa,ab->DPb',ut,st)
+    vt = vt.transpose([1,0,2,3])
 
     if DEBUG:
         # Check to make sure initial and reduced peps tensors are identical
-        final = einsum('LDRa,aPb,bpc,lcru->lLDPRpru',ub,phys_b,phys_t,vt)
-        mpiprint(0,'Reduced Difference = {}'.format(summ(abss(original-final))))
+        final = einsum('LDRa,aPb->LDRPb',ub,phys_b)
+        final = einsum('LDRPb,bpc->LDRPpc',final,phys_t)
+        final = einsum('LDRPpc,lcru->lLDPRpru',final,vt)
+        mpiprint(0,'Reduced Difference = {}'.format((original-final).abs().sum()))
 
     # Return result
     return ub,phys_b,phys_t,vt
@@ -1387,9 +1388,7 @@ def calc_local_env(bra1,bra2,ket1,ket2,env_top,env_bot,lbmpo,rbmpo,reduced=True,
 
         return ub,phys_b,phys_t,vt,ubk,phys_bk,phys_tk,vtk,N
     else:
-        mpiprint(0,'Only reduced update implemented')
-        import sys
-        sys.exit()
+        raise NotImplementedError()
 
 def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
                       phys_b_ket=None,phys_t_ket=None,
@@ -1408,12 +1407,12 @@ def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
         tmp = einsum('APU,UQB->APQB',phys_b_bra,phys_t_bra)
         tmp1= einsum('APQB,aAbB->aPQb',tmp,N)
         tmp2= einsum('apu,uqb->apqb',phys_b_ket,phys_t_ket)
-        tmp = einsum('aPQb,apqb->PQpq',tmp1,tmp2)
+        norm = einsum('apqb,apqb->',tmp1,tmp2).to_val()
         if ham is not None:
-            E = einsum('PQpq,PQpq->',tmp,ham)
+            tmp = einsum('aPQb,apqb->PQpq',tmp1,tmp2)
+            E = einsum('PQpq,PQpq->',tmp,ham).to_val()
         else:
-            E = einsum('PQPQ->',tmp)
-        norm = einsum('PQPQ->',tmp)
+            E = norm
         mpiprint(7,'E = {}/{} = {}'.format(E,norm,E/norm))
         if normalize:
             if return_norm:
@@ -1426,9 +1425,7 @@ def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
             else:
                 return E
     else:
-        mpiprint(0,'Only reduced update implemented')
-        import sys
-        sys.exit()
+        raise NotImplementedError()
 
 def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,positive=True,ket_col=None):
     """
@@ -1437,9 +1434,35 @@ def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,pos
     # Copy bra if needed
     _ket_col = ket_col
     if ket_col is None: 
-        ket_col = copy.deepcopy(bra_col)
-    # TODO - Conjugate this ket column
+        ket_col = [None]*len(bra_col)
+        for i in range(len(ket_col)):
+            ket_col[i] = bra_col[i].copy()
 
+    # Create identity matrices to use on top and bottom
+    # Bottom identity
+    ninds = len(ket_col[0].legs[1])+len(left_bmpo[0].legs[0])+len(bra_col[0].legs[1])+len(right_bmpo[0].legs[0])
+    legs = []
+    legs.append(list(range(len(left_bmpo[0].legs[0]))))
+    legs.append(list(range(len(legs[0]),len(legs[0])+len(ket_col[0].legs[1]))))
+    legs.append(list(range(len(legs[0])+len(legs[1]),len(legs[0])+len(legs[1])+len(bra_col[0].legs[1]))))
+    legs.append(list(range(len(legs[0])+len(legs[1])+len(legs[2]),len(legs[0])+len(legs[1])+len(legs[2])+len(right_bmpo[0].legs[0]))))
+    bot_env_id = ones((1,)*ninds,
+                      dtype=bra_col[0].dtype,
+                      legs=legs)
+    # Top Identity
+    lenc = len(ket_col)
+    ninds = len(ket_col[lenc-1].legs[4])+len(left_bmpo[2*(lenc-2)+3].legs[2])+len(bra_col[lenc-1].legs[4])+len(right_bmpo[2*(lenc-2)+3].legs[2])
+    ninds = len(ket_col[lenc-1].legs[4])+len(left_bmpo[2*lenc-1].legs[2])+len(bra_col[lenc-1].legs[4])+len(right_bmpo[2*lenc-1].legs[2])
+    legs = []
+    legs.append(list(range(len(left_bmpo[2*lenc-1].legs[2]))))
+    legs.append(list(range(len(legs[0]),len(legs[0])+len(ket_col[lenc-1].legs[4]))))
+    legs.append(list(range(len(legs[0])+len(legs[1]),len(legs[0])+len(legs[1])+len(bra_col[lenc-1].legs[4]))))
+    legs.append(list(range(len(legs[0])+len(legs[1])+len(legs[2]),len(legs[0])+len(legs[1])+len(legs[2])+len(right_bmpo[2*lenc-1].legs[2]))))
+    top_env_id = ones((1,)*ninds,
+                      dtype=bra_col[0].dtype,
+                      legs=legs)
+
+    # Compute Local Environment (N)
     if row == 0:
         if len(bra_col) == 2:
             # Only two sites in column, use identity at both ends
@@ -1447,37 +1470,38 @@ def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,pos
                                  bra_col[row+1],
                                  ket_col[row],
                                  ket_col[row+1],
-                                 ones((1,1,1,1),dtype=top_envs[0].dtype),
-                                 ones((1,1,1,1),dtype=top_envs[0].dtype),
+                                 top_env_id,
+                                 bot_env_id,
                                  left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                                  right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                                  hermitian=hermitian,
                                  positive=positive)
         else:
-            # Get the local environment tensor
+            # Identity only on bottom
             res = calc_local_env(bra_col[row],
                                  bra_col[row+1],
                                  ket_col[row],
                                  ket_col[row+1],
                                  top_envs[row+2],
-                                 ones((1,1,1,1),dtype=top_envs[0].dtype),
+                                 bot_env_id,
                                  left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                                  right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                                  hermitian=hermitian,
                                  positive=positive)
     elif row == len(bra_col)-2:
+        # Identity needed on top
         res = calc_local_env(bra_col[row],
                              bra_col[row+1],
                              ket_col[row],
                              ket_col[row+1],
-                             ones((1,1,1,1),dtype=top_envs[0].dtype),
+                             top_env_id,
                              bot_envs[row-1],
                              left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                              right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                              hermitian=hermitian,
                              positive=positive)
     else:
-        # Get the local environment tensor
+        # Get the local environment tensor (no identity needed)
         res = calc_local_env(bra_col[row],
                              bra_col[row+1],
                              ket_col[row],
@@ -1513,7 +1537,7 @@ def calc_single_column_op(peps_col,left_bmpo,right_bmpo,ops_col,normalize=True,k
     bot_envs = calc_bot_envs(peps_col,left_bmpo,right_bmpo,ket_col=ket_col)
 
     # Calculate Energy
-    E = zeros(len(ops_col))
+    E = peps_col[0].backend.zeros(len(ops_col))
     for row in range(len(ops_col)):
         res = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=False,positive=False,ket_col=ket_col)
         _,phys_b,phys_t,_,_,phys_bk,phys_tk,_,N = res
@@ -1553,10 +1577,13 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
     # Compute the boundary MPOs
     right_bmpo = calc_right_bound_mpo(peps, 0,chi=chi,return_all=True,ket=ket)
     left_bmpo  = calc_left_bound_mpo (peps,Nx,chi=chi,return_all=True,ket=ket)
-    ident_bmpo = identity_mps(len(right_bmpo[0]),dtype=peps[0][0].dtype)
+    ident_bmpo = identity_mps(len(right_bmpo[0]),
+                              dtype=peps[0][0].dtype,
+                              sym=None,
+                              backend=peps.backend)
 
     # Loop through all columns
-    E = zeros((len(ops),len(ops[0])),dtype=peps[0][0].dtype)
+    E = peps.backend.zeros((len(ops),len(ops[0])),dtype=peps[0][0].dtype)
     for col in range(Nx):
         if ket is None: 
             ket_col = None
@@ -1571,7 +1598,7 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
     mpiprint(8,'Energy [:,:] = \n{}'.format(E))
 
     if return_sum:
-        return summ(E)
+        return sum(E)
     else:
         return E
 
@@ -1601,28 +1628,26 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
             The resulting observable's expectation value
     """
     # Absorb Lambda tensors if needed
-    try:
+    if peps.ltensors is not None:
         peps = peps_absorb_lambdas(peps.tensors,peps.ltensors,mk_copy=True)
-    except: pass
-    try:
+    if ket is not None and ket.ltensors is not None:
         ket = peps_absorb_lambdas(ket.tensors,ket.ltensors,mk_copy=True)
-    except: pass
 
     # Calculate contribution from interactions between columns
     col_energy = calc_all_column_op(peps,ops[0],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
 
     # Calculate contribution from interactions between rows
-    peps = rotate_peps(peps,clockwise=True)
+    peps.rotate(clockwise=True)
     if ket is not None: 
-        ket = rotate_peps(ket,clockwise=True)
+        ket.rotate(clockwise=True)
     row_energy = calc_all_column_op(peps,ops[1],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
-    peps = rotate_peps(peps,clockwise=False)
+    peps.rotate(clockwise=False)
     if ket is not None: 
-        ket = rotate_peps(ket,clockwise=False)
+        ket.rotate(clockwise=False)
 
     # Return Result
     if return_sum:
-        return summ(col_energy)+summ(row_energy)
+        return sum(col_energy)+sum(row_energy)
     else:
         return col_energy,row_energy
 
@@ -1859,6 +1884,7 @@ class PEPS:
         self.Zn          = Zn
         self.canonical   = canonical
         self.backend     = backend
+        self.backend     = load_lib(self.backend)
         self.singleLayer = singleLayer
         self.dtype       = dtype
         self.norm_tol    = norm_tol

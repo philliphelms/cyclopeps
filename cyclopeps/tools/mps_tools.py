@@ -6,7 +6,7 @@ Date: July 2019
 
 """
 
-from cyclopeps.tools.gen_ten import einsum
+from cyclopeps.tools.gen_ten import einsum,ones
 #from cyclopeps.tools.params import *
 from cyclopeps.tools.utils import *
 from numpy import float_
@@ -621,15 +621,15 @@ def mps_apply_svd(mps,chi):
     mps = make_mps_right(mps,truncate_mbd=chi)
     return mps
 
-def identity_mps(N,dtype=float_):
+def identity_mps(N,dtype=float_,sym=None,backend='numpy'):
     """
     Create an identity mps (currently limited to physical and 
     auxilliary bond dimension = 1).
     """
-    mps = MPS(d=1,D=1,N=N,dtype=dtype)
-    for site in range(N):
-        mps[site][:,:,:] = 1.
-    return mps
+    tens = []
+    for i in range(N):
+        tens.append(ones((1,1,1),sym=sym,backend=backend,dtype=dtype))
+    return MPS(tens)
 
 # -----------------------------------------------------------------
 # MPS Class

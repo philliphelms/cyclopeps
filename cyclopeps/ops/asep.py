@@ -4,13 +4,14 @@ generator for the 2D simple exclusion process.
 """
 
 from cyclopeps.tools.utils import *
-from cyclopeps.ops.ops import *
+from cyclopeps.ops.ops import OPS
 from cyclopeps.tools.ops_tools import *
 from numpy import float_
 from numpy import exp
 import collections
+from cyclopeps.tools.gen_ten import einsum
 
-def return_op(Nx,Ny,params):
+def return_op(Nx,Ny,params,sym=None,backend='numpy'):
     """
     Return the operators
 
@@ -44,6 +45,9 @@ def return_op(Nx,Ny,params):
     Returns:
         ops
     """
+    # Collect useful operators
+    ops = OPS(sym=sym,backend=backend)
+
     # Convert params to matrices
     params = val2mat_params(Nx,Ny,params)
     (jr,jl,ju,jd, cr,cl,cu,cd, dr,dl,du,dd, sx,sy) = params
@@ -62,7 +66,8 @@ def return_op(Nx,Ny,params):
                          cd[x,:],
                          du[x,:],
                          dd[x,:],
-                         sy[x,:])
+                         sy[x,:],
+                         ops)
             # Add to list of column operators
             col_ops.append(op)
         # Add column of operators to list of columns
@@ -82,7 +87,8 @@ def return_op(Nx,Ny,params):
                          cl[:,y],
                          dr[:,y],
                          dl[:,y],
-                         sx[:,y])
+                         sx[:,y],
+                         ops)
             # Add to list of row operators
             row_ops.append(op)
         # Add row of operators to list of rows
@@ -91,13 +97,20 @@ def return_op(Nx,Ny,params):
     # Return Results
     return [columns,rows]
 
-def make_op(row,ju,jd,cu,cd,du,dd,sy):
+def make_op(row,ju,jd,cu,cd,du,dd,sy,ops):
     """
     Interaction between sites (row,row+1)
     """
+    # Collect needed ops
+    Sp = ops.Sp
+    Sm = ops.Sm
+    v = ops.v
+    n = ops.n
+    I = ops.I
+
     # -----------------------------------------
     # Hopping between sites
-
+    
     # Hop up
     if DEBUG: mpiprint(0,'{} Sp_{}*Sm_{} - {} n_{}*v_{}'.format(ju[row]*exp(sy[row]),row,row+1,ju[row],row,row+1))
     op  = ju[row]*exp(sy[row])*quick_op(Sp,Sm)
@@ -153,7 +166,7 @@ def make_op(row,ju,jd,cu,cd,du,dd,sy):
 
 
 # Current operators ------------------------------------------------------------------------------
-def return_curr_op(Nx,Ny,params,include_edges=False):
+def return_curr_op(Nx,Ny,params,include_edges=False,sym=None,backend='numpy'):
     """
     Return the operators to calculate the current
 
@@ -187,6 +200,9 @@ def return_curr_op(Nx,Ny,params,include_edges=False):
     Returns:
         ops
     """
+    # Collect useful operators
+    ops = OPS(sym=sym,backend=backend)
+
     # Convert params to matrices
     params = val2mat_params(Nx,Ny,params)
     (jr,jl,ju,jd, cr,cl,cu,cd, dr,dl,du,dd, sx,sy) = params
@@ -206,6 +222,7 @@ def return_curr_op(Nx,Ny,params,include_edges=False):
                               du[x,:],
                               dd[x,:],
                               sy[x,:],
+                              ops,
                               include_edges=include_edges)
             # Add to list of column operators
             col_ops.append(op)
@@ -227,6 +244,7 @@ def return_curr_op(Nx,Ny,params,include_edges=False):
                               dr[:,y],
                               dl[:,y],
                               sx[:,y],
+                              ops,
                               include_edges=include_edges)
             # Add to list of row operators
             row_ops.append(op)
@@ -236,10 +254,17 @@ def return_curr_op(Nx,Ny,params,include_edges=False):
     # Return Results
     return [columns,rows]
 
-def make_curr_op(row,ju,jd,cu,cd,du,dd,sy,include_edges=False):
+def make_curr_op(row,ju,jd,cu,cd,du,dd,sy,ops,include_edges=False):
     """
     Interaction between sites (row,row+1)
     """
+    # Collect needed operators
+    Sp = ops.Sp
+    Sm = ops.Sm
+    v = ops.v
+    n = ops.n
+    I = ops.I
+
     # -----------------------------------------
     # Hopping between sites
     # Hop up

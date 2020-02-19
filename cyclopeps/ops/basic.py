@@ -9,8 +9,9 @@ from cyclopeps.tools.ops_tools import *
 from numpy import float_
 from numpy import exp
 import collections
+from cyclopeps.tools.gen_ten import einsum
 
-def return_dens_op(Nx,Ny,top=True):
+def return_dens_op(Nx,Ny,top=True,sym=None,backend='numpy'):
     """
     Return the operators to give local densities
 
@@ -27,6 +28,10 @@ def return_dens_op(Nx,Ny,top=True):
     Returns:
         ops
     """
+    # Collect helpful operators
+    ops = OPS(sym=sym,backend=backend)
+    I = ops.I
+    n = ops.n
 
     # Operators within columns
     columns = []
