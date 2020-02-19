@@ -621,14 +621,21 @@ def mps_apply_svd(mps,chi):
     mps = make_mps_right(mps,truncate_mbd=chi)
     return mps
 
-def identity_mps(N,dtype=float_,sym=None,backend='numpy'):
+def identity_mps(N,dtype=float_,sym=False,backend='numpy',alternating=True):
     """
     Create an identity mps (currently limited to physical and 
     auxilliary bond dimension = 1).
     """
     tens = []
     for i in range(N):
-        tens.append(ones((1,1,1),sym=sym,backend=backend,dtype=dtype))
+        if sym:
+            if alternating:
+                symstr = '++-' if i%2 else '+--'
+            else:
+                symstr = '++-'
+            tens.append(ones((1,1,1),sym=[symstr,[range(1)]*3,None,None],backend=backend,dtype=dtype))
+        else:
+            tens.append(ones((1,1,1),sym=None,backend=backend,dtype=dtype))
     return MPS(tens)
 
 # -----------------------------------------------------------------

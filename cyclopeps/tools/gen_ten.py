@@ -200,7 +200,7 @@ def svd_ten(ten,split_ind,truncate_mbd=1e100,return_ent=True,return_wgt=True,bac
     else:
         return U,S,V
 
-def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_,order='+',legs=None):
+def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_,legs=None):
     """
     Create an identity tensor
 
@@ -219,10 +219,6 @@ def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_,order='+',legs=None)
             'numpy'    - a numpy tensor
         dtype : dtype
             The data type for the tensor, i.e. np.float_,np.complex128,etc.
-        order : string
-            Determine the order of symmetry string applied, 
-            if order = '+' -> sym[0] = '+-'
-            otherwise, sym[0] = '-+'.
     """
     if isinstance(backend,str):
         backend = load_lib(backend)
@@ -233,11 +229,11 @@ def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_,order='+',legs=None)
         return ten
     else:
         # Create a symmetric tensor
-        #sym = ['+-',[Z,Z],None,None]
-        if order == '+':
-            sym = ['+-',[Z,Z],None,None]
-        else:
-            sym = ['-+',[Z,Z],None,None]
+        sym = ['+-',[Z,Z],None,None]
+        #if order == '+':
+        #    sym = ['+-',[Z,Z],None,None]
+        #else:
+        #    sym = ['-+',[Z,Z],None,None]
         ten = GEN_TEN(shape=(D,D),sym=sym,backend=backend,dtype=dtype,legs=legs)
         for i in range(ten.ten.array.shape[0]):
             ten.ten.array[i,:,:] = backend.eye(ten.ten.array.shape[1])
@@ -439,8 +435,13 @@ def einsum(subscripts,opA,opB):
     # Create a new gen_ten (with correctly lumped legs) from the result
     # Find resulting sym
     if opA.sym is not None:
-        sym = res.sym
-        sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
+        if hasattr(res,'sym'):
+            sym = res.sym
+            sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
+        else:
+            # Constant returned (don't need to put into gen_ten)
+            sym = None
+            #return res
     else:
         sym = None
     # Find resulting legs
@@ -812,8 +813,8 @@ class GEN_TEN:
             res = symsvd(self.ten,
                          [list(range(split)),list(range(split,self.ten.ndim))],
                          truncate_mbd=truncate_mbd,
-                         return_ent=True,
-                         return_wgt=True)
+                         return_ent=return_ent,
+                         return_wgt=return_wgt)
         U,S,V = res[0],res[1],res[2]
         U = GEN_TEN(ten=U)
         S = GEN_TEN(ten=S)
@@ -838,6 +839,14 @@ class GEN_TEN:
         for i in range(3,len(res)):
             ret += (res[i],)
         return ret
+
+    def update_signs(self,signs):
+        """
+        Change the signs of the symtensors
+        """
+        if self.sym is not None:
+            self.sym[0] = signs
+            self.ten.sym[0] = signs
 
     def conj(self):
         return self._as_new_tensor(self.ten.conj())
@@ -877,7 +886,9 @@ class GEN_TEN:
         return self._as_new_tensor(-self.ten)
 
     def __div__(self,x):
-        return self._as_new_tensor(self.ten/x)
+        print(self,type(self))
+        print(x,type(x))
+        return self._as_new_tensor((1./x)*self.ten)
 
     def __add__(self,x):
         if isinstance(x,GEN_TEN):

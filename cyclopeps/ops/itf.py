@@ -3,7 +3,7 @@ Operators for the Ising Transverse Field Model
 """
 from cyclopeps.tools.utils import *
 from cyclopeps.ops.ops import OPS
-from cyclopeps.tools.gen_ten import einsum
+from cyclopeps.tools.ops_tools import quick_op
 
 def return_op(Nx,Ny,params,sym=None,backend='numpy'):
     """
@@ -63,10 +63,10 @@ def op(params,ops):
     I = ops.I
     Z = ops.Z
     # Interaction with field
-    op = -0.25*params[0]*einsum('io,IO->iIoO',X,I)
-    op += -0.25*params[0]*einsum('io,IO->iIoO',I,X)
+    op = -0.25*params[0]*quick_op(X,I)
+    op += -0.25*params[0]*quick_op(I,X)
     # Interaction between spins
-    op += -params[1]*einsum('io,IO->iIoO',Z,Z)
+    op += -params[1]*quick_op(Z,Z)
     # Return result
     return op
 
@@ -79,10 +79,10 @@ def op0(params,ops):
     I = ops.I
     Z = ops.Z
     # Interaction with field
-    op = -0.5*params[0]*einsum('io,IO->iIoO',X,I)
-    op += -0.25*params[0]*einsum('io,IO->iIoO',I,X)
+    op = -0.5*params[0]*quick_op(X,I)
+    op += -0.25*params[0]*quick_op(I,X)
     # Interaction between spins
-    op += -params[1]*einsum('io,IO->iIoO',Z,Z)
+    op += -params[1]*quick_op(Z,Z)
     # Return result
     return op
 
@@ -95,9 +95,9 @@ def opN(params,ops):
     I = ops.I
     Z = ops.Z
     # Interaction with field
-    op = -0.25*params[0]*einsum('io,IO->iIoO',X,I)
-    op += -0.5*params[0]*einsum('io,IO->iIoO',I,X)
+    op = -0.25*params[0]*quick_op(X,I)
+    op += -0.5*params[0]*quick_op(I,X)
     # Interaction between spins
-    op += -params[1]*einsum('io,IO->iIoO',Z,Z)
+    op += -params[1]*quick_op(Z,Z)
     # Return result
     return op

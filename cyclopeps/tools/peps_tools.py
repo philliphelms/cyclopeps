@@ -21,6 +21,7 @@ from cyclopeps.tools.utils import *
 from cyclopeps.tools.mps_tools import MPS,identity_mps
 from numpy import float_
 import copy
+FLIP = {'+':'-','-':'+'}
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # PEPS ENVIRONMENT FUNCTIONS 
@@ -85,12 +86,10 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
         # Add correct identity
         (_,_,Dr,Du) = ket[row].shape
         (_,_,Zr,Zu) = ket[row].qn_sectors
-        order = res.sym[0][4] if ket[row].is_symmetric else '+'
         I1 = eye(Dr,
                  Zr,
                  is_symmetric=ket[row].is_symmetric,
-                 backend=ket[row].backend,
-                 order=order)
+                 backend=ket[row].backend)
         I2 = eye(Du,
                  Zu,
                  is_symmetric=ket[row].is_symmetric,
@@ -101,6 +100,10 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
                  backend=ket[row].backend)
         Itmp = einsum('du,UD->dDuU',I3,I2)
         I = einsum('dDuU,lr->dlDruU',Itmp,I1)
+        # Set symmetry since identity's is ambiguous
+        if I.sym is not None:
+            I.update_signs(FLIP[res.sym[0][3]]+FLIP[res.sym[0][4]]+FLIP[res.sym[0][5]]+\
+                           res.sym[0][4]+res.sym[0][3]+res.sym[0][5])
 
         # Merge inds to make it an MPO
         I.merge_inds([0,1,2])
@@ -1078,35 +1081,34 @@ def update_top_env(bra,ket,left1,left2,right1,right2,prev_env):
 
      +-------+-------+-------+
      |       |       |       |
-     O       U       |       o
+     O       u       |       o
      |       |       |       |
-     +---L---+---R---^-------+
+     +---l---+---r---^-------+
      |       |\      |       |
      |       | \     |       |
-     N       D   p   u       n
-     |             \ |       |
-     |              \|       |
-     +-------l-------+---r---+
-     |               |       |
-     M               d       m
+     N       |   p   U       n
+     |       |     \ |       |
+     |       |      \|       |
+     +-------^---L---+---R---+
+     |       |       |       |
+     M       d       D       m
 
     """
     if prev_env is None:
-        ninds = len(ket.legs[4])+len(left2.legs[2])+len(bra.legs[4])+len(right2.legs[2])
-        legs = []
-        legs.append(list(range(len(left2.legs[2]))))
-        legs.append(list(range(len(legs[0]),len(legs[0])+len(ket.legs[4]))))
-        legs.append(list(range(len(legs[0])+len(legs[1]),len(legs[0])+len(legs[1])+len(bra.legs[4]))))
-        legs.append(list(range(len(legs[0])+len(legs[1])+len(legs[2]),len(legs[0])+len(legs[1])+len(legs[2])+len(right2.legs[2]))))
-        prev_env = ones((1,)*ninds,
-                        dtype=bra.dtype,
-                        legs=legs)
-    tmp = einsum('ldpru,OuUo->OldprUo',ket,prev_env)
-    tmp = einsum('OldprUo,NlO->NdprUo',tmp,left2)
-    tmp = einsum('NdprUo,nro->NdpUn',tmp,right2)
-    tmp = einsum('NdpUn,LDpRU->NdLDRn',tmp,bra)
-    tmp = einsum('NdLDRn,MLN->MdDRn',tmp,left1)
-    top_env = einsum('MdDRn,mRn->MdDm',tmp,right1)
+        # Create first top env
+        tmp = einsum('ldpru,NlO->uONdpr',ket,left2).remove_empty_ind(0).remove_empty_ind(0)
+        tmp = einsum('Ndpr,nro->oNdpn',tmp,right2).remove_empty_ind(0)
+        tmp = einsum('Ndpn,LDpRU->UNdLDRn',tmp,bra).remove_empty_ind(0)
+        tmp = einsum('NdLDRn,MLN->MdDRn',tmp,left1)
+        top_env = einsum('MdDRn,mRn->MdDm',tmp,right1)
+    else:
+        # Add on to top env
+        tmp = einsum('ldpru,OuUo->OldprUo',ket,prev_env)
+        tmp = einsum('OldprUo,NlO->NdprUo',tmp,left2)
+        tmp = einsum('NdprUo,nro->NdpUn',tmp,right2)
+        tmp = einsum('NdpUn,LDpRU->NdLDRn',tmp,bra)
+        tmp = einsum('NdLDRn,MLN->MdDRn',tmp,left1)
+        top_env = einsum('MdDRn,mRn->MdDm',tmp,right1)
     return top_env
 
 def calc_top_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
@@ -1175,21 +1177,18 @@ def update_bot_env(bra,ket,left1,left2,right1,right2,prev_env):
 
     """
     if prev_env is None:
-        ninds = len(ket.legs[1])+len(left1.legs[0])+len(bra.legs[1])+len(right1.legs[0])
-        legs = []
-        legs.append(list(range(len(left1.legs[0]))))
-        legs.append(list(range(len(legs[0]),len(legs[0])+len(ket.legs[1]))))
-        legs.append(list(range(len(legs[0])+len(legs[1]),len(legs[0])+len(legs[1])+len(bra.legs[1]))))
-        legs.append(list(range(len(legs[0])+len(legs[1])+len(legs[2]),len(legs[0])+len(legs[1])+len(legs[2])+len(right1.legs[0]))))
-        prev_env = ones((1,)*ninds,
-                        dtype=bra.dtype,
-                        legs=legs)
-    tmp = einsum('LDPRU,MdDm->MdLPURm',bra,prev_env)
-    tmp = einsum('MdLPURm,MLN->NdPURm',tmp,left1)
-    tmp = einsum('NdPURm,mRn->NdPUn',tmp,right1)
-    tmp = einsum('NdPUn,ldPru->NlurUn',tmp,ket)
-    tmp = einsum('NlurUn,NlO->OurUn',tmp,left2)
-    bot_env = einsum('OurUn,nro->OuUo',tmp,right2)
+        tmp = einsum('LDPRU,MLN->DMNPUR',bra,left1).remove_empty_ind(0).remove_empty_ind(0)
+        tmp = einsum('NPUR,mRn->mNPUn',tmp,right1).remove_empty_ind(0)
+        tmp = einsum('NPUn,ldPru->dNlurUn',tmp,ket).remove_empty_ind(0)
+        tmp = einsum('NlurUn,NlO->OurUn',tmp,left2)
+        bot_env = einsum('OurUn,nro->OuUo',tmp,right2)
+    else:
+        tmp = einsum('LDPRU,MdDm->MdLPURm',bra,prev_env)
+        tmp = einsum('MdLPURm,MLN->NdPURm',tmp,left1)
+        tmp = einsum('NdPURm,mRn->NdPUn',tmp,right1)
+        tmp = einsum('NdPUn,ldPru->NlurUn',tmp,ket)
+        tmp = einsum('NlurUn,NlO->OurUn',tmp,left2)
+        bot_env = einsum('OurUn,nro->OuUo',tmp,right2)
     return bot_env
 
 def calc_bot_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
@@ -1249,6 +1248,7 @@ def reduce_tensors(peps1,peps2):
 
     # Reduce bottom tensor
     peps1 = peps1.transpose([0,1,3,2,4])
+    output = peps1.svd(3,return_ent=False,return_wgt=False)
     (ub,sb,vb) = peps1.svd(3,return_ent=False,return_wgt=False)
     phys_b = einsum('ab,bPU->aPU',sb,vb)
 
@@ -1367,20 +1367,34 @@ def calc_local_env(bra1,bra2,ket1,ket2,env_top,env_bot,lbmpo,rbmpo,reduced=True,
         ubk,phys_bk,phys_tk,vtk = reduce_tensors(ket1,ket2)
 
         # Compute bottom half of environment
-        tmp = einsum('CdDc,CLB->BLdDc',env_bot,lbmpo[0])
-        tmp = einsum('BLdDc,LDRU->BdURc',tmp,ub)
-        tmp = einsum('BdURc,cRb->BdUb',tmp,rbmpo[0])
-        tmp = einsum('BdUb,BlA->AldUb',tmp,lbmpo[1])
-        tmp = einsum('AldUb,ldru->AurUb',tmp,ubk)
-        envb= einsum('AurUb,bra->AuUa',tmp,rbmpo[1])
+        if env_bot is None:
+            tmp = einsum('CLB,LDRU->CDBUR',lbmpo[0],ub).remove_empty_ind(0).remove_empty_ind(0)
+            tmp = einsum('BUR,cRb->cBUb',tmp,rbmpo[0]).remove_empty_ind(0)
+            tmp = einsum('BUb,BlA->AlUb',tmp,lbmpo[1])
+            tmp = einsum('AlUb,ldru->dAurUb',tmp,ubk).remove_empty_ind(0)
+            envb= einsum('AurUb,bra->AuUa',tmp,rbmpo[1])
+        else:
+            tmp = einsum('CdDc,CLB->BLdDc',env_bot,lbmpo[0])
+            tmp = einsum('BLdDc,LDRU->BdURc',tmp,ub)
+            tmp = einsum('BdURc,cRb->BdUb',tmp,rbmpo[0])
+            tmp = einsum('BdUb,BlA->AldUb',tmp,lbmpo[1])
+            tmp = einsum('AldUb,ldru->AurUb',tmp,ubk)
+            envb= einsum('AurUb,bra->AuUa',tmp,rbmpo[1])
 
         # Compute top half of environment
-        tmp = einsum('CuUc,BlC->BluUc',env_top,lbmpo[3])
-        tmp = einsum('BluUc,ldru->BdrUc',tmp,vtk)
-        tmp = einsum('BdrUc,brc->BdUb',tmp,rbmpo[3])
-        tmp = einsum('BdUb,ALB->ALdUb',tmp,lbmpo[2])
-        tmp = einsum('ALdUb,LDRU->AdDRb',tmp,vt)
-        envt= einsum('AdDRb,aRb->AdDa',tmp,rbmpo[2])
+        if env_top is None:
+            tmp = einsum('BlC,ldru->CuBdr',lbmpo[3],vtk).remove_empty_ind(0).remove_empty_ind(0)
+            tmp = einsum('Bdr,brc->cBdb',tmp,rbmpo[3]).remove_empty_ind(0)
+            tmp = einsum('Bdb,ALB->ALdb',tmp,lbmpo[2])
+            tmp = einsum('ALdb,LDRU->UAdDRb',tmp,vt).remove_empty_ind(0)
+            envt= einsum('AdDRb,aRb->AdDa',tmp,rbmpo[2])
+        else:
+            tmp = einsum('CuUc,BlC->BluUc',env_top,lbmpo[3])
+            tmp = einsum('BluUc,ldru->BdrUc',tmp,vtk)
+            tmp = einsum('BdrUc,brc->BdUb',tmp,rbmpo[3])
+            tmp = einsum('BdUb,ALB->ALdUb',tmp,lbmpo[2])
+            tmp = einsum('ALdUb,LDRU->AdDRb',tmp,vt)
+            envt= einsum('AdDRb,aRb->AdDa',tmp,rbmpo[2])
 
         # Compute Environment
         N = einsum('AdDa,AuUa->uUdD',envt,envb)
@@ -1438,30 +1452,6 @@ def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,pos
         for i in range(len(ket_col)):
             ket_col[i] = bra_col[i].copy()
 
-    # Create identity matrices to use on top and bottom
-    # Bottom identity
-    ninds = len(ket_col[0].legs[1])+len(left_bmpo[0].legs[0])+len(bra_col[0].legs[1])+len(right_bmpo[0].legs[0])
-    legs = []
-    legs.append(list(range(len(left_bmpo[0].legs[0]))))
-    legs.append(list(range(len(legs[0]),len(legs[0])+len(ket_col[0].legs[1]))))
-    legs.append(list(range(len(legs[0])+len(legs[1]),len(legs[0])+len(legs[1])+len(bra_col[0].legs[1]))))
-    legs.append(list(range(len(legs[0])+len(legs[1])+len(legs[2]),len(legs[0])+len(legs[1])+len(legs[2])+len(right_bmpo[0].legs[0]))))
-    bot_env_id = ones((1,)*ninds,
-                      dtype=bra_col[0].dtype,
-                      legs=legs)
-    # Top Identity
-    lenc = len(ket_col)
-    ninds = len(ket_col[lenc-1].legs[4])+len(left_bmpo[2*(lenc-2)+3].legs[2])+len(bra_col[lenc-1].legs[4])+len(right_bmpo[2*(lenc-2)+3].legs[2])
-    ninds = len(ket_col[lenc-1].legs[4])+len(left_bmpo[2*lenc-1].legs[2])+len(bra_col[lenc-1].legs[4])+len(right_bmpo[2*lenc-1].legs[2])
-    legs = []
-    legs.append(list(range(len(left_bmpo[2*lenc-1].legs[2]))))
-    legs.append(list(range(len(legs[0]),len(legs[0])+len(ket_col[lenc-1].legs[4]))))
-    legs.append(list(range(len(legs[0])+len(legs[1]),len(legs[0])+len(legs[1])+len(bra_col[lenc-1].legs[4]))))
-    legs.append(list(range(len(legs[0])+len(legs[1])+len(legs[2]),len(legs[0])+len(legs[1])+len(legs[2])+len(right_bmpo[2*lenc-1].legs[2]))))
-    top_env_id = ones((1,)*ninds,
-                      dtype=bra_col[0].dtype,
-                      legs=legs)
-
     # Compute Local Environment (N)
     if row == 0:
         if len(bra_col) == 2:
@@ -1470,8 +1460,8 @@ def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,pos
                                  bra_col[row+1],
                                  ket_col[row],
                                  ket_col[row+1],
-                                 top_env_id,
-                                 bot_env_id,
+                                 None,
+                                 None,
                                  left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                                  right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                                  hermitian=hermitian,
@@ -1483,7 +1473,7 @@ def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,pos
                                  ket_col[row],
                                  ket_col[row+1],
                                  top_envs[row+2],
-                                 bot_env_id,
+                                 None,
                                  left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                                  right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                                  hermitian=hermitian,
@@ -1494,7 +1484,7 @@ def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,pos
                              bra_col[row+1],
                              ket_col[row],
                              ket_col[row+1],
-                             top_env_id,
+                             None,
                              bot_envs[row-1],
                              left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                              right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
@@ -1579,7 +1569,7 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
     left_bmpo  = calc_left_bound_mpo (peps,Nx,chi=chi,return_all=True,ket=ket)
     ident_bmpo = identity_mps(len(right_bmpo[0]),
                               dtype=peps[0][0].dtype,
-                              sym=None,
+                              sym=(peps[0][0].sym is not None),
                               backend=peps.backend)
 
     # Loop through all columns

@@ -10,6 +10,7 @@ Date: July 2019
 from cyclopeps.tools.utils import *
 from cyclopeps.tools.mps_tools import MPS
 from scipy.linalg import expm as sla_expm
+from cyclopeps.tools.gen_ten import einsum
 import copy
 
 def quick_op(op1,op2):
