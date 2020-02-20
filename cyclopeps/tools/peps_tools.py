@@ -14,7 +14,7 @@ Date: July 2019
     (2) bottom  (3) physical
 """
 
-from cyclopeps.tools.gen_ten import rand,einsum,eye,ones,svd_ten
+from cyclopeps.tools.gen_ten import rand,einsum,eye,ones,svd_ten,zeros
 #from cyclopeps.tools.params import *
 from symtensor.settings import load_lib
 from cyclopeps.tools.utils import *
@@ -102,6 +102,8 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
         I = einsum('dDuU,lr->dlDruU',Itmp,I1)
         # Set symmetry since identity's is ambiguous
         if I.sym is not None:
+            # If this assertion fails, the sign update must be rewritten
+            assert(len(res.sym[0]) == 6)
             I.update_signs(FLIP[res.sym[0][3]]+FLIP[res.sym[0][4]]+FLIP[res.sym[0][5]]+\
                            res.sym[0][4]+res.sym[0][3]+res.sym[0][5])
 
@@ -148,7 +150,20 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
                  Zd,
                  is_symmetric=ket[row].is_symmetric,
                  backend=ket[row].backend)
+        # Create identity
         I = einsum('mLn,du->mdLnu',bound_mpo[2*row],I1)
+        # Adjust symmetry (identity gives flexibility)
+        if I.sym is not None:
+            bmposgn = list(bound_mpo[2*row].get_signs())
+            Isgn = list(I.get_signs())
+            ketsgn = list(ket[row].get_signs())
+            newsgn = ''.join(bmposgn[i] for i in bound_mpo[2*row].legs[0])
+            newsgn += ''.join(FLIP[ketsgn[i]] for i in ket[row].legs[1])
+            newsgn += ''.join(bmposgn[i] for i in bound_mpo[2*row].legs[1])
+            newsgn += ''.join(bmposgn[i] for i in bound_mpo[2*row].legs[2])
+            newsgn += ''.join(ketsgn[i] for i in ket[row].legs[1])
+            I.update_signs(newsgn)
+            
         # Reshape it into an MPO
         I.merge_inds([0,1])
         I.merge_inds([2,3])
@@ -157,24 +172,19 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
 
         # Add ket contraction
         mpiprint(6,'Adding ket tensor to boundary mps')
+        # Contract with boundary mpo
         res = einsum('mln,ldpru->mdrpnu',bound_mpo[2*row+1],ket[row])
         # Reshape it into an MPO
-        if True:
-            if row == Ny-1:
-                res = res.remove_empty_ind(len(res.legs)-1)
-                res.merge_inds([0,1])
-                res.merge_inds([1,2])
-            else:
-                res.merge_inds([0,1])
-                res.merge_inds([1,2])
-                res.merge_inds([2,3])
+        if row == Ny-1:
+            res = res.remove_empty_ind(len(res.legs)-1)
+            res.merge_inds([0,1])
+            res.merge_inds([1,2])
         else:
             res.merge_inds([0,1])
             res.merge_inds([1,2])
             res.merge_inds([2,3])
         # Append to boundary MPO
         bound_mpo_new.append(res)
-        #print('\t{}\t{}'.format(res.legs,res.shape))
 
     # Put result into an MPS -------------------------------------------
     bound_mps = MPS(bound_mpo_new)
@@ -202,19 +212,16 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
     bound_mpo_new = []
 
     for row in range(Ny):
-        mpiprint(5,'Adding Site {} to bra'.format(row))
 
         # Add bra contraction
-        mpiprint(6,'Adding bra tensor to boundary mps')
         res = einsum('mLn,LDPRU->mDRnUP',bound_mpo[2*row],bra[row])
+        # Save some useful info
+        if res.sym is not None: ressgn = list(res.get_signs())
+        resleg = res.legs
         # Reshape it into an MPO
-        if True:
-            if row == 0:
-                res = res.remove_empty_ind(0)
-                res.merge_inds([2,3,4])
-            else:
-                res.merge_inds([0,1])
-                res.merge_inds([2,3,4])
+        if row == 0:
+            res = res.remove_empty_ind(0)
+            res.merge_inds([2,3,4])
         else:
             res.merge_inds([0,1])
             res.merge_inds([2,3,4])
@@ -233,16 +240,32 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
                 Zu,
                 is_symmetric=bra[row].is_symmetric,
                 backend=bra[row].backend)
-        # Contract with previous bound_mpo tensor
-        I = einsum('mrpn,UD->mDprnU',bound_tens,I1)
-        # Reshape it back into an MPO
-        if True:
-            if row == Ny-1:
-                I = I.remove_empty_ind(len(I.legs)-1)
-                I.merge_inds([0,1,2])
+        # Create correct tensor
+        I = einsum('mrpn,DU->mDprnU',bound_tens,I1)
+        # Adjust symmetry (identity gives flexibility)
+        if I.sym is not None:
+            bmposgn = list(bound_tens.get_signs())
+            Isgn = list(I.get_signs())
+            brasgn = list(bra[row].get_signs())
+            newsgn  = ''.join(FLIP[ressgn[i]] for i in resleg[3])
+            add = ''.join(FLIP[ressgn[i]] for i in resleg[4])
+            newsgn += add
+            add = ''.join(FLIP[ressgn[i]] for i in resleg[5])
+            newsgn += add
+            add = ''.join(FLIP[ressgn[i]] for i in resleg[2])
+            newsgn += add
+            if ''.join(FLIP[ressgn[i]] for i in resleg[3]) == ''.join(bmposgn[i] for i in bound_tens.legs[0]):
+                add = ''.join(bmposgn[i] for i in bound_tens.legs[3])
             else:
-                I.merge_inds([0,1,2])
-                I.merge_inds([2,3])
+                add = ''.join(FLIP[bmposgn[i]] for i in bound_tens.legs[3])
+            newsgn += add
+            add = ''.join(ressgn[i] for i in resleg[4])
+            newsgn += add
+            I.update_signs(newsgn)
+        # Reshape it back into an MPO
+        if row == Ny-1:
+            I = I.remove_empty_ind(len(I.legs)-1)
+            I.merge_inds([0,1,2])
         else:
             I.merge_inds([0,1,2])
             I.merge_inds([2,3])
@@ -290,7 +313,6 @@ def left_bmpo_sl(bra, bound_mpo, chi=4,truncate=True,ket=None):
         bound_mpo : list
             An updated boundary mpo
     """
-    #mpiprint(3,'Updating boundary mpo (sl), maxelem = {}'.format(bound_mpo.max_elem()))
     mpiprint(3,'Updating boundary mpo (sl)')
     # Find size of peps column and dims of tensors
     Ny = len(bra)
@@ -976,10 +998,8 @@ def calc_peps_norm(peps,chi=4,singleLayer=True):
     """
     # TODO Add - separate bra and ket
     # Absorb Lambda tensors if needed
-    try:
+    if peps.ltensors is not None:
         peps = peps_absorb_lambdas(peps.tensors,peps.ltensors,mk_copy=True)
-    except:
-        pass
 
     # Get PEPS Dims
     Nx = len(peps)
@@ -1045,13 +1065,60 @@ def make_rand_peps(Nx,Ny,d,D,Zn=None,backend='numpy',dtype=float_):
 
     return tensors
 
-def make_rand_lambdas(Nx,Ny,D,dtype=float_):
+def rand_lambda_tensor(D,Zn=None,backend='numpy',dtype=float_):
+    """
+    Create a random lambda tensor for a canonical PEPS
+
+    Args:
+        D : int
+            The PEPS Bond Dimension
+
+    Kwargs:
+        Zn : int
+            Create a PEPS which preserves this Zn symmetry,
+            i.e. if Zn=2, then Z2 symmetry is preserved.
+        backend : str
+            This specifies the backend to be used for the calculation.
+            Options are currently 'numpy' or 'ctf'. If using symmetries,
+            this will be adapted to using symtensors with numpy or ctf as
+            the backend.
+        dtype : dtype
+            The data type of the tensor
+            Default : np.float_
+
+    Returns:
+        ten : ndarray
+            A random tensor with the correct dimensions
+            for the given site
+    """
+    # Determine symmetry
+    sym = None
+    if Zn is not None:
+        sym = ['+-',[range(Zn)]*2,0,Zn]
+        D /= Zn
+
+    # Create empty tensor
+    l = zeros((D,D),
+              sym=sym,
+              backend=backend,
+              dtype=dtype)
+
+    # Fill Diagonal Elements
+    if l.sym is None:
+        l.ten = l.backend.diag(l.backend.random(D))
+    else:
+        for i in range(Zn):
+            l.ten.array[i,:,:] = l.backend.diag(l.backend.random(D))
+
+    # Return result
+    return l
+
+def make_rand_lambdas(Nx,Ny,D,Zn=None,backend='numpy',dtype=float_):
     """
     Make random diagonal matrices to serve as the
     singular values for the Gamma-Lambda canonical
     form of the PEPS
 
-    Note:
     Used primarily for the simple update contraction scheme
     """
 
@@ -1060,7 +1127,7 @@ def make_rand_lambdas(Nx,Ny,D,dtype=float_):
     for x in range(Nx):
         tmp = []
         for y in range(Ny-1):
-            tmp += [rand((D),dtype=dtype)]
+            tmp += [rand_lambda_tensor(D,Zn=Zn,backend=backend,dtype=dtype)]
         vert += [tmp]
 
     # Lambda tensors along horizontal bonds
@@ -1068,7 +1135,7 @@ def make_rand_lambdas(Nx,Ny,D,dtype=float_):
     for x in range(Nx-1):
         tmp = []
         for x in range(Ny):
-            tmp += [rand((D),dtype=dtype)]
+            tmp += [rand_lambda_tensor(D,Zn=Zn,backend=backend,dtype=dtype)]
         horz += [tmp]
 
     # Add horizontal and vertical lambdas to tensor list
@@ -1777,18 +1844,20 @@ def peps_absorb_lambdas(Gamma,Lambda,mk_copy=False):
         # loop through all sites, absorbing the "singular values"
         for x in range(Nx):
             for y in range(Ny):
+                initsgn = Gamma[x][y].get_signs()
                 # Absorb left lambda
                 if x is not 0:
-                    Gamma[x][y] = einsum('ldpru,l->ldpru',Gamma[x][y],sqrt(Lambda[1][x-1][y]))
+                    Gamma[x][y] = einsum('ldpru,lL->Ldpru',Gamma[x][y],Lambda[1][x-1][y].sqrt())
                 # Absorb down lambda
                 if y is not 0:
-                    Gamma[x][y] = einsum('ldpru,d->ldpru',Gamma[x][y],sqrt(Lambda[0][x][y-1]))
+                    Gamma[x][y] = einsum('ldpru,dD->lDpru',Gamma[x][y],Lambda[0][x][y-1].sqrt())
                 # Absorb right lambda
                 if x is not (Nx-1):
-                    Gamma[x][y] = einsum('ldpru,r->ldpru',Gamma[x][y],sqrt(Lambda[1][x][y]))
+                    Gamma[x][y] = einsum('ldpru,rR->ldpRu',Gamma[x][y],Lambda[1][x][y].sqrt())
                 # Absorb up lambda
                 if y is not (Ny-1):
-                    Gamma[x][y] = einsum('ldpru,u->ldpru',Gamma[x][y],sqrt(Lambda[0][x][y]))
+                    Gamma[x][y] = einsum('ldpru,uU->ldprU',Gamma[x][y],Lambda[0][x][y].sqrt())
+                Gamma[x][y].update_signs(initsgn)
 
     # Return results
     return Gamma
@@ -1896,7 +1965,9 @@ class PEPS:
             self.ltensors = make_rand_lambdas(self.Nx,
                                               self.Ny,
                                               self.D,
-                                              self.dtype)
+                                              Zn=self.Zn,
+                                              backend=self.backend,
+                                              dtype=self.dtype)
         else:
             self.ltensors = None
 

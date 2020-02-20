@@ -98,7 +98,7 @@ def qr_ten(ten,split_ind,rq=False,backend=np.linalg):
                      LETTERS[:len(Q.shape)-1]+LETTERS[len(Q.shape):len(Q.shape)-1+len(R.shape)]
         assert(np.allclose(ten,np.einsum(subscripts,Q,R),rtol=1e-6))
     else:
-        raise NotImplemented
+        raise NotImplementedError()
     # Return results
     if rq:
         return R,Q
@@ -848,8 +848,23 @@ class GEN_TEN:
             self.sym[0] = signs
             self.ten.sym[0] = signs
 
+    def get_signs(self):
+        """
+        Change the signs of the symtensors
+        """
+        if self.sym is not None:
+            return self.sym[0]
+        else:
+            return None
+
     def conj(self):
         return self._as_new_tensor(self.ten.conj())
+
+    def sqrt(self):
+        if self.sym is not None:
+            return self._as_new_tensor(self.ten.sqrt())
+        else:
+            return self._as_new_tensor(self.backend.sqrt(self.ten))
 
     def abs(self):
         return self._as_new_tensor(abs(self.ten))
@@ -886,8 +901,6 @@ class GEN_TEN:
         return self._as_new_tensor(-self.ten)
 
     def __div__(self,x):
-        print(self,type(self))
-        print(x,type(x))
         return self._as_new_tensor((1./x)*self.ten)
 
     def __add__(self,x):
