@@ -21,15 +21,44 @@ def quick_op(op1,op2):
     #return einsum('io,IO->iIoO',op1,op2)
     return einsum('io,IO->oOiI',op1,op2)
 
-def expm(m,a=1.):
+def exp_gate_nosym(h,a=1.):
     """
-    Take the exponential of a matrix
+    Take the exponential of a local two site
+    gate for a non-symmetric tensor
     """
-    m = to_nparray(m)
-    m *= a
-    m = sla_expm(m)
-    m = from_nparray(m)
-    return m
+    # Get correct library
+    lib = h.backend
+    # Create tensors to save results
+    eh = h.copy()
+    res = h.copy().ten
+    # Reshape into a matrix
+    d = res.shape[0]
+    res = lib.reshape(res,(d**2,d**2))
+    # Take exponential of matrix
+    res *= a
+    res = lib.expm(res)
+    # Reshape back into a two-site gate
+    res = lib.reshape(res,(d,d,d,d))
+    # Put result into a gen_ten
+    eh.ten = res
+    return eh
+
+def exp_gate_sym(h,a=1.):
+    """
+    Take the exponential of a local two site gate
+    for a gate that is a symtensor
+    """
+    h = h.copy()
+    raise NotImplementedError()
+
+def exp_gate(h,a=1.):
+    """
+    Take the exponential of a local two site gate
+    """
+    if h.sym is None:
+        return exp_gate_nosym(h,a=a)
+    else:
+        return exp_gate_sym(h,a=a)
 
 def take_exp(ops,a=1.):
     """
@@ -112,7 +141,7 @@ def copy_ops(ops):
         tmp = [None]*len(ops[0][i])
         for j in range(len(ops[0][i])):
             if ops[0][i][j] is not None:
-                tmp[j] = copy.deepcopy(ops[0][i][j])
+                tmp[j] = ops[0][i][j].copy()
         vert_ops.append(tmp)
     opsCopy.append(vert_ops)
 
@@ -122,7 +151,7 @@ def copy_ops(ops):
         tmp = [None]*len(ops[1][i])
         for j in range(len(ops[1][i])):
             if ops[1][i][j] is not None:
-                tmp[j] = copy.deepcopy(ops[1][i][j])
+                tmp[j] = ops[1][i][j].copy()
         horz_ops.append(tmp)
     opsCopy.append(horz_ops)
     

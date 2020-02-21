@@ -1686,9 +1686,11 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
     """
     # Absorb Lambda tensors if needed
     if peps.ltensors is not None:
-        peps = peps_absorb_lambdas(peps.tensors,peps.ltensors,mk_copy=True)
+        peps = peps.copy()
+        peps.absorb_lambdas()
     if ket is not None and ket.ltensors is not None:
-        ket = peps_absorb_lambdas(ket.tensors,ket.ltensors,mk_copy=True)
+        ket = ket.copy()
+        ket.absorb_lambdas()
 
     # Calculate contribution from interactions between columns
     col_energy = calc_all_column_op(peps,ops[0],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)

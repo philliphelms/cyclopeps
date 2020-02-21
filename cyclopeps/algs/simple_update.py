@@ -1,78 +1,65 @@
-from cyclopeps.tools.params import *
 from cyclopeps.tools.utils import *
 from cyclopeps.tools.peps_tools import *
 from cyclopeps.tools.ops_tools import *
 from numpy import float_
 import copy 
-from cyclopeps.tools.mps_tools import svd_ten
-
-def exp_ham(ham,a=1.):
-    """
-    Take the exponential of the Hamiltonian
-    """
-    ham = copy.deepcopy(ham)
-    d = ham.shape[0]
-    ham = reshape(ham,(d**2,d**2))
-    eH = expm(ham,a)
-    eH = reshape(eH,(d,d,d,d))
-    return eH
 
 def absorb_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas):
     """
     """
-    peps1 = copy.deepcopy(peps_col[row])
-    peps2 = copy.deepcopy(peps_col[row+1])
+    peps1 = peps_col[row].copy()
+    peps2 = peps_col[row+1].copy()
     # Absorb Bottom lambda
     if not (row == 0):
-        peps1 = einsum('ldpru,d->ldpru',peps1,vert_lambdas[row-1])
+        peps1 = einsum('ldpru,dD->lDpru',peps1,vert_lambdas[row-1])
     # Absorb left lambdas
     if left_lambdas is not None:
-        peps1 = einsum('ldpru,l->ldpru',peps1,left_lambdas[row])
-        peps2 = einsum('ldpru,l->ldpru',peps2,left_lambdas[row+1])
+        peps1 = einsum('ldpru,lL->Ldpru',peps1,left_lambdas[row])
+        peps2 = einsum('ldpru,lL->Ldpru',peps2,left_lambdas[row+1])
     # Absorb right lambdas
     if right_lambdas is not None:
-        peps1 = einsum('ldpru,r->ldpru',peps1,right_lambdas[row])
-        peps2 = einsum('ldpru,r->ldpru',peps2,right_lambdas[row+1])
+        peps1 = einsum('ldpru,rR->ldpRu',peps1,right_lambdas[row])
+        peps2 = einsum('ldpru,rR->ldpRu',peps2,right_lambdas[row+1])
     # Absorb Top lambda
     if not (row == len(peps_col)-2):
-        peps2 = einsum('ldpru,u->ldpru',peps2,vert_lambdas[row+1])
+        peps2 = einsum('ldpru,uU->ldprU',peps2,vert_lambdas[row+1])
     # Absorb middle lambda
-    peps1 = einsum('ldpru,u->ldpru',peps1,vert_lambdas[row])
+    peps1 = einsum('ldpru,uU->ldprU',peps1,vert_lambdas[row])
     return peps1,peps2
 
 def separate_sites(combined_sites,D):
     """
     """
     # Do the SVD Decomposition
-    peps1,Lambda,peps2 = svd_ten(combined_sites,4,
-                         truncate_mbd=D,
-                         return_ent=False,
-                         return_wgt=False)
+    peps1,Lambda,peps2 = combined_sites.svd(4,
+                                            truncate_mbd=D,
+                                            return_ent=False,
+                                            return_wgt=False)
     # Do some renormalization (just to keep numbers reasonable)
-    Lambda /= sqrt(dot(Lambda,Lambda))
+    Lambda /= einsum('ij,jk->ik',Lambda,Lambda).sqrt().to_val()
     # Reshape the results
-    peps2 = transpose(peps2,[1,0,2,3,4])
+    peps2 = peps2.transpose([1,0,2,3,4])
     return peps1,Lambda,peps2
 
 def remove_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas):
     """
     """
-    peps1 = copy.deepcopy(peps_col[row])
-    peps2 = copy.deepcopy(peps_col[row+1])
+    peps1 = peps_col[row].copy()
+    peps2 = peps_col[row+1].copy()
     # Absorb Bottom lambda
     if not (row == 0):
-        peps1 = einsum('ldpru,d->ldpru',peps1,1./vert_lambdas[row-1])
+        peps1 = einsum('ldpru,dD->lDpru',peps1,1./vert_lambdas[row-1])
     # Absorb left lambdas
     if left_lambdas is not None:
-        peps1 = einsum('ldpru,l->ldpru',peps1,1./left_lambdas[row])
-        peps2 = einsum('ldpru,l->ldpru',peps2,1./left_lambdas[row+1])
+        peps1 = einsum('ldpru,lL->Ldpru',peps1,1./left_lambdas[row])
+        peps2 = einsum('ldpru,lL->Ldpru',peps2,1./left_lambdas[row+1])
     # Absorb right lambdas
     if right_lambdas is not None:
-        peps1 = einsum('ldpru,r->ldpru',peps1,1./right_lambdas[row])
-        peps2 = einsum('ldpru,r->ldpru',peps2,1./right_lambdas[row+1])
+        peps1 = einsum('ldpru,rR->ldpRu',peps1,1./right_lambdas[row])
+        peps2 = einsum('ldpru,rR->ldpRu',peps2,1./right_lambdas[row+1])
     # Absorb Top lambda
     if not (row == len(peps_col)-2):
-        peps2 = einsum('ldpru,u->ldpru',peps2,1./vert_lambdas[row+1])
+        peps2 = einsum('ldpru,uU->ldprU',peps2,1./vert_lambdas[row+1])
 
     # Put them back in the list
     peps_col[row] = peps1
@@ -93,18 +80,23 @@ def tebd_step_single_col(peps_col,vert_lambdas,left_lambdas,right_lambdas,step_s
         peps1,peps2 = absorb_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas)
 
         # Take the exponential of the hamiltonian
-        eH = exp_ham(ham[row],-step_size)
+        eH = exp_gate(ham[row],-step_size)
 
         # Apply Time Evolution
-        #comparison = einsum('ldpru,LuPRU->ldprLPRU',peps1,peps2)
-        result = einsum('ldpru,LuPRU,pPqQ->ldqrLQRU',peps1,peps2,eH)
-        #print(summ(abss(comparison-result)))
+        if DEBUG:
+            comparison = einsum('ldpru,LuPRU->ldprLPRU',peps1,peps2)
+        tmp = einsum('ldpru,LuPRU->ldprLPRU',peps1,peps2)
+        result = einsum('ldprLPRU,pPqQ->ldqrLQRU',tmp,eH)
+        #result = einsum('ldpru,LuPRU,pPqQ->ldqrLQRU',peps1,peps2,eH)
+        if DEBUG:
+            print(summ(abss(comparison-result)))
 
         # Perform SVD
         D = peps1.shape[4]
         peps1,Lambda,peps2 = separate_sites(result,D)
-        #comparison2 = einsum('ldpru,LuPRU,u->ldprLPRU',peps1,peps2,Lambda)
-        #print(summ(abss(comparison2-result)))
+        if DEBUG:
+            comparison2 = einsum('ldpru,LuPRU,u->ldprLPRU',peps1,peps2,Lambda)
+            print(summ(abss(comparison2-result)))
         
         # Put result back into vectors
         vert_lambdas[row] = Lambda
@@ -116,9 +108,9 @@ def tebd_step_single_col(peps_col,vert_lambdas,left_lambdas,right_lambdas,step_s
 
 
         peps1,peps2 = absorb_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas)
-        #comparison = einsum('ldpru,LuPRU->ldprLPRU',peps1,peps2)
-        #print(summ(abss(comparison-result)))
-        #print('\n'+'#'*50)
+        if DEBUG:
+            comparison = einsum('ldpru,LuPRU->ldprLPRU',peps1,peps2)
+            print(summ(abss(comparison-result)))
 
     # Return the result
     return peps_col,vert_lambdas
@@ -202,7 +194,9 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None):
     return E,peps
 
 def run_tebd(Nx,Ny,d,ham,
+             Zn=None,
              peps=None,
+             backend='numpy',
              D=3,chi=10,
              norm_tol=20,singleLayer=True,
              max_norm_iter=20,
@@ -225,6 +219,12 @@ def run_tebd(Nx,Ny,d,ham,
             is found in /mpo/itf.py 
 
     Kwargs:
+        Zn : int
+            The Zn symmetry of the PEPS. 
+            If None, then a dense, non-symmetric PEPS will be used.
+        backend : str
+            The tensor backend to be used. 
+            Current options are 'numpy' or 'ctf'
         peps : PEPS object
             The initial guess for the PEPS, in the "Gamma-Lambda"
             formalism. If this is not 
@@ -304,6 +304,8 @@ def run_tebd(Nx,Ny,d,ham,
                     d=d,
                     D=D[0],
                     chi=chi[0],
+                    Zn=Zn,
+                    backend=backend,
                     norm_tol=norm_tol,
                     canonical=True,
                     singleLayer=singleLayer,

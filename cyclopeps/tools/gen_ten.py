@@ -903,6 +903,9 @@ class GEN_TEN:
     def __div__(self,x):
         return self._as_new_tensor((1./x)*self.ten)
 
+    def __rdiv__(self,x):
+        return self/x
+
     def __add__(self,x):
         if isinstance(x,GEN_TEN):
             return self._as_new_tensor(self.ten+x.ten)
