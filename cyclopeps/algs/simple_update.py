@@ -11,20 +11,23 @@ def absorb_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas):
     peps2 = peps_col[row+1].copy()
     # Absorb Bottom lambda
     if not (row == 0):
-        peps1 = einsum('ldpru,dD->lDpru',peps1,vert_lambdas[row-1])
+        peps1 = einsum('ldpru,dd->ldpru',peps1,vert_lambdas[row-1])
     # Absorb left lambdas
     if left_lambdas is not None:
-        peps1 = einsum('ldpru,lL->Ldpru',peps1,left_lambdas[row])
-        peps2 = einsum('ldpru,lL->Ldpru',peps2,left_lambdas[row+1])
+        peps1 = einsum('ldpru,ll->ldpru',peps1,left_lambdas[row])
+        peps2 = einsum('ldpru,ll->ldpru',peps2,left_lambdas[row+1])
     # Absorb right lambdas
     if right_lambdas is not None:
-        peps1 = einsum('ldpru,rR->ldpRu',peps1,right_lambdas[row])
-        peps2 = einsum('ldpru,rR->ldpRu',peps2,right_lambdas[row+1])
+        peps1 = einsum('ldpru,rr->ldpru',peps1,right_lambdas[row])
+        peps2 = einsum('ldpru,rr->ldpru',peps2,right_lambdas[row+1])
     # Absorb Top lambda
     if not (row == len(peps_col)-2):
-        peps2 = einsum('ldpru,uU->ldprU',peps2,vert_lambdas[row+1])
+        peps2 = einsum('ldpru,uu->ldpru',peps2,vert_lambdas[row+1])
     # Absorb middle lambda
-    peps1 = einsum('ldpru,uU->ldprU',peps1,vert_lambdas[row])
+    peps1 = einsum('ldpru,uu->ldpru',peps1,vert_lambdas[row])
+    # Reset symmetries
+    #peps1.update_signs(peps_col[row].get_signs())
+    #peps1.update_signs(peps_col[row+1].get_signs())
     return peps1,peps2
 
 def separate_sites(combined_sites,D):
@@ -48,18 +51,18 @@ def remove_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas):
     peps2 = peps_col[row+1].copy()
     # Absorb Bottom lambda
     if not (row == 0):
-        peps1 = einsum('ldpru,dD->lDpru',peps1,1./vert_lambdas[row-1])
+        peps1 = einsum('ldpru,dd->ldpru',peps1,1./vert_lambdas[row-1])
     # Absorb left lambdas
     if left_lambdas is not None:
-        peps1 = einsum('ldpru,lL->Ldpru',peps1,1./left_lambdas[row])
-        peps2 = einsum('ldpru,lL->Ldpru',peps2,1./left_lambdas[row+1])
+        peps1 = einsum('ldpru,ll->ldpru',peps1,1./left_lambdas[row])
+        peps2 = einsum('ldpru,ll->ldpru',peps2,1./left_lambdas[row+1])
     # Absorb right lambdas
     if right_lambdas is not None:
-        peps1 = einsum('ldpru,rR->ldpRu',peps1,1./right_lambdas[row])
-        peps2 = einsum('ldpru,rR->ldpRu',peps2,1./right_lambdas[row+1])
+        peps1 = einsum('ldpru,rr->ldpru',peps1,1./right_lambdas[row])
+        peps2 = einsum('ldpru,rr->ldpru',peps2,1./right_lambdas[row+1])
     # Absorb Top lambda
     if not (row == len(peps_col)-2):
-        peps2 = einsum('ldpru,uU->ldprU',peps2,1./vert_lambdas[row+1])
+        peps2 = einsum('ldpru,uu->ldpru',peps2,1./vert_lambdas[row+1])
 
     # Put them back in the list
     peps_col[row] = peps1
@@ -76,6 +79,9 @@ def tebd_step_single_col(peps_col,vert_lambdas,left_lambdas,right_lambdas,step_s
     E = zeros(len(ham),dtype=peps_col[0].dtype)
     for row in range(len(ham)):
 
+        # Get symmetries for reference
+        sym1,sym2 = peps_col[row].get_signs(), peps_col[row+1].get_signs()
+
         # Absorb Lambdas into Gamma tensors
         peps1,peps2 = absorb_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas)
 
@@ -83,21 +89,13 @@ def tebd_step_single_col(peps_col,vert_lambdas,left_lambdas,right_lambdas,step_s
         eH = exp_gate(ham[row],-step_size)
 
         # Apply Time Evolution
-        if DEBUG:
-            comparison = einsum('ldpru,LuPRU->ldprLPRU',peps1,peps2)
         tmp = einsum('ldpru,LuPRU->ldprLPRU',peps1,peps2)
         result = einsum('ldprLPRU,pPqQ->ldqrLQRU',tmp,eH)
-        #result = einsum('ldpru,LuPRU,pPqQ->ldqrLQRU',peps1,peps2,eH)
-        if DEBUG:
-            print(summ(abss(comparison-result)))
 
         # Perform SVD
         D = peps1.shape[4]
         peps1,Lambda,peps2 = separate_sites(result,D)
-        if DEBUG:
-            comparison2 = einsum('ldpru,LuPRU,u->ldprLPRU',peps1,peps2,Lambda)
-            print(summ(abss(comparison2-result)))
-        
+
         # Put result back into vectors
         vert_lambdas[row] = Lambda
         peps_col[row]   = peps1
@@ -106,11 +104,9 @@ def tebd_step_single_col(peps_col,vert_lambdas,left_lambdas,right_lambdas,step_s
         # Remove Lambdas
         peps_col = remove_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas)
 
-
-        peps1,peps2 = absorb_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas)
-        if DEBUG:
-            comparison = einsum('ldpru,LuPRU->ldprLPRU',peps1,peps2)
-            print(summ(abss(comparison-result)))
+        # Update symmetries
+        peps_col[row].update_signs(sym1)
+        peps_col[row+1].update_signs(sym2)
 
     # Return the result
     return peps_col,vert_lambdas

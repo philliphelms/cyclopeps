@@ -873,7 +873,7 @@ def multiply_peps_elements(peps,const):
             peps[xind][yind] *= const
     return peps
 
-def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=1.0,
+def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
                     down=0.0,singleLayer=True):
     """
     Normalize the full PEPS by doing a binary search on the
@@ -1876,7 +1876,7 @@ class PEPS:
                  chi=None,Zn=None,canonical=False,backend='numpy',
                  singleLayer=True,dtype=float_,
                  normalize=True,norm_tol=20.,
-                 max_norm_iter=100,norm_bs_upper=1.0,norm_bs_lower=0.0):
+                 max_norm_iter=100,norm_bs_upper=10.0,norm_bs_lower=0.0):
         """
         Create a random PEPS object
 

@@ -48,8 +48,26 @@ def exp_gate_sym(h,a=1.):
     Take the exponential of a local two site gate
     for a gate that is a symtensor
     """
-    h = h.copy()
-    raise NotImplementedError()
+    # Get correct library
+    lib = h.backend
+    # Create tensors to save results
+    eh = h.copy()
+    res = h.copy().ten.make_sparse()
+    d = res.shape[0]
+    # Reshape into a matrix for exponentiation
+    res = lib.reshape(res,(d**2,d**2))
+    # Take exponential of matrix
+    res *= a
+    res = lib.expm(res)
+    # Reshape back into a two-site gate
+    res = lib.reshape(res,(d,d,d,d,1,1,1,1))
+    # Put back into a symtensor
+    delta = h.ten.get_irrep_map()
+    res = lib.einsum('ABCDabcd,ABCD->ABCabcd',res,delta)
+    eh.ten.array = res
+    # Check that we haven't messed up the symmetry
+    eh.ten.enforce_sym()
+    return eh
 
 def exp_gate(h,a=1.):
     """
