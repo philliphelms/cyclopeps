@@ -24,7 +24,7 @@ import copy
 FLIP = {'+':'-','-':'+'}
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-# PEPS ENVIRONMENT FUNCTIONS 
+# PEPS ENVIRONMENT FUNCTIONS
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 def copy_tensor_list(ten_list):
     """
@@ -317,7 +317,7 @@ def left_bmpo_sl(bra, bound_mpo, chi=4,truncate=True,ket=None):
     # Find size of peps column and dims of tensors
     Ny = len(bra)
     _,_,d,D,_ = bra[0].shape
-    
+
     # Copy the ket column if needed
     bra = copy_tensor_list(bra)
     if ket is None:
@@ -335,7 +335,7 @@ def left_update_sl(peps_col, bound_mpo, chi=4,truncate=True,ket=None):
     """
     Update the boundary mpo, from the left, moving right, using single layer
 
-    Args: 
+    Args:
         peps_col : list
             A list containing the tensors for a single peps column
         bound_mpo : list
@@ -371,7 +371,7 @@ def update_left_bound_mpo(peps_col, bound_mpo, chi=4, singleLayer=True,truncate=
     """
     Update the boundary mpo, from the left, moving right
 
-    Args: 
+    Args:
         peps_col : list
             A list containing the tensors for a single peps column
         bound_mpo : list
@@ -425,7 +425,7 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all
 
     returns:
         bound_mpo : list
-            An mpo stored as a list, corresponding to the 
+            An mpo stored as a list, corresponding to the
             resulting boundary mpo.
 
     """
@@ -438,7 +438,7 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all
     bound_mpo = [None]*(col-1)
     for colind in range(col-1):
         mpiprint(4,'Updating left boundary mpo')
-        if ket is not None: 
+        if ket is not None:
             ket_col = ket[colind][:]
         else: ket_col = None
         if colind == 0:
@@ -479,7 +479,7 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
 
     returns:
         bound_mpo : list
-            An mpo stored as a list, corresponding to the 
+            An mpo stored as a list, corresponding to the
             resulting boundary mpo.
 
     """
@@ -491,7 +491,7 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
 
     # Flip the peps
     peps = flip_peps(peps)
-    if ket is not None: 
+    if ket is not None:
         ket = flip_peps(ket)
     col = Nx-col
 
@@ -499,7 +499,7 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
     bound_mpo = [None]*(col-1)
     for colind in range(col-1):
         mpiprint(4,'Updating boundary mpo')
-        if ket is not None: 
+        if ket is not None:
             ket_col = ket[colind][:]
         else: ket_col = None
         if colind == 0:
@@ -509,9 +509,9 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
 
     # Unflip the peps
     peps = flip_peps(peps)
-    if ket is not None: 
+    if ket is not None:
         ket = flip_peps(ket)
-    
+
     # Return results
     if return_all:
         return bound_mpo[::-1]
@@ -650,10 +650,10 @@ def flip_lambda(Lambda):
     Flip the lambda tensors (part of the canonical peps) horizontally
 
     Args:
-        Lambda : 
+        Lambda :
 
     Returns:
-        Lambda : 
+        Lambda :
             The horizontally flipped version of the lambda
             tensor. This is flipped such that ...
     """
@@ -828,8 +828,7 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,backend='numpy',dtype=float_):
     # Create the random tensor
     dims = (Dl,Dd,d,Dr,Du)
     ten = rand(dims,sym,backend=backend,dtype=dtype)
-    # NOTE - Could need to replace this
-    #ten = 0.95*ones(dims,dtype=dtype)+0.1*rand(dims,dtype=dtype)
+    #ten = 0.95*ones(dims,sym,backend=backend,dtype=dtype) + 0.1*rand(dims,sym,backend=backend,dtype=dtype)
     
     # Return result
     return ten
@@ -864,6 +863,15 @@ def normalize_peps_col(peps_col):
 def multiply_peps_elements(peps,const):
     """
     Multiply all elements in a peps by a constant
+
+    Args:
+        peps : A PEPS object or a list of lists containing the peps tensors
+
+        const : float
+            The constant with which to multiply each peps tensor
+
+    Returns:
+        peps : a PEPS object, or list of lists, depending on input
     """
 
     Nx = len(peps)
@@ -882,7 +890,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
     with norm equal to 1.0.
 
     Args:
-        peps : List
+        peps : A PEPS object
             The PEPS to be normalized, given as a PEPS object
 
     Kwargs:
@@ -915,8 +923,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
             The approximate norm of the PEPS after the normalization
             procedure
         peps : list
-            The normalized version of the PEPS, stored as a
-            list of lists
+            The normalized version of the PEPS, given as a PEPS object
 
     """
 
@@ -925,10 +932,32 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
     Ny = peps.Ny
     be = peps[0][0].backend
 
-    pwr = -1.0 / (2*Nx*Ny) # NOTE: if trying to use this procedure to 
+    pwr = -1.0 / (2*Nx*Ny) # NOTE: if trying to use this procedure to
                            # normalize a partition function, remove
                            # the factor of 2 in this denominator
     mpiprint(4, '\n[binarySearch] shape=({},{}), chi={}'.format(Nx,Ny,chi))
+
+    # Check if state is already easily normalized
+    try:
+        init_norm = calc_peps_norm(peps,chi=chi,singleLayer=singleLayer)
+    except:
+        init_norm = None
+    if not (init_norm < 10.**(-1*norm_tol) or init_norm > 10.**(norm_tol)) or (init_norm is None):
+        if init_norm is not None:
+            sfac = init_norm**pwr
+            peps_try = multiply_peps_elements(peps.copy(),sfac)
+            z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer)
+        else:
+            try:
+                sfac = 1e-3
+                peps_try = multiply_peps_elements(peps.copy(),sfac)
+                z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer)
+            except:
+                sfac = 1e3
+                peps_try = multiply_peps_elements(peps.copy(),sfac)
+                z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer)
+        if abs(z-1.) < 1e-6: 
+            return z, peps_try
 
     # get initial scale factor
     scale = (up+down)/2.0
@@ -943,6 +972,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
             z = None
             z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer)
         except:
+            print('Failed to calculate peps norm')
             pass
         mpiprint(2, 'step={}, (down,up)=({},{}), scale={}, norm={}'.format(
                                                         istep,down,up,scale,z))
@@ -976,14 +1006,13 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
 
     return z, peps_try
 
-def calc_peps_norm(peps,chi=4,singleLayer=True):
+def calc_peps_norm(peps,chi=4,singleLayer=True,ket=None):
     """
     Calculate the norm of the PEPS
 
     Args:
-        peps : List
-            A list of a list of tensors, corresponding to
-            the PEPS for which we will compute the norm
+        peps : A PEPS object
+            The PEPS for which we will compute the norm
 
     Kwargs:
         chi : int
@@ -996,20 +1025,27 @@ def calc_peps_norm(peps,chi=4,singleLayer=True):
         norm : float
             The (approximate) norm of the PEPS
     """
-    # TODO Add - separate bra and ket
     # Absorb Lambda tensors if needed
     if peps.ltensors is not None:
-        peps = peps_absorb_lambdas(peps.tensors,peps.ltensors,mk_copy=True)
+        peps = peps.copy()
+        peps.absorb_lambdas()
+    else:
+        peps = peps.copy()
+    if ket is not None and ket.ltensors is not None:
+        ket = ket.copy()
+        ket.absorb_lambdas()
+    elif ket is not None:
+        ket = ket.copy()
 
     # Get PEPS Dims
     Nx = len(peps)
     Ny = len(peps[0])
 
     # Get the boundary MPO from the left (for the furthest right column)
-    left_bound_mpo  = calc_left_bound_mpo(peps,Nx,chi=chi,singleLayer=singleLayer)
+    left_bound_mpo  = calc_left_bound_mpo(peps,Nx,chi=chi,singleLayer=singleLayer,ket=ket)
 
     # Get the boundary MPO from the right (for the furthest right column)
-    right_bound_mpo = calc_right_bound_mpo(peps,Nx-2,chi=chi,singleLayer=singleLayer)
+    right_bound_mpo = calc_right_bound_mpo(peps,Nx-2,chi=chi,singleLayer=singleLayer,ket=ket)
 
     # Contract the two MPOs
     norm = left_bound_mpo.contract(right_bound_mpo)
@@ -1288,7 +1324,6 @@ def calc_bot_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
         ket_col = [None]*len(bra_col)
         for i in range(len(ket_col)):
             ket_col[i] = bra_col[i].copy()
-    # TODO - Conjugate this ket col?
 
     # Compute the bottom environment
     bot_env = [None]*Ny
@@ -1618,7 +1653,7 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
         return_sum : bool
             Whether to return the summation of all energies or
             a 2D array showing the energy contribution from each bond.
-        ket : PEPS Object
+        ket : A list of lists of ket tensors
             A second peps, to use as the ket, in the operator contraction
 
     Returns:
@@ -1642,7 +1677,7 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
     # Loop through all columns
     E = peps.backend.zeros((len(ops),len(ops[0])),dtype=peps[0][0].dtype)
     for col in range(Nx):
-        if ket is None: 
+        if ket is None:
             ket_col = None
         else: ket_col = ket[col]
         if col == 0:
@@ -1688,9 +1723,13 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
     if peps.ltensors is not None:
         peps = peps.copy()
         peps.absorb_lambdas()
+    else:
+        peps = peps.copy()
     if ket is not None and ket.ltensors is not None:
         ket = ket.copy()
         ket.absorb_lambdas()
+    elif ket is not None:
+        ket = ket.copy()
 
     # Calculate contribution from interactions between columns
     col_energy = calc_all_column_op(peps,ops[0],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
@@ -1712,7 +1751,7 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
 
 def increase_peps_mbd_lambda(Lambda,Dnew,noise=0.01):
     """
-    Increase the bond dimension of lambda tensors in a 
+    Increase the bond dimension of lambda tensors in a
     canonical peps
 
     Args:
@@ -1725,7 +1764,7 @@ def increase_peps_mbd_lambda(Lambda,Dnew,noise=0.01):
         noise : float
             The maximum magnitude of random noise to be incorporated
             in increasing the bond dimension
-    
+
     Returns:
         Lambda : 3D array
             Lists of lambda tensors with increased bond dimensions
@@ -1750,7 +1789,7 @@ def increase_peps_mbd_lambda(Lambda,Dnew,noise=0.01):
 
         # Return result
         return Lambda
-    else: 
+    else:
         return None
 
 def increase_peps_mbd(peps,Dnew,noise=1e-10):
@@ -1767,7 +1806,7 @@ def increase_peps_mbd(peps,Dnew,noise=1e-10):
         noise : float
             The maximum magnitude of random noise to be incorporated
             in increasing the bond dimension
-    
+
     Returns:
         peps : 2D Array
             The new peps tensors with increased bond dimensions
@@ -1776,7 +1815,7 @@ def increase_peps_mbd(peps,Dnew,noise=1e-10):
     Nx = len(peps)
     Ny = len(peps[0])
     Dold = peps[0][0].shape[3]
-    
+
     for col in range(Nx):
         for row in range(Ny):
             # Determine tensor shape
@@ -1789,8 +1828,8 @@ def increase_peps_mbd(peps,Dnew,noise=1e-10):
                 new_shape[1] = Dnew
             if row != Nx-1:
                 new_shape[3] = Dnew
-            if col != Ny-1:
-                new_shape[4] = Dnew
+                if col != Ny-1:
+                    new_shape[4] = Dnew
             # Create an empty tensor
             ten = zeros(new_shape,dtype=peps[row][col].dtype)
             ten[:old_shape[0],:old_shape[1],:old_shape[2],:old_shape[3],:old_shape[4]] = peps[row][col].copy()
@@ -1807,15 +1846,30 @@ def copy_peps_tensors(peps):
     """
     Create a copy of the PEPS tensors
     """
-    copy = []
+    cp = []
     for x in range(len(peps)):
         tmp = []
         for y in range(len(peps[0])):
             tmp += [peps[x][y].copy()]
-        copy += [tmp]
-    return copy
+        cp += [tmp]
+    return cp
 
-def peps_absorb_lambdas(Gamma,Lambda,mk_copy=False):
+def copy_lambda_tensors(peps):
+    """
+    Create a copy of the PEPS tensors
+    """
+    cp = []
+    for x in range(len(peps.ltensors)):
+        tmp = []
+        for y in range(len(peps.ltensors[x])):
+            tmp2 = []
+            for z in range(len(peps.ltensors[x][y])):
+                tmp2 += [peps.ltensors[x][y][z].copy()]
+            tmp += [tmp2]
+        cp += [tmp]
+    return cp
+
+def peps_absorb_lambdas(Gamma,Lambda,mk_copy=True):
     """
     Absorb the lambda tensors into the gamma tensors,
     transforming the peps representations from the canonical
@@ -1826,8 +1880,8 @@ def peps_absorb_lambdas(Gamma,Lambda,mk_copy=False):
             A list of a list of the peps gamma tensors
         Lambda : list of lists of lists
             The lambda tensors (singular value vectors)
-            with Lambda[0] being the lambda vecs on the vertical bonds and 
-            Lambda[1] being the lambda vecs on the horizontal bonds. 
+            with Lambda[0] being the lambda vecs on the vertical bonds and
+            Lambda[1] being the lambda vecs on the horizontal bonds.
 
     Returns:
         peps : list of lists
@@ -1846,23 +1900,75 @@ def peps_absorb_lambdas(Gamma,Lambda,mk_copy=False):
         # loop through all sites, absorbing the "singular values"
         for x in range(Nx):
             for y in range(Ny):
+                # Absorb lambdas that are to the right and above (not symmetric
+                # but better for precision)
                 initsgn = Gamma[x][y].get_signs()
-                # Absorb left lambda
-                if x is not 0:
-                    Gamma[x][y] = einsum('ldpru,lL->Ldpru',Gamma[x][y],Lambda[1][x-1][y].sqrt())
-                # Absorb down lambda
-                if y is not 0:
-                    Gamma[x][y] = einsum('ldpru,dD->lDpru',Gamma[x][y],Lambda[0][x][y-1].sqrt())
-                # Absorb right lambda
-                if x is not (Nx-1):
-                    Gamma[x][y] = einsum('ldpru,rR->ldpRu',Gamma[x][y],Lambda[1][x][y].sqrt())
-                # Absorb up lambda
-                if y is not (Ny-1):
-                    Gamma[x][y] = einsum('ldpru,uU->ldprU',Gamma[x][y],Lambda[0][x][y].sqrt())
+                if x is not Nx-1:
+                    Gamma[x][y] = einsum('ldpru,rr->ldpru',Gamma[x][y],Lambda[1][x][y])
+                if y is not Ny-1:
+                    Gamma[x][y] = einsum('ldpru,uu->ldpru',Gamma[x][y],Lambda[0][x][y])
                 Gamma[x][y].update_signs(initsgn)
-
     # Return results
     return Gamma
+
+def load_peps(fname):
+    """
+    Load a saved PEPS into a new PEPS object
+
+    Args:
+        fname : str
+            The file which holds the saved PEPS object
+
+    Returns:
+        peps : PEPS object
+            A peps object with the saved PEPS loaded
+    """
+    # Open File
+    f = open_file(fname,'r')
+
+    # Get PEPS info
+    Nx = get_dataset('Nx')
+    Ny = get_dataset('Ny')
+    shape = get_dataset('shape')
+    d = get_dataset('d')
+    D = get_dataset('D')
+    chi = get_dataset('chi')
+    norm_tol = get_dataset('norm_tol')
+    canonical = get_dataset('canonical')
+    singleLayer = get_dataset('singleLayer')
+    max_norm_iter = get_dataset('max_norm_iter')
+    norm_BS_upper = get_dataset('norm_BS_upper')
+    norm_BS_lower = get_dataset('norm_BS_lower')
+    norm_BS_print = get_dataset('norm_BS_print')
+    dtype = get_dataset('tensor_0_0').dtype
+    fname = get_dataset('fname')
+    fdir = get_dataset('fdir')
+
+    # Create new PEPS object
+    peps = PEPS(Nx=Nx,Ny=Ny,d=d,D=D,
+                chi=chi,norm_tol=norm_tol,
+                canonical=canonical,
+                singleLayer=singleLayer,
+                max_norm_iter=max_norm_iter,
+                norm_BS_upper=norm_BS_upper,
+                norm_BS_lower=norm_BS_lower,
+                dtype=dtype,normalize=False,
+                fdir=fdir,fname=fname+'_loaded')
+
+    # Load PEPS Tensors
+    for i in range(Nx):
+        for j in range(Ny):
+            peps.tensors[i][j] = get_dataset('tensor_{}_{}'.format(i,j))
+
+    # Load lambda tensors (if there)
+    if canonical:
+        for ind in range(len(self.ltensors)):
+            for x in range(len(self.ltensors[ind])):
+                for y in range(len(self.ltensors[ind][x])):
+                    peps.ltensors[ind][x][y] = get_dataset('ltensor_{}_{}_{}'.format(ind,x,y))
+
+    # Return resulting PEPS
+    return peps
 
 # -----------------------------------------------------------------
 # PEPS Class
@@ -1876,7 +1982,8 @@ class PEPS:
                  chi=None,Zn=None,canonical=False,backend='numpy',
                  singleLayer=True,dtype=float_,
                  normalize=True,norm_tol=20.,
-                 max_norm_iter=100,norm_bs_upper=10.0,norm_bs_lower=0.0):
+                 max_norm_iter=100,norm_bs_upper=10.0,norm_bs_lower=0.0,
+                 fname=None,fdir='./'):
         """
         Create a random PEPS object
 
@@ -1928,6 +2035,19 @@ class PEPS:
             norm_bs_lower : float
                 The lower bound for the binary search factor
                 during normalization.
+            norm_BS_print : boolean
+                Controls output of binary search normalization
+                procedure.
+            dtype : dtype
+                The data type for the PEPS
+            normalize : bool
+                Whether the initial random peps should be normalized
+            fname : str
+                Where the PEPS will be saved as an .npz file, if None,
+                then the default is 'peps_Nx{}_Ny{}_D{}'
+            fdir : str
+                The directory where the PEPS will be saved, default is
+                current working directory
 
         Returns:
             PEPS : PEPS Object
@@ -1952,6 +2072,11 @@ class PEPS:
         self.max_norm_iter = max_norm_iter
         self.norm_bs_upper = norm_bs_upper
         self.norm_bs_lower = norm_bs_lower
+        if fname is None:
+            self.fname = 'peps_Nx{}_Ny{}_D{}'.format(Nx,Ny,D)
+        else:
+            self.fname = fname
+        self.fdir          = fdir
 
         # Make a random PEPS
         self.tensors = make_rand_peps(self.Nx,
@@ -1977,7 +2102,7 @@ class PEPS:
         if normalize:
             self.normalize()
 
-    def calc_bmpo_left(self,col,chi=4,singleLayer=True,truncate=True,return_all=False):
+    def calc_bmpo_left(self,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None):
         """
         Calculate the left boundary MPO
 
@@ -1999,6 +2124,8 @@ class PEPS:
             return_all : bool
                 Whether to return a list of boundary mpos upto col or just
                 return the boundary mpo for col.
+            ket : List
+                A list of lists containing the ket's peps tensors
 
         returns:
             bound_mpo : list
@@ -2009,9 +2136,9 @@ class PEPS:
             chi = self.chi
         if singleLayer is None:
             singleLayer = self.singleLayer
-        return calc_left_bound_mpo(self,col,chi=chi,singleLayer=singleLayer,truncate=truncate,return_all=return_all)
+        return calc_left_bound_mpo(self,col,chi=chi,singleLayer=singleLayer,truncate=truncate,return_all=return_all,ket=ket)
 
-    def calc_bmpo_right(self,col,chi=None,singleLayer=None,truncate=True,return_all=False):
+    def calc_bmpo_right(self,col,chi=None,singleLayer=None,truncate=True,return_all=False,ket=None):
         """
         Calculate the right boundary MPO
 
@@ -2033,6 +2160,8 @@ class PEPS:
             return_all : bool
                 Whether to return a list of boundary mpos upto col or just
                 return the boundary mpo for col.
+            ket : List
+                A list of lists containing the ket's peps tensors
 
         returns:
             bound_mpo : list
@@ -2044,9 +2173,9 @@ class PEPS:
             chi = self.chi
         if singleLayer is None:
             singleLayer = self.singleLayer
-        return calc_right_bound_mpo(self,col,chi=chi,singleLayer=singleLayer,truncate=truncate,return_all=return_all)
+        return calc_right_bound_mpo(self,col,chi=chi,singleLayer=singleLayer,truncate=truncate,return_all=return_all,ket=ket)
 
-    def calc_norm(self,chi=None,singleLayer=None):
+    def calc_norm(self,chi=None,singleLayer=None,ket=None):
         """
         Calculate the norm of the PEPS
 
@@ -2059,6 +2188,8 @@ class PEPS:
             single_layer : bool
                 Indicates whether to use a single layer environment
                 (currently it is the only option...)
+            ket : PEPS Object
+                A peps containing the ket's peps tensors
 
         Returns:
             norm : float
@@ -2066,7 +2197,7 @@ class PEPS:
         """
         if chi is None: chi = self.chi
         if singleLayer is None: singleLayer = self.singleLayer
-        return calc_peps_norm(self,chi=chi,singleLayer=singleLayer)
+        return calc_peps_norm(self,chi=chi,singleLayer=singleLayer,ket=ket)
 
     def normalize(self,max_iter=None,norm_tol=None,chi=None,up=None,down=None,
                     singleLayer=None):
@@ -2115,13 +2246,16 @@ class PEPS:
         if down is None: down = self.norm_bs_lower
         if singleLayer is None: singleLayer = self.singleLayer
         # Run the normalization procedure
-        norm, self.tensors = normalize_peps(self,
+        norm, normpeps = normalize_peps(self,
                                       max_iter = max_iter,
                                       norm_tol = norm_tol,
                                       chi = chi,
                                       up = up,
                                       down = down,
                                       singleLayer=singleLayer)
+        # Copy the resulting tensors
+        self.tensors = copy_peps_tensors(normpeps)
+        self.ltensors = copy_lambda_tensors(normpeps)
 
         return norm
 
@@ -2184,6 +2318,7 @@ class PEPS:
         """
         self.tensors = peps_absorb_lambdas(self.tensors,self.ltensors)
         self.ltensors = None
+        self.canonical = False
 
     def __len__(self):
         return self.Nx
@@ -2205,7 +2340,8 @@ class PEPS:
                          max_norm_iter=self.max_norm_iter,
                          norm_bs_upper=self.norm_bs_upper,
                          norm_bs_lower=self.norm_bs_lower,
-                         dtype=self.dtype,normalize=False)
+                         dtype=self.dtype,normalize=False,
+                         fdir=self.fdir,fname=self.fname+'_cp')
 
         # Copy peps tensors
         for i in range(self.Nx):
@@ -2218,6 +2354,7 @@ class PEPS:
                 for x in range(len(self.ltensors[ind])):
                     for y in range(len(self.ltensors[ind][x])):
                         peps_copy.ltensors[ind][x][y] = self.ltensors[ind][x][y].copy()
+
 
         # Return result
         return peps_copy
@@ -2278,3 +2415,39 @@ class PEPS:
                 # Get a sparse version of the tensors
                 speps[x][y] = self.tensors[x][y].copy().make_sparse()
         return speps
+
+    def save(self):
+        """
+        Save the PEPS tensors
+        """
+        # Create file
+        f = open_file(self.fdir+self.fname,'w')
+        # Add PEPS Info
+        create_dataset(f,'Nx',self.Nx)
+        create_dataset(f,'Ny',self.Ny)
+        create_dataset(f,'shape',self.shape)
+        create_dataset(f,'d',self.d)
+        create_dataset(f,'D',self.D)
+        create_dataset(f,'chi',self.chi)
+        create_dataset(f,'norm_tol',self.norm_tol)
+        create_dataset(f,'canonical',self.canonical)
+        create_dataset(f,'singleLayer',self.singleLayer)
+        create_dataset(f,'max_norm_iter',self.max_norm_iter)
+        create_dataset(f,'norm_BS_upper',self.norm_BS_upper)
+        create_dataset(f,'norm_BS_lower',self.norm_BS_lower)
+        create_dataset(f,'norm_BS_print',self.norm_BS_print)
+        #create_dataset(f,'dtype',self.dtype) # NOTE - Not able to save dtype...
+        create_dataset(f,'fname',self.fname)
+        create_dataset(f,'fdir',self.fdir)
+        # Add PEPS Tensors
+        for i in range(len(self.tensors)):
+            for j in range(len(self.tensors[i])):
+                create_dataset(f,'tensor_{}_{}'.format(i,j),self.tensors[i][j])
+        # Add Lambda Tensors (if Canonical)
+        if self.ltensors is not None:
+            for ind in range(len(self.ltensors)):
+                for x in range(len(self.ltensors[ind])):
+                    for y in range(len(self.ltensors[ind][x])):
+                        create_dataset(f,'ltensor_{}_{}_{}'.format(ind,x,y),self.ltensors[ind][x][y])
+        # Close file
+        close_file(f)

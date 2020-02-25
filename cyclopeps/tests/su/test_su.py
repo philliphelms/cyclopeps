@@ -1,6 +1,9 @@
 import unittest
 from cyclopeps.tools.utils import *
 import copy
+from cyclopeps.tools.peps_tools import PEPS
+from cyclopeps.ops.heis import return_op
+from cyclopeps.algs.simple_update import *
 
 class test_cal_energy(unittest.TestCase):
 
@@ -10,8 +13,8 @@ class test_cal_energy(unittest.TestCase):
         from cyclopeps.algs.simple_update import run_tebd,tebd_step
         mpiprint(0,'\n'+'='*50+'\nSU 2x2 Heisenberg test\n'+'-'*50)
         # Create PEPS
-        Nx = 2
-        Ny = 2
+        Nx = 10
+        Ny = 10
         d = 2
         D = 2
         chi = 10

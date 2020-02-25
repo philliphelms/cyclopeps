@@ -902,9 +902,15 @@ class GEN_TEN:
 
     def __div__(self,x):
         return self._as_new_tensor((1./x)*self.ten)
-
+    
     def __rdiv__(self,x):
-        return self/x
+        newten = self._as_new_tensor(self.ten)
+        if isinstance(x,float):
+            if newten.sym is None:
+                newten.ten = 1./newten.ten
+            else:
+                newten.ten.array = 1./newten.ten.array
+        return newten
 
     def __add__(self,x):
         if isinstance(x,GEN_TEN):

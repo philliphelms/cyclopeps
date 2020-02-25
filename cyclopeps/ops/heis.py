@@ -1,5 +1,5 @@
 """
-Operators for the Heisenberg Model
+Operators for the quantum Heisenberg Model
 """
 from cyclopeps.tools.utils import *
 from cyclopeps.tools.ops_tools import *
@@ -15,11 +15,6 @@ def return_op(Nx,Ny,sym=None,backend='numpy'):
             Lattice size in the x direction
         Ny : int
             Lattixe size in the y direction
-        params : 1D Array
-            The parameters for the hamiltonian.
-            Here,
-                params[0] = spin-spin interaction
-                params[1] = Magnetic Field
 
     Returns:
         op
