@@ -6,6 +6,9 @@ from numpy import float_
 def absorb_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas):
     """
     """
+    _peps1 = peps_col[row].copy().make_sparse()
+    _peps2 = peps_col[row+1].copy().make_sparse()
+    # Do Dense version ----------------------------------------------------------------
     peps1 = peps_col[row].copy()
     peps2 = peps_col[row+1].copy()
     # Absorb Bottom lambda
@@ -24,6 +27,26 @@ def absorb_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas):
         peps2 = einsum('ldpru,uU->ldprU',peps2,vert_lambdas[row+1])
     # Absorb middle lambda
     peps1 = einsum('ldpru,uU->ldprU',peps1,vert_lambdas[row])
+    # Do Sparse version ----------------------------------------------------------------
+    # Absorb Bottom lambda
+    if not (row == 0):
+        _peps1 = einsum('ldpru,dD->lDpru',_peps1,vert_lambdas[row-1].make_sparse())
+    # Absorb left lambdas
+    if left_lambdas is not None:
+        _peps1 = einsum('ldpru,lL->Ldpru',_peps1,left_lambdas[row].make_sparse())
+        _peps2 = einsum('ldpru,lL->Ldpru',_peps2,left_lambdas[row+1].make_sparse())
+    # Absorb right lambdas
+    if right_lambdas is not None:
+        _peps1 = einsum('ldpru,rR->ldpRu',_peps1,right_lambdas[row].make_sparse())
+        _peps2 = einsum('ldpru,rR->ldpRu',_peps2,right_lambdas[row+1].make_sparse())
+    # Absorb Top lambda
+    if not (row == len(peps_col)-2):
+        _peps2 = einsum('ldpru,uU->ldprU',_peps2,vert_lambdas[row+1].make_sparse())
+    # Absorb middle lambda
+    _peps1 = einsum('ldpru,uU->ldprU',_peps1,vert_lambdas[row].make_sparse())
+    # Compare results -------------------------------------------------------------------
+    #print('PEPS 1 diff (absorb): {}'.format((_peps1-peps1.make_sparse()).abs().sum()))
+    #print('PEPS 2 diff (absorb): {}'.format((_peps2-peps2.make_sparse()).abs().sum()))
     return peps1,peps2
 
 def separate_sites(combined_sites,D):
@@ -43,27 +66,49 @@ def separate_sites(combined_sites,D):
 def remove_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas):
     """
     """
+    _peps1 = peps_col[row].copy().make_sparse()
+    _peps2 = peps_col[row+1].copy().make_sparse()
+    # Compare invert_diag results
+    v1 = vert_lambdas[row-1].copy().invert_diag().make_sparse()
+    v2 = vert_lambdas[row-1].copy().make_sparse().invert_diag()
+    # Do Dense version ----------------------------------------------------------------
     peps1 = peps_col[row].copy()
     peps2 = peps_col[row+1].copy()
     # Absorb Bottom lambda
     if not (row == 0):
-        peps1 = einsum('ldpru,dd->ldpru',peps1,1./vert_lambdas[row-1])
+        peps1 = einsum('ldpru,dD->lDpru',peps1,vert_lambdas[row-1].invert_diag())
     # Absorb left lambdas
     if left_lambdas is not None:
-        _peps1 = peps1.copy()
-        peps1 = einsum('ldpru,ll->ldpru',peps1,1./left_lambdas[row])
-        peps2 = einsum('ldpru,ll->ldpru',peps2,1./left_lambdas[row+1])
+        peps1 = einsum('ldpru,lL->Ldpru',peps1,left_lambdas[row].invert_diag())
+        peps2 = einsum('ldpru,lL->Ldpru',peps2,left_lambdas[row+1].invert_diag())
     # Absorb right lambdas
     if right_lambdas is not None:
-        peps1 = einsum('ldpru,rr->ldpru',peps1,1./right_lambdas[row])
-        peps2 = einsum('ldpru,rr->ldpru',peps2,1./right_lambdas[row+1])
+        peps1 = einsum('ldpru,rR->ldpRu',peps1,right_lambdas[row].invert_diag())
+        peps2 = einsum('ldpru,rR->ldpRu',peps2,right_lambdas[row+1].invert_diag())
     # Absorb Top lambda
     if not (row == len(peps_col)-2):
-        peps2 = einsum('ldpru,uu->ldpru',peps2,1./vert_lambdas[row+1])
+        peps2 = einsum('ldpru,uU->ldprU',peps2,vert_lambdas[row+1].invert_diag())
 
     # Put them back in the list
     peps_col[row] = peps1
     peps_col[row+1] = peps2
+    # Do Sparse version ----------------------------------------------------------------
+    # Absorb Bottom lambda
+    if not (row == 0):
+        _peps1 = einsum('ldpru,dD->lDpru',_peps1,vert_lambdas[row-1].make_sparse().invert_diag())
+    # Absorb left lambdas
+    if left_lambdas is not None:
+        _peps1 = einsum('ldpru,lL->Ldpru',_peps1,left_lambdas[row].make_sparse().invert_diag())
+        _peps2 = einsum('ldpru,lL->Ldpru',_peps2,left_lambdas[row+1].make_sparse().invert_diag())
+    # Absorb right lambdas
+    if right_lambdas is not None:
+        _peps1 = einsum('ldpru,rR->ldpRu',_peps1,right_lambdas[row].make_sparse().invert_diag())
+        _peps2 = einsum('ldpru,rR->ldpRu',_peps2,right_lambdas[row+1].make_sparse().invert_diag())
+    # Absorb Top lambda
+    if not (row == len(peps_col)-2):
+        _peps2 = einsum('ldpru,uU->ldprU',_peps2,vert_lambdas[row+1].make_sparse().invert_diag())
+    #print('PEPS 1 diff (remove): {}'.format((_peps1-peps1.make_sparse()).abs().sum()))
+    #print('PEPS 2 diff (remove): {}'.format((_peps2-peps2.make_sparse()).abs().sum()))
 
     # Return result
     return peps_col
@@ -93,11 +138,14 @@ def tebd_step_single_col(peps_col,vert_lambdas,left_lambdas,right_lambdas,step_s
         # Perform SVD
         D = peps1.shape[4]
         peps1,Lambda,peps2 = separate_sites(result,D)
+        comparison_ten = einsum('ldpru,LuPRU->ldprLPRU',einsum('ldpru,uU->ldprU',peps1,Lambda),peps2).make_sparse()
 
         # Put result back into vectors
         vert_lambdas[row] = Lambda
         peps_col[row]   = peps1
         peps_col[row+1] = peps2
+        comparison2_ten = einsum('ldpru,LuPRU->ldprLPRU',einsum('ldpru,uU->ldprU',peps_col[row],vert_lambdas[row]),peps_col[row+1]).make_sparse()
+        #print('diff1 = {}'.format((comparison_ten-comparison2_ten).abs().sum()))
 
         # Remove Lambdas
         peps_col = remove_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas)
@@ -105,6 +153,11 @@ def tebd_step_single_col(peps_col,vert_lambdas,left_lambdas,right_lambdas,step_s
         # Update symmetries
         peps_col[row].update_signs(sym1)
         peps_col[row+1].update_signs(sym2)
+
+        # A final check
+        peps1,peps2 = absorb_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas)
+        comparison3_ten = einsum('ldpru,LuPRU->ldprLPRU',peps1,peps2).make_sparse()
+        #print('diff2 = {}'.format((comparison_ten-comparison3_ten).abs().sum()))
 
     # Return the result
     return peps_col,vert_lambdas

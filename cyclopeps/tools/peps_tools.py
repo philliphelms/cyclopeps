@@ -1904,9 +1904,9 @@ def peps_absorb_lambdas(Gamma,Lambda,mk_copy=True):
                 # but better for precision)
                 initsgn = Gamma[x][y].get_signs()
                 if x is not Nx-1:
-                    Gamma[x][y] = einsum('ldpru,rr->ldpru',Gamma[x][y],Lambda[1][x][y])
+                    Gamma[x][y] = einsum('ldpru,rR->ldpRu',Gamma[x][y],Lambda[1][x][y])
                 if y is not Ny-1:
-                    Gamma[x][y] = einsum('ldpru,uu->ldpru',Gamma[x][y],Lambda[0][x][y])
+                    Gamma[x][y] = einsum('ldpru,uU->ldprU',Gamma[x][y],Lambda[0][x][y])
                 Gamma[x][y].update_signs(initsgn)
     # Return results
     return Gamma
@@ -2399,7 +2399,7 @@ class PEPS:
                      D             = self.D,
                      chi           = self.chi,
                      Zn            = None,
-                     canonical     = False,
+                     canonical     = self.canonical,
                      backend       = self.backend,
                      singleLayer   = self.singleLayer,
                      dtype         = self.dtype,
@@ -2414,6 +2414,13 @@ class PEPS:
             for y in range(speps.Ny):
                 # Get a sparse version of the tensors
                 speps[x][y] = self.tensors[x][y].copy().make_sparse()
+        # Do it for lambda tensors as well
+        if speps.canonical:
+            for x in range(len(speps.ltensors)):
+                for y in range(len(speps.ltensors[x])):
+                    for z in range(len(speps.ltensors[x][y])):
+                        speps.ltensors[x][y][z] = self.ltensors[x][y][z].copy().make_sparse()
+        # Return result
         return speps
 
     def save(self):

@@ -627,7 +627,7 @@ class GEN_TEN:
         return self._as_new_tensor(self.ten.copy())
 
     def _as_new_tensor(self,ten):
-        newten = GEN_TEN(ten=ten,
+        newten = GEN_TEN(ten=ten.copy(),
                          backend=self.backend,
                          legs=copy.deepcopy(self.legs))
         return newten
@@ -870,7 +870,11 @@ class GEN_TEN:
         return self._as_new_tensor(abs(self.ten))
 
     def sum(self):
-        return self.ten.sum()
+        if self.sym is None:
+            res = self.backend.einsum('abcdefghijklmnopqrstuvwxyz'[:len(self.ten.shape)]+'->',self.ten)
+        else:
+            res = self.backend.einsum('abcdefghijklmnopqrstuvwxyz'[:len(self.ten.array.shape)]+'->',self.ten.array)
+        return res
 
     def max(self):
         return self._as_new_tensor(self.ten.max())
@@ -906,6 +910,7 @@ class GEN_TEN:
     def __rdiv__(self,x):
         newten = self._as_new_tensor(self.ten)
         if isinstance(x,float):
+            # Divide tensor elements
             if newten.sym is None:
                 newten.ten = 1./newten.ten
             else:
@@ -929,3 +934,14 @@ class GEN_TEN:
             self.ten.array[key] = value
         else:
             self.ten[key] = value
+
+    def invert_diag(self):
+        newten = self._as_new_tensor(self.ten)
+        if newten.sym is None:
+            assert(len(self.ten.shape) == 2)
+            newten.ten = self.backend.diag(1./self.backend.diag(newten.ten))
+        else:
+            assert(len(self.ten.array.shape) == 3)
+            for i in range(self.ten.array.shape[0]):
+                newten.ten.array[i] = self.backend.diag(1./self.backend.diag(newten.ten.array[i]))
+        return newten
