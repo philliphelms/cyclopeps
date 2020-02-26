@@ -877,6 +877,9 @@ class GEN_TEN:
     def max(self):
         return self.ten.max()
 
+    def min(self):
+        return self.ten.min()
+
     def to_val(self):
         """
         Returns a single valued tensor's value
@@ -956,6 +959,16 @@ class GEN_TEN:
             inv = self.backend.inv(mat)
             newten.ten = self.backend.reshape(inv,(n1,n2,n3,n4))
         else:
-            raise NotImplementedError()
+            # Do the inversion with the full tensor
+            mat = self.ten.make_sparse()
+            (N1,N2,N3,N4,n1,n2,n3,n4) = mat.shape
+            mat = mat.transpose([0,4,1,5,2,6,3,7])
+            mat = mat.reshape((N1*n1*N2*n2,N3*n3*N4*n4))
+            inv = self.backend.inv(mat)
+            inv = inv.reshape((N1,n1,N2,n2,N3,n3,N4,n4))
+            inv = inv.transpose([0,2,4,6,1,3,5,7])
+            # Convert back into sparse tensor
+            delta = self.ten.get_irrep_map()
+            inv = self.backend.einsum('ABCDabcd,ABCD->ABCabcd',inv,delta)
+            newten.ten.array = inv
         return newten
-            

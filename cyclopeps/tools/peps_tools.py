@@ -104,7 +104,7 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
         if I.sym is not None:
             # If this assertion fails, the sign update must be rewritten
             assert(len(res.sym[0]) == 6)
-            I.update_signs(FLI[res.sym[0][3]]+FLIP[res.sym[0][4]]+FLIP[res.sym[0][5]]+\
+            I.update_signs(FLIP[res.sym[0][3]]+FLIP[res.sym[0][4]]+FLIP[res.sym[0][5]]+\
                            res.sym[0][4]+res.sym[0][3]+res.sym[0][5])
 
         # Merge inds to make it an MPO
@@ -1403,11 +1403,27 @@ def make_N_positive(N,hermitian=True,positive=True):
                 u,v = N.backend.eigh(Nmat)
                 u = pos_sqrt_vec(u)
                 Nmat = N.backend.einsum('ij,j,kj->ik',v,u,v)
-                Nmat = N.backend.reshape(Nmat,(n1,n2,n3,n4))
-                Nmat = N.backend.einsum('UDud->UuDd',Nmat)
+                Nmat = Nmat.reshape((n1,n2,n3,n4))
+                Nmat = Nmat.transpose([0,2,1,3])
                 N.ten = Nmat
             else:
-                print('Making Environment Positive not implemented for symmetric tensors')
+                N = N.copy().transpose([0,2,1,3])
+                # Make this a sparse tensor
+                Nmat = N.ten.make_sparse()
+                (N1,N2,N3,N4,n1,n2,n3,n4) = Nmat.shape
+                Nmat = Nmat.transpose([0,4,1,5,2,6,3,7])
+                Nmat = Nmat.reshape((N1*n1*N2*n2,N3*n3*N4*n4))
+                u,v = N.backend.eigh(Nmat)
+                u = pos_sqrt_vec(u)
+                Nmat = N.backend.einsum('ij,j,kj->ik',v,u,v)
+                Nmat = Nmat.reshape((N1,n1,N2,n2,N3,n3,N4,n4))
+                Nmat = Nmat.transpose([0,2,4,6,1,3,5,7])
+                # Cast back into a symtensor
+                delta = N.ten.get_irrep_map()
+                Nmat = N.backend.einsum('ABCDabcd,ABCD->ABCabcd',Nmat,delta)
+                N.ten.array = Nmat
+                # Retranspose
+                N = N.transpose([0,2,1,3])
         except Exception as e:
             mpiprint(0,'Failed to make N positive, eigenvalues did not converge')
 
