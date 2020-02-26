@@ -248,11 +248,15 @@ def run_tebd(Nx,Ny,d,ham,
              Zn=None,
              peps=None,
              backend='numpy',
-             D=3,chi=10,
-             norm_tol=20,singleLayer=True,
+             D=3,
+             chi=10,
+             norm_tol=20,
+             singleLayer=True,
              max_norm_iter=20,
              dtype=float_,
-             step_size=0.2,n_step=5,conv_tol=1e-8,
+             step_size=0.2,
+             n_step=5,
+             conv_tol=1e-8,
              peps_fname=None,
              peps_fdir='./'):
     """
@@ -386,6 +390,7 @@ def run_tebd(Nx,Ny,d,ham,
         # Increase MBD if needed
         if (len(D)-1 > Dind) and (D[Dind+1] > D[Dind]):
             peps.increase_mbd(D[Dind+1],chi=chi[Dind+1])
+            peps.normalize()
 
     # Print out results
     mpiprint(0,'\n\n'+'#'*50)
@@ -395,23 +400,3 @@ def run_tebd(Nx,Ny,d,ham,
     mpiprint(0,'Per Site Energy = {}'.format(E/(Nx*Ny)))
 
     return E,peps
-
-if __name__ == "__main__":
-    # PEPS parameters
-    Nx = 3
-    Ny = 3
-    d = 2
-    D = 5
-    chi = 10
-    # Get Hamiltonian
-    from cyclopeps.ops.itf import return_op
-    ham = return_op(Nx,Ny,(1.,2.))
-    # Run TEBD
-    E,_ = run_tebd(Nx,Ny,d,ham,
-                   D=[1,D,D,D,D],
-                   chi=chi,
-                   singleLayer=True,
-                   max_norm_iter=100,
-                   dtype=float_,
-                   step_size=[1.,0.1,0.01,0.001,0.0001],
-                   n_step=[10,10,10,10,10])

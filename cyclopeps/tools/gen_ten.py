@@ -425,11 +425,9 @@ def einsum(subscripts,opA,opB):
     """
     print_str = ''
     # Format String ------------------------------------
-    #print('Initial Subscripts = {}, {}, {}'.format(subscripts,opA.legs,opB.legs))
     _subscripts = subscripts
     subscripts = replace_caps(subscripts)
     subscripts = unmerge_subscripts(subscripts,opA.legs,opB.legs)
-    #print('Final   Subscripts = {}'.format(subscripts))
     # Do einsum
     res = opA.lib.einsum(subscripts,opA.ten,opB.ten)
     # Create a new gen_ten (with correctly lumped legs) from the result
@@ -877,7 +875,7 @@ class GEN_TEN:
         return res
 
     def max(self):
-        return self._as_new_tensor(self.ten.max())
+        return self.ten.max()
 
     def to_val(self):
         """
@@ -945,3 +943,19 @@ class GEN_TEN:
             for i in range(self.ten.array.shape[0]):
                 newten.ten.array[i] = self.backend.diag(1./self.backend.diag(newten.ten.array[i]))
         return newten
+
+    def square_inv(self):
+        """
+        Take the inverse of a 'square' tensor, used in ALS for PEPS Full Update
+        """
+        newten = self._as_new_tensor(self.ten)
+        if newten.sym is None:
+            assert(len(self.ten.shape) == 4)
+            (n1,n2,n3,n4) = self.ten.shape
+            mat = self.backend.reshape(self.ten,(n1*n2,n3*n4))
+            inv = self.backend.inv(mat)
+            newten.ten = self.backend.reshape(inv,(n1,n2,n3,n4))
+        else:
+            raise NotImplementedError()
+        return newten
+            

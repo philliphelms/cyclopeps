@@ -11,10 +11,10 @@ class test_cal_energy(unittest.TestCase):
         from cyclopeps.tools.peps_tools import PEPS
         from cyclopeps.ops.heis import return_op
         from cyclopeps.algs.simple_update import run_tebd,tebd_step
-        mpiprint(0,'\n'+'='*50+'\nSU 2x2 Heisenberg test\n'+'-'*50)
+        mpiprint(0,'\n'+'='*50+'\nSU Z2 Heisenberg test\n'+'-'*50)
         # Create PEPS
-        Nx = 3
-        Ny = 3
+        Nx = 5
+        Ny = 5
         d = 2
         D = 4
         chi = 10
@@ -42,8 +42,8 @@ class test_cal_energy(unittest.TestCase):
         from cyclopeps.algs.simple_update import run_tebd,tebd_step
         mpiprint(0,'\n'+'='*50+'\nSU Heisenberg test\n'+'-'*50)
         # Create PEPS
-        Nx = 3
-        Ny = 3
+        Nx = 5
+        Ny = 5
         d = 2
         D = 2
         chi = 10
