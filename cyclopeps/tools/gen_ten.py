@@ -17,6 +17,7 @@ import sys
 import numpy as np
 
 LETTERS = 'abcdefghijklmnopqrstuvwxyz'
+FLIP = {'+':'-','-':'+'}
 
 ###########################################################
 # Functions
@@ -854,6 +855,14 @@ class GEN_TEN:
             return self.sym[0]
         else:
             return None
+
+    def flip_signs(self):
+        """
+        Flip all the signs of a symtensor
+        """
+        if self.sym is not None:
+            self.sym[0] = ''.join(FLIP[i] for i in self.sym[0])
+            self.ten.sym[0] = ''.join(FLIP[i] for i in self.ten.sym[0])
 
     def conj(self):
         return self._as_new_tensor(self.ten.conj())

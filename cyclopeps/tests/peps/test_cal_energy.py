@@ -31,14 +31,14 @@ class test_cal_energy(unittest.TestCase):
         from cyclopeps.ops.identity import return_op
         ham = return_op(Nx,Ny,sym='Z2',backend=backend)
         # Calculate initial norm
-        norm0 = peps.calc_norm()
+        norm0 = peps.calc_norm()*4.
         mpiprint(0,'Norm (routine) = {}'.format(norm0))
         # Perform the Exact energy calculation:
         bra = einsum('LDWCM,lMXcu->LDluWXCc',peps[0][0],peps[0][1]).remove_empty_ind(0).remove_empty_ind(0).remove_empty_ind(0).remove_empty_ind(0)
         bra = einsum('WXCc,CdYRm->dRWXYcm',bra,peps[1][0]).remove_empty_ind(0).remove_empty_ind(0)
         bra = einsum('WXYcm,cmZru->ruWXYZ',bra,peps[1][1]).remove_empty_ind(0).remove_empty_ind(0)
         norm1 = einsum('WXYZ,WXYZ->',bra,bra.conj())
-        norm1 = norm1.to_val()
+        norm1 = norm1.to_val()*4.
         mpiprint(0,'Norm (explicit) = {}'.format(norm1))
         tmp = einsum('WXYZ,wxYZ->WXwx',bra,bra.conj())
         E1  = einsum('WXwx,WXwx->',tmp,ham[0][0][0])
@@ -54,6 +54,7 @@ class test_cal_energy(unittest.TestCase):
         E2 = peps.calc_op(ham,normalize=False)
         mpiprint(0,'Energy via peps Method (not normalized) = {}'.format(E2))
         self.assertTrue(abs((norm0-norm1)/norm0) < 1e-10)
+        print('Check here {}, {}, {}, {}'.format(norm0,norm1,E1,E2))
         self.assertTrue(abs((norm0-E1)/norm0) < 1e-10)
         self.assertTrue(abs((norm0-E2)/norm0) < 1e-10)
         mpiprint(0,'Passed\n'+'='*50)
@@ -129,14 +130,14 @@ class test_cal_energy(unittest.TestCase):
         from cyclopeps.ops.identity import return_op
         ham = return_op(Nx,Ny,sym='Z2',backend=backend)
         # Calculate initial norm
-        norm0 = peps.calc_norm()
+        norm0 = peps.calc_norm()*4.
         mpiprint(0,'Norm (routine) = {}'.format(norm0))
         # Perform the Exact energy calculation:
         bra = einsum('LDWCM,lMXcu->LDluWXCc',peps[0][0],peps[0][1]).remove_empty_ind(0).remove_empty_ind(0).remove_empty_ind(0).remove_empty_ind(0)
         bra = einsum('WXCc,CdYRm->dRWXYcm',bra,peps[1][0]).remove_empty_ind(0).remove_empty_ind(0)
         bra = einsum('WXYcm,cmZru->ruWXYZ',bra,peps[1][1]).remove_empty_ind(0).remove_empty_ind(0)
         norm1 = einsum('WXYZ,WXYZ->',bra,bra.conj())
-        norm1 = norm1.to_val()
+        norm1 = norm1.to_val()*4
         mpiprint(0,'Norm (explicit) = {}'.format(norm1))
         tmp = einsum('WXYZ,wxYZ->WXwx',bra,bra.conj())
         E1  = einsum('WXwx,WXwx->',tmp,ham[0][0][0])
@@ -152,8 +153,7 @@ class test_cal_energy(unittest.TestCase):
         E2 = peps.calc_op(ham,normalize=False)
         mpiprint(0,'Energy via peps Method (not normalized) = {}'.format(E2))
         self.assertTrue(abs((norm0-norm1)/norm0) < 1e-10)
-        self.assertTrue(abs((norm0-E1)/norm0) < 1e-10)
-        self.assertTrue(abs((norm0-E2)/norm0) < 1e-10)
+        self.assertTrue(abs((E2-E1)/E2) < 1e-10)
         mpiprint(0,'Passed\n'+'='*50)
 
     def test_energy_itf_contraction_ones(self):
@@ -221,13 +221,13 @@ class test_cal_energy(unittest.TestCase):
         from cyclopeps.ops.identity import return_op
         ham = return_op(Nx,Ny)
         # Calculate initial norm
-        norm0 = peps.calc_norm()
+        norm0 = peps.calc_norm()*4.
         mpiprint(0,'Norm = {}'.format(norm0))
         # Perform the Exact energy calculation:
         bra = einsum('LDWCM,lMXcu->WXCc',peps[0][0],peps[0][1])
         bra = einsum('WXCc,CdYRm->WXYcm',bra,peps[1][0])
         bra = einsum('WXYcm,cmZru->WXYZ',bra,peps[1][1])
-        norm1 = einsum('WXYZ,WXYZ->',bra,bra.conj()).to_val()
+        norm1 = einsum('WXYZ,WXYZ->',bra,bra.conj()).to_val()*4.
         tmp = einsum('WXYZ,wxYZ->WXwx',bra,bra.conj())
         E1  = einsum('WXwx,WXwx->',tmp,ham[0][0][0])
         tmp = einsum('WXYZ,wXyZ->WYwy',bra,bra.conj())
@@ -259,12 +259,12 @@ class test_cal_energy(unittest.TestCase):
         from cyclopeps.ops.identity import return_op
         ham = return_op(Nx,Ny)
         # Calculate initial norm
-        norm0 = peps.calc_norm()
+        norm0 = peps.calc_norm()*4.
         # Perform the Exact energy calculation:
         bra = einsum('LDWCM,lMXcu->WXCc',peps[0][0],peps[0][1])
         bra = einsum('WXCc,CdYRm->WXYcm',bra,peps[1][0])
         bra = einsum('WXYcm,cmZru->WXYZ',bra,peps[1][1])
-        norm1 = einsum('WXYZ,WXYZ->',bra,bra.conj()).to_val()
+        norm1 = einsum('WXYZ,WXYZ->',bra,bra.conj()).to_val()*4.
         tmp = einsum('WXYZ,wxYZ->WXwx',bra,bra.conj())
         E1  = einsum('WXwx,WXwx->',tmp,ham[0][0][0])
         tmp = einsum('WXYZ,wXyZ->WYwy',bra,bra.conj())
@@ -324,50 +324,6 @@ class test_cal_energy(unittest.TestCase):
         mpiprint(0,'Energy (routine) = {}'.format(E2))
         self.assertTrue(abs((E2-E1)/E1) < 1e-10)
         mpiprint(0,'Passed\n'+'='*50)
-
-    """
-    def test_energy_itf_contraction_3x3(self):
-        mpiprint(0,'\n'+'='*50+'\nPeps Energy (Ham=ITF, 3x3) calculation\n'+'-'*50)
-        # Create a PEPS
-        from cyclopeps.tools.peps_tools import PEPS
-        Nx = 3
-        Ny = 3
-        d = 2
-        D = 3
-        peps = PEPS(Nx=Nx,Ny=Ny,d=d,D=D,chi=1000)
-        # Get the Hamiltonian
-        from cyclopeps.ops.itf import return_op
-        ham = return_op(Nx,Ny,(1.,2.))
-        # Calculate initial norm
-        norm0 = peps.calc_norm()
-        mpiprint(0,'Norm = {}'.format(norm0))
-        # Perform the Exact energy calculation:
-        row1 = einsum('abAcd,edBfg,hgCij->ABCcfi',peps[0][0],peps[0][1],peps[0][2])
-        row2 = einsum('ckDlm,fmEno,ioFpq->cfiDEFlnp',peps[1][0],peps[1][1],peps[1][2])
-        row3 = einsum('lrGst,ntHuv,pvIwx->lnpGHI',peps[2][0],peps[2][1],peps[2][2])
-        bra = einsum('ABCcfi,cfiDEFlnp,lnpGHI->ABCDEFGHI',row1,row2,row3)
-        E1 = einsum('ABCDEFGHI,abCDEFGHI,ABab->',bra,conj(bra),ham[0][0][0])
-        E2 = einsum('ABCDEFGHI,AbcDEFGHI,BCbc->',bra,conj(bra),ham[0][0][1])
-        E3 = einsum('ABCDEFGHI,ABCdeFGHI,DEde->',bra,conj(bra),ham[0][1][0])
-        E4 = einsum('ABCDEFGHI,ABCDefGHI,EFef->',bra,conj(bra),ham[0][1][1])
-        E5 = einsum('ABCDEFGHI,ABCDEFghI,GHgh->',bra,conj(bra),ham[0][2][0])
-        E6 = einsum('ABCDEFGHI,ABCDEFGhi,HIhi->',bra,conj(bra),ham[0][2][1])
-        #mpiprint(0,E1,E2,E3,E4,E5,E6)
-        E7 = einsum('ABCDEFGHI,aBCdEFGHI,ADad->',bra,conj(bra),ham[1][0][0])
-        E8 = einsum('ABCDEFGHI,ABCdEFgHI,DGdg->',bra,conj(bra),ham[1][0][1])
-        E9 = einsum('ABCDEFGHI,AbCDeFGHI,BEbe->',bra,conj(bra),ham[1][1][0])
-        E10= einsum('ABCDEFGHI,ABCDeFGhI,EHeh->',bra,conj(bra),ham[1][1][1])
-        E11= einsum('ABCDEFGHI,ABcDEfGHI,CFcf->',bra,conj(bra),ham[1][2][0])
-        E12= einsum('ABCDEFGHI,ABCDEfGHi,FIfi->',bra,conj(bra),ham[1][2][1])
-        #mpiprint(0,E7,E8,E9,E10,E11,E12)
-        E = E1+E2+E3+E4+E5+E6+E7+E8+E9+E10+E11+E12
-        # Contract Energy again
-        E2 = peps.calc_op(ham,normalize=False)
-        mpiprint(0,'Energy (exact)   = {}'.format(E))
-        mpiprint(0,'Energy (routine) = {}'.format(E2))
-        self.assertTrue(abs((E2-E)/E) < 1e-10)
-        mpiprint(0,'Passed\n'+'='*50)
-    """
 
 if __name__ == "__main__":
     unittest.main()

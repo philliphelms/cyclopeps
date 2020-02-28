@@ -132,12 +132,19 @@ def move_gauge_right_qr(ten1,ten2):
         ten2 : np or ctf array
             The tensor now holding the gauge
     """
+    if DEBUG:
+        res0 = einsum('abc,cde->abde',ten1,ten2).make_sparse()
+
     # Perform the svd on the tensor
     Q,R = ten1.qr(2)
     ten1 = Q
 
     # Multiply remainder into neighboring site
     ten2 = einsum('ab,bpc->apc',R,ten2)
+
+    if DEBUG:
+        res1 = einsum('abc,cde->abde',ten1,ten2).make_sparse()
+        mpiprint(0,'QR (right) Difference = {}'.format((res0-res1).abs().sum()))
 
     # Return results
     return ten1,ten2
@@ -189,6 +196,9 @@ def move_gauge_right_svd(ten1,ten2,truncate_mbd=1e100):
             The sum of the discarded weigths
             Only returned if return_wgt == True
     """
+    if DEBUG:
+        res0 = einsum('abc,cde->abde',ten1,ten2).make_sparse()
+
     # Perform the svd on the tensor
     U,S,V,EE,EEs,wgt = ten1.svd(2,truncate_mbd=truncate_mbd)
     ten1 = U
@@ -196,6 +206,10 @@ def move_gauge_right_svd(ten1,ten2,truncate_mbd=1e100):
     # Multiply remainder into neighboring site
     gauge = einsum('ab,bc->ac',S,V)
     ten2 = einsum('ab,bpc->apc',gauge,ten2)
+
+    if DEBUG:
+        res1 = einsum('abc,cde->abde',ten1,ten2).make_sparse()
+        mpiprint(0,'SVD (right) Difference = {}'.format((res0-res1).abs().sum()))
 
     # Return results
     return ten1,ten2,EE,EEs,wgt
@@ -230,9 +244,8 @@ def move_gauge_left_svd(ten1,ten2,truncate_mbd=1e100):
             Only returned if return_wgt == True
     """
     if DEBUG:
-        init_cont = einsum('abc,cde->abde',ten1,ten2)
-        mpiprint(0,'\t\tInitial Shape ten1 = {}'.format(ten1.ten.shape))
-        mpiprint(0,'\t\tInitial Shape ten2 = {}'.format(ten2.ten.shape))
+        res0 = einsum('abc,cde->abde',ten1,ten2).make_sparse()
+
     # Perform the svd on the tensor
     U,S,V,EE,EEs,wgt = ten2.svd(1,truncate_mbd=truncate_mbd)
     ten2 = V
@@ -242,17 +255,9 @@ def move_gauge_left_svd(ten1,ten2,truncate_mbd=1e100):
     ten1 = einsum('apb,bc->apc',ten1,gauge)
 
     if DEBUG:
-        fin_cont = einsum('abc,cde->abde',ten1,ten2)
-        if fin_cont.sym is None:
-            diff = init_cont.backend.sum(init_cont.backend.abs(init_cont.ten-fin_cont.ten))
-            mpiprint(0,'\t\tFinal   Shape ten1 = {}'.format(ten1.ten.shape))
-            mpiprint(0,'\t\tFinal   Shape ten2 = {}'.format(ten2.ten.shape))
-            mpiprint(0,'\t\tDifference before/after SVD = {}'.format(diff))
-        else:
-            diff = init_cont.backend.sum(init_cont.backend.abs(init_cont.ten.array-fin_cont.ten.array))
-            mpiprint(0,'\t\tFinal   Shape ten1 = {}'.format(ten1.ten.array.shape))
-            mpiprint(0,'\t\tFinal   Shape ten2 = {}'.format(ten2.ten.array.shape))
-            mpiprint(0,'\t\tDifference before/after SVD = {}'.format(diff))
+        res1 = einsum('abc,cde->abde',ten1,ten2).make_sparse()
+        mpiprint(0,'SVD (left) Difference = {}'.format((res0-res1).abs().sum()))
+
     # Return results
     return ten1,ten2,EE,EEs,wgt
 

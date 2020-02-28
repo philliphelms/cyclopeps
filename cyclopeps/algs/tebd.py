@@ -4,7 +4,7 @@ from cyclopeps.tools.mps_tools import *
 from cyclopeps.tools.peps_tools import *
 from cyclopeps.tools.ops_tools import *
 from cyclopeps.algs.simple_update import run_tebd as su
-from numpy import float_
+from numpy import float_,isfinite
 
 def cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,U):
     """
@@ -159,8 +159,8 @@ def make_equal_distance(peps1,peps2,mbd):
     peps2 = einsum('DPa,LaRU->LDPRU',phys_t,vt)
 
     # Try to shrink norm by multiplying peps1 and peps2 by constants
-    peps1 /= peps1.max()
-    peps2 /= peps2.max()
+    peps1 /= peps1.abs().max()
+    peps2 /= peps2.abs().max()
 
     # Return results
     return peps1,peps2
@@ -208,8 +208,9 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,mbd,als_ite
 
         # Normalize everything (to try to avoid some errors)
         norm_fact = bot_envs[row].max()
-        bot_envs[row] /= norm_fact
-        peps_col[row] /= norm_fact**(1./2.)
+        if isfinite(norm_fact):
+            bot_envs[row] /= norm_fact
+            peps_col[row] /= norm_fact**(1./2.)
 
     # Return the result
     return E,peps_col

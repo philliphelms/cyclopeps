@@ -77,6 +77,8 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
         bra[row] = bra[row].remove_empty_ind(0)
         # Add Bra-ket contraction
         res = einsum('dpru,DpRU->dDRurU',ket[row],bra[row])
+        ressgn = res.get_signs()
+        resleg = res.legs
         # Merge inds to make it an MPO
         res.merge_inds([0,1])
         res.merge_inds([2,3,4])
@@ -98,19 +100,20 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
                  Zu,
                  is_symmetric=ket[row].is_symmetric,
                  backend=ket[row].backend)
-        Itmp = einsum('du,UD->dDuU',I3,I2)
+        # Make sure signs are correct
+        if ressgn is not None:
+            if ''.join(ressgn[i] for i in resleg[4]) == ''.join(I1.get_signs()[i] for i in I1.legs[0]): 
+                I1.flip_signs()
+            if ''.join(ressgn[i] for i in resleg[5]) == ''.join(I2.get_signs()[i] for i in I2.legs[0]): 
+                I2.flip_signs()
+            if ''.join(ressgn[i] for i in resleg[3]) == ''.join(I3.get_signs()[i] for i in I3.legs[0]): 
+                I3.flip_signs()
+        # Contract to form Identity
+        Itmp = einsum('du,DU->dDuU',I3,I2)
         I = einsum('dDuU,lr->dlDruU',Itmp,I1)
-        # Set symmetry since identity's is ambiguous
-        if I.sym is not None:
-            # If this assertion fails, the sign update must be rewritten
-            assert(len(res.sym[0]) == 6)
-            I.update_signs(FLIP[res.sym[0][3]]+FLIP[res.sym[0][4]]+FLIP[res.sym[0][5]]+\
-                           res.sym[0][4]+res.sym[0][3]+res.sym[0][5])
-
         # Merge inds to make it an MPO
         I.merge_inds([0,1,2])
         I.merge_inds([2,3])
-
         # Append to the boundary mpo
         bound_mpo.append(I)
 
@@ -128,6 +131,7 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
             mpiprint(6,'Computing resulting bmpo norm')
             norm1 = bound_mps.norm()
             mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+
     return bound_mps
 
 def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
@@ -142,38 +146,10 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
     for row in range(Ny):
         mpiprint(5,'Adding Site {} to Ket'.format(row))
 
-        # Add Correct Identity
-        mpiprint(6,'Adding Identity to ket boundary mps')
-        (Dl,Dd,Dp,Dr,Du) = ket[row].shape
-        (Zl,Zd,Zp,Zr,Zu) = ket[row].qn_sectors
-        I1 = eye(Dd,
-                 Zd,
-                 is_symmetric=ket[row].is_symmetric,
-                 backend=ket[row].backend)
-        # Create identity
-        I = einsum('mLn,du->mdLnu',bound_mpo[2*row],I1)
-        # Adjust symmetry (identity gives flexibility)
-        if I.sym is not None:
-            bmposgn = list(bound_mpo[2*row].get_signs())
-            Isgn = list(I.get_signs())
-            ketsgn = list(ket[row].get_signs())
-            newsgn = ''.join(bmposgn[i] for i in bound_mpo[2*row].legs[0])
-            newsgn += ''.join(FLIP[ketsgn[i]] for i in ket[row].legs[1])
-            newsgn += ''.join(bmposgn[i] for i in bound_mpo[2*row].legs[1])
-            newsgn += ''.join(bmposgn[i] for i in bound_mpo[2*row].legs[2])
-            newsgn += ''.join(ketsgn[i] for i in ket[row].legs[1])
-            I.update_signs(newsgn)
-            
-        # Reshape it into an MPO
-        I.merge_inds([0,1])
-        I.merge_inds([2,3])
-        # Append to boundary MPO
-        bound_mpo_new.append(I)
-
-        # Add ket contraction
-        mpiprint(6,'Adding ket tensor to boundary mps')
-        # Contract with boundary mpo
+        # Calculate ket contraction first (so we can use it to determine symmetry signs of identity)
         res = einsum('mln,ldpru->mdrpnu',bound_mpo[2*row+1],ket[row])
+        ressgn = res.get_signs()
+        resleg = res.legs
         # Reshape it into an MPO
         if row == Ny-1:
             res = res.remove_empty_ind(len(res.legs)-1)
@@ -183,7 +159,32 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
             res.merge_inds([0,1])
             res.merge_inds([1,2])
             res.merge_inds([2,3])
-        # Append to boundary MPO
+
+        # Create Correct Identity
+        (Dl,Dd,Dp,Dr,Du) = ket[row].shape
+        (Zl,Zd,Zp,Zr,Zu) = ket[row].qn_sectors
+        I1 = eye(Dd,
+                 Zd,
+                 is_symmetric=ket[row].is_symmetric,
+                 backend=ket[row].backend)
+        # Adjust symmetry signs
+        if ressgn is not None:
+            if ''.join(ressgn[i] for i in resleg[0]) == ''.join(ressgn[i] for i in resleg[1]):
+                I1.update_signs(''.join(FLIP[bound_mpo[2*row].get_signs()[i]] for i in bound_mpo[2*row].legs[2]) + 
+                                ''.join(bound_mpo[2*row].get_signs()[i] for i in bound_mpo[2*row].legs[2]))
+            else:
+                I1.update_signs(''.join(bound_mpo[2*row].get_signs()[i] for i in bound_mpo[2*row].legs[2]) + 
+                                ''.join(FLIP[bound_mpo[2*row].get_signs()[i]] for i in bound_mpo[2*row].legs[2]))
+        # Contract with previous bmpo
+        I = einsum('mLn,du->mdLnu',bound_mpo[2*row],I1)
+        # Reshape it into an MPO
+        I.merge_inds([0,1])
+        I.merge_inds([2,3])
+
+        # Append identity to boundary MPO
+        bound_mpo_new.append(I)
+
+        # Append ket to boundary MPO
         bound_mpo_new.append(res)
 
     # Put result into an MPS -------------------------------------------
@@ -216,7 +217,7 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
         # Add bra contraction
         res = einsum('mLn,LDPRU->mDRnUP',bound_mpo[2*row],bra[row])
         # Save some useful info
-        if res.sym is not None: ressgn = list(res.get_signs())
+        ressgn = res.get_signs()
         resleg = res.legs
         # Reshape it into an MPO
         if row == 0:
@@ -240,29 +241,17 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
                 Zu,
                 is_symmetric=bra[row].is_symmetric,
                 backend=bra[row].backend)
-        # Create correct tensor
-        I = einsum('mrpn,DU->mDprnU',bound_tens,I1)
-        # Adjust symmetry (identity gives flexibility)
-        if I.sym is not None:
-            bmposgn = list(bound_tens.get_signs())
-            Isgn = list(I.get_signs())
-            brasgn = list(bra[row].get_signs())
-            newsgn  = ''.join(FLIP[ressgn[i]] for i in resleg[3])
-            add = ''.join(FLIP[ressgn[i]] for i in resleg[4])
-            newsgn += add
-            add = ''.join(FLIP[ressgn[i]] for i in resleg[5])
-            newsgn += add
-            add = ''.join(FLIP[ressgn[i]] for i in resleg[2])
-            newsgn += add
-            if ''.join(FLIP[ressgn[i]] for i in resleg[3]) == ''.join(bmposgn[i] for i in bound_tens.legs[0]):
-                add = ''.join(bmposgn[i] for i in bound_tens.legs[3])
+        # Adjust symmetry signs
+        if ressgn is not None:
+            if ''.join(ressgn[i] for i in resleg[3]) == ''.join(ressgn[i] for i in resleg[4]):
+                I1.update_signs(''.join(bound_tens.get_signs()[i] for i in bound_tens.legs[0]) + 
+                                ''.join(FLIP[bound_tens.get_signs()[i]] for i in bound_tens.legs[0]))
             else:
-                add = ''.join(FLIP[bmposgn[i]] for i in bound_tens.legs[3])
-            newsgn += add
-            add = ''.join(ressgn[i] for i in resleg[4])
-            newsgn += add
-            I.update_signs(newsgn)
-        # Reshape it back into an MPO
+                I1.update_signs(''.join(FLIP[bound_tens.get_signs()[i]] for i in bound_tens.legs[0]) + 
+                                ''.join(bound_tens.get_signs()[i] for i in bound_tens.legs[0]))
+        # Contract with previous bmpo
+        I = einsum('mrPn,DU->mDPrnU',bound_tens,I1)
+        # Reshape into an MPO
         if row == Ny-1:
             I = I.remove_empty_ind(len(I.legs)-1)
             I.merge_inds([0,1,2])
@@ -286,6 +275,7 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
             mpiprint(6,'Computing resulting bmpo norm')
             norm1 = bound_mps.norm()
             mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+
     return bound_mps
 
 def left_bmpo_sl(bra, bound_mpo, chi=4,truncate=True,ket=None):
@@ -753,7 +743,7 @@ def calc_peps_col_norm(peps_col):
     # Return the resulting norm
     return norm
 
-def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,backend='numpy',dtype=float_):
+def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
     """
     Create a random tensor for a PEPS
 
@@ -771,6 +761,9 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,backend='numpy',dtype=float_):
         Zn : int
             Create a PEPS which preserves this Zn symmetry,
             i.e. if Zn=2, then Z2 symmetry is preserved.
+        dZn : int
+            The number of symmetry sectors for the physical bond dimension
+            if None, then Zn will be used
         backend : str
             This specifies the backend to be used for the calculation.
             Options are currently 'numpy' or 'ctf'. If using symmetries,
@@ -817,11 +810,11 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,backend='numpy',dtype=float_):
         Dr /= Znr
         Dd /= Znd
         Du /= Znu
-        d  /= Zn
+        d  /= dZn
 
         # Create sym argument
         sym = ['+++--',
-               [range(Znl),range(Znd),range(Zn),range(Znr),range(Znu)],
+               [range(Znl),range(Znd),range(dZn),range(Znr),range(Znu)],
                0,
                Zn]
 
@@ -1053,7 +1046,7 @@ def calc_peps_norm(peps,chi=4,singleLayer=True,ket=None):
     # Return result
     return norm
 
-def make_rand_peps(Nx,Ny,d,D,Zn=None,backend='numpy',dtype=float_):
+def make_rand_peps(Nx,Ny,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
     """
     Make a random PEPS
 
@@ -1071,6 +1064,9 @@ def make_rand_peps(Nx,Ny,d,D,Zn=None,backend='numpy',dtype=float_):
         Zn : int
             Create a PEPS which preserves this Zn symmetry,
             i.e. if Zn=2, then Z2 symmetry is preserved.
+        dZn : int
+            The number of symmetry sectors for the physical bond dimension
+            If None, then will be the same as Zn
         backend : str
             This specifies the backend to be used for the calculation.
             Options are currently 'numpy' or 'ctf'. If using symmetries,
@@ -1095,7 +1091,7 @@ def make_rand_peps(Nx,Ny,d,D,Zn=None,backend='numpy',dtype=float_):
     # Place random tensors into the PEPS
     for x in range(Nx):
         for y in range(Ny):
-            tensors[x][y] = rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=Zn,backend=backend,dtype=dtype)
+            tensors[x][y] = rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=Zn,dZn=dZn,backend=backend,dtype=dtype)
         # At the end of each column, make the norm smaller
         tensors[x][:] = normalize_peps_col(tensors[x][:])
 
@@ -1983,7 +1979,7 @@ class PEPS:
     """
 
     def __init__(self,Nx=10,Ny=10,d=2,D=2,
-                 chi=None,Zn=None,canonical=False,backend='numpy',
+                 chi=None,Zn=None,dZn=None,canonical=False,backend='numpy',
                  singleLayer=True,dtype=float_,
                  normalize=True,norm_tol=20.,
                  max_norm_iter=100,norm_bs_upper=10.0,norm_bs_lower=0.0,
@@ -2008,6 +2004,9 @@ class PEPS:
             Zn : int
                 Create a PEPS which preserves this Zn symmetry,
                 i.e. if Zn=2, then Z2 symmetry is preserved.
+            dZn : int
+                The number of symmetry sectors in the physical
+                bond dimension. 
             canonical : bool
                 If true, then the PEPS will be created in the 
                 Gamma Lambda formalism, with diagonal matrices
@@ -2067,6 +2066,8 @@ class PEPS:
         if chi is None: chi = 4*D**2
         self.chi         = chi
         self.Zn          = Zn
+        if dZn is None: dZn = Zn
+        self.dZn         = dZn
         self.canonical   = canonical
         self.backend     = backend
         self.backend     = load_lib(self.backend)
@@ -2088,6 +2089,7 @@ class PEPS:
                                       self.d,
                                       self.D,
                                       Zn=self.Zn,
+                                      dZn=self.dZn,
                                       backend=self.backend,
                                       dtype=self.dtype)
 

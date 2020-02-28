@@ -120,8 +120,8 @@ class test_canonical_peps(unittest.TestCase):
     def test_canonical_rotate_z2(self):
         mpiprint(0,'\n'+'='*50+'\nCanonical Peps Rotation test (Z2 Symmetry)\n'+'-'*50)
         from cyclopeps.tools.peps_tools import PEPS
-        Nx = 6
-        Ny = 4
+        Nx = 3
+        Ny = 3
         d = 2
         D = 3
         chi = 10
