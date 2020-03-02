@@ -709,26 +709,6 @@ class MPS:
                 mps_tmp[site] *= -1.
         return mps_tmp
 
-    def norm(self):
-        """
-        Compute the norm of the MPS
-        """
-        # Move to the left, contracting env with bra and ket tensors
-        for site in range(self.N):
-            if site == 0:
-                # Form initial norm environment
-                norm_env = einsum('apb,ApB->aAbB',self[site],self[site].conj())
-                # Remove initial empty indices
-                norm_env = norm_env.remove_empty_ind(0)
-                norm_env = norm_env.remove_empty_ind(0)
-            else:
-                # Add next mps tensors to norm environment
-                tmp1 = einsum('aA,apb->Apb',norm_env,self[site])
-                norm_env = einsum('Apb,ApB->bB',tmp1,self[site].conj())
-        # Extract and return result
-        norm = norm_env.to_val()
-        return norm
-
     def apply_svd(self,chi):
         """
         Shrink the maximum bond dimension of an mps
@@ -856,7 +836,10 @@ class MPS:
                 tmp1 = einsum('aA,apb->Apb',norm_env,self[site])
                 norm_env = einsum('Apb,ApB->bB',tmp1,mps2[site])
         # Extract and return result
-        norm = norm_env.to_val()
+        if norm_env.sym is None:
+            norm = norm_env.backend.einsum('abcdefghijklmnopqrstuvwxyz'[:len(norm_env.ten.shape)]+'->',norm_env.ten)
+        else:
+            norm = norm_env.backend.einsum('abcdefghijklmnopqrstuvwxyz'[:len(norm_env.ten.array.shape)]+'->',norm_env.ten.array)
         return norm
 
     def norm(self):

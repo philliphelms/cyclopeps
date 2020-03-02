@@ -38,7 +38,7 @@ class test_cal_energy(unittest.TestCase):
         bra = einsum('WXCc,CdYRm->dRWXYcm',bra,peps[1][0]).remove_empty_ind(0).remove_empty_ind(0)
         bra = einsum('WXYcm,cmZru->ruWXYZ',bra,peps[1][1]).remove_empty_ind(0).remove_empty_ind(0)
         norm1 = einsum('WXYZ,WXYZ->',bra,bra.conj())
-        norm1 = norm1.to_val()*4.
+        norm1 = norm1*4.
         mpiprint(0,'Norm (explicit) = {}'.format(norm1))
         tmp = einsum('WXYZ,wxYZ->WXwx',bra,bra.conj())
         E1  = einsum('WXwx,WXwx->',tmp,ham[0][0][0])
@@ -48,7 +48,6 @@ class test_cal_energy(unittest.TestCase):
         E1 += einsum('YZyz,YZyz->',tmp,ham[0][1][0])
         tmp = einsum('WXYZ,WxYz->XZxz',bra,bra.conj())
         E1 += einsum('XZxz,XZxz->',tmp,ham[1][1][0])
-        E1 = E1.to_val()
         mpiprint(0,'Explicitly computed energy (not normalized) = {}'.format(E1))
         # Contract Energy again
         E2 = peps.calc_op(ham,normalize=False)
@@ -88,7 +87,7 @@ class test_cal_energy(unittest.TestCase):
         bra = einsum('WXCc,CdYRm->dRWXYcm',bra,peps[1][0]).remove_empty_ind(0).remove_empty_ind(0)
         bra = einsum('WXYcm,cmZru->ruWXYZ',bra,peps[1][1]).remove_empty_ind(0).remove_empty_ind(0)
         norm1 = einsum('WXYZ,WXYZ->',bra,bra.conj())
-        norm1 = norm1.to_val()
+        norm1 = norm1
         mpiprint(0,'Norm (explicit) = {}'.format(norm1))
         #print(ham[0][0][0])
         tmp = einsum('WXYZ,wxYZ->WXwx',bra,bra.conj())
@@ -99,7 +98,7 @@ class test_cal_energy(unittest.TestCase):
         E1 += einsum('YZyz,YZyz->',tmp,ham[0][1][0])
         tmp = einsum('WXYZ,WxYz->XZxz',bra,bra.conj())
         E1 += einsum('XZxz,XZxz->',tmp,ham[1][1][0])
-        E1 = E1.to_val()
+        E1 = E1
         mpiprint(0,'Explicitly computed energy (not normalized) = {}'.format(E1))
         # Contract Energy again
         E2 = peps.calc_op(ham,normalize=False)
@@ -137,7 +136,7 @@ class test_cal_energy(unittest.TestCase):
         bra = einsum('WXCc,CdYRm->dRWXYcm',bra,peps[1][0]).remove_empty_ind(0).remove_empty_ind(0)
         bra = einsum('WXYcm,cmZru->ruWXYZ',bra,peps[1][1]).remove_empty_ind(0).remove_empty_ind(0)
         norm1 = einsum('WXYZ,WXYZ->',bra,bra.conj())
-        norm1 = norm1.to_val()*4
+        norm1 = norm1*4
         mpiprint(0,'Norm (explicit) = {}'.format(norm1))
         tmp = einsum('WXYZ,wxYZ->WXwx',bra,bra.conj())
         E1  = einsum('WXwx,WXwx->',tmp,ham[0][0][0])
@@ -147,7 +146,6 @@ class test_cal_energy(unittest.TestCase):
         E1 += einsum('YZyz,YZyz->',tmp,ham[0][1][0])
         tmp = einsum('WXYZ,WxYz->XZxz',bra,bra.conj())
         E1 += einsum('XZxz,XZxz->',tmp,ham[1][1][0])
-        E1 = E1.to_val()
         mpiprint(0,'Explicitly computed energy (not normalized) = {}'.format(E1))
         # Contract Energy again
         E2 = peps.calc_op(ham,normalize=False)
@@ -179,7 +177,7 @@ class test_cal_energy(unittest.TestCase):
         bra = einsum('LDWCM,lMXcu->WXCc',peps[0][0],peps[0][1])
         bra = einsum('WXCc,CdYRm->WXYcm',bra,peps[1][0])
         bra = einsum('WXYcm,cmZru->WXYZ',bra,peps[1][1])
-        norm1 = einsum('WXYZ,WXYZ->',bra,bra.conj()).to_val()
+        norm1 = einsum('WXYZ,WXYZ->',bra,bra.conj())
         mpiprint(0,'Explicitly computed norm = {}'.format(norm1))
         tmp = einsum('WXYZ,wxYZ->WXwx',bra,bra.conj())
         E1  = einsum('WXwx,WXwx->',tmp,ham[0][0][0])
@@ -189,7 +187,6 @@ class test_cal_energy(unittest.TestCase):
         E1 += einsum('YZyz,YZyz->',tmp,ham[0][1][0])
         tmp = einsum('WXYZ,WxYz->XZxz',bra,bra.conj())
         E1 += einsum('XZxz,XZxz->',tmp,ham[1][1][0])
-        E1 = E1.to_val()
         mpiprint(0,'Explicitly computed energy (not normalized) = {}'.format(E1))
         # Contract Energy again
         E2 = peps.calc_op(ham,normalize=False)
@@ -227,7 +224,7 @@ class test_cal_energy(unittest.TestCase):
         bra = einsum('LDWCM,lMXcu->WXCc',peps[0][0],peps[0][1])
         bra = einsum('WXCc,CdYRm->WXYcm',bra,peps[1][0])
         bra = einsum('WXYcm,cmZru->WXYZ',bra,peps[1][1])
-        norm1 = einsum('WXYZ,WXYZ->',bra,bra.conj()).to_val()*4.
+        norm1 = einsum('WXYZ,WXYZ->',bra,bra.conj())*4.
         tmp = einsum('WXYZ,wxYZ->WXwx',bra,bra.conj())
         E1  = einsum('WXwx,WXwx->',tmp,ham[0][0][0])
         tmp = einsum('WXYZ,wXyZ->WYwy',bra,bra.conj())
@@ -236,7 +233,6 @@ class test_cal_energy(unittest.TestCase):
         E1 += einsum('YZyz,YZyz->',tmp,ham[0][1][0])
         tmp = einsum('WXYZ,WxYz->XZxz',bra,bra.conj())
         E1 += einsum('XZxz,XZxz->',tmp,ham[1][1][0])
-        E1 = E1.to_val()
         mpiprint(0,'Explicitly computed energy (not normalized) = {}'.format(E1))
         # Contract Energy again
         E2 = peps.calc_op(ham,normalize=False)
@@ -264,7 +260,7 @@ class test_cal_energy(unittest.TestCase):
         bra = einsum('LDWCM,lMXcu->WXCc',peps[0][0],peps[0][1])
         bra = einsum('WXCc,CdYRm->WXYcm',bra,peps[1][0])
         bra = einsum('WXYcm,cmZru->WXYZ',bra,peps[1][1])
-        norm1 = einsum('WXYZ,WXYZ->',bra,bra.conj()).to_val()*4.
+        norm1 = einsum('WXYZ,WXYZ->',bra,bra.conj())*4.
         tmp = einsum('WXYZ,wxYZ->WXwx',bra,bra.conj())
         E1  = einsum('WXwx,WXwx->',tmp,ham[0][0][0])
         tmp = einsum('WXYZ,wXyZ->WYwy',bra,bra.conj())
@@ -273,7 +269,6 @@ class test_cal_energy(unittest.TestCase):
         E1 += einsum('YZyz,YZyz->',tmp,ham[0][1][0])
         tmp = einsum('WXYZ,WxYz->XZxz',bra,bra.conj())
         E1 += einsum('XZxz,XZxz->',tmp,ham[1][1][0])
-        E1 = E1.to_val()
         # Contract Energy again
         E2 = peps.calc_op(ham,normalize=False)
         self.assertTrue(abs((norm0-norm1)/norm0) < 1e-10)
@@ -308,15 +303,15 @@ class test_cal_energy(unittest.TestCase):
         ket = einsum('LDWCM,lMXcu->WXCc',peps2[0][0],peps2[0][1])
         ket = einsum('WXCc,CdYRm->WXYcm',ket,peps2[1][0])
         ket = einsum('WXYcm,cmZru->WXYZ',ket,peps2[1][1])
-        norm1 = einsum('WXYZ,WXYZ->',bra,ket).to_val()
+        norm1 = einsum('WXYZ,WXYZ->',bra,ket)
         tmp = einsum('WXYZ,wxYZ->WXwx',bra,ket)
-        E1 = einsum('WXwx,WXwx->',tmp,ham[0][0][0]).to_val()
+        E1 = einsum('WXwx,WXwx->',tmp,ham[0][0][0])
         tmp = einsum('WXYZ,wXyZ->WYwy',bra,ket)
-        E2 = einsum('WYwy,WYwy->',tmp,ham[1][0][0]).to_val()
+        E2 = einsum('WYwy,WYwy->',tmp,ham[1][0][0])
         tmp = einsum('WXYZ,WXyz->YZyz',bra,ket)
-        E3 = einsum('YZyz,YZyz->',tmp,ham[0][1][0]).to_val()
+        E3 = einsum('YZyz,YZyz->',tmp,ham[0][1][0])
         tmp = einsum('WXYZ,WxYz->XZxz',bra,ket)
-        E4 = einsum('XZxz,XZxz->',tmp,ham[1][1][0]).to_val()
+        E4 = einsum('XZxz,XZxz->',tmp,ham[1][1][0])
         E1 = E1+E2+E3+E4
         # Contract Energy again
         E2 = peps.calc_op(ham,normalize=False,chi=1e100,ket=peps2)

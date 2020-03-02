@@ -1523,10 +1523,10 @@ def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
         tmp = einsum('APU,UQB->APQB',phys_b_bra,phys_t_bra)
         tmp1= einsum('APQB,aAbB->aPQb',tmp,N)
         tmp2= einsum('apu,uqb->apqb',phys_b_ket,phys_t_ket)
-        norm = einsum('apqb,apqb->',tmp1,tmp2).to_val()
+        norm = einsum('apqb,apqb->',tmp1,tmp2)
         if ham is not None:
             tmp = einsum('aPQb,apqb->PQpq',tmp1,tmp2)
-            E = einsum('PQpq,PQpq->',tmp,ham).to_val()
+            E = einsum('PQpq,PQpq->',tmp,ham)
         else:
             E = norm
         mpiprint(7,'E = {}/{} = {}'.format(E,norm,E/norm))
@@ -2344,6 +2344,7 @@ class PEPS:
                          chi=self.chi,norm_tol=self.norm_tol,
                          canonical=self.canonical,
                          singleLayer=self.singleLayer,
+                         backend=self.backend,
                          max_norm_iter=self.max_norm_iter,
                          norm_bs_upper=self.norm_bs_upper,
                          norm_bs_lower=self.norm_bs_lower,

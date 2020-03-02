@@ -40,7 +40,7 @@ def calc_entanglement(S,backend=np):
     # Create a copy of S
     S = S.copy()
     # Ensure correct normalization
-    norm_fact = backend.sqrt(backend.dot(S,S.conj()))
+    norm_fact = backend.dot(S,S.conj())**(1./2.)
     S /= norm_fact
 
     # Calc Entanglement Spectrum
@@ -97,7 +97,7 @@ def qr_ten(ten,split_ind,rq=False,backend=np.linalg):
         subscripts = LETTERS[:len(Q.shape)]+','+\
                      LETTERS[len(Q.shape)-1:len(Q.shape)-1+len(R.shape)]+'->'+\
                      LETTERS[:len(Q.shape)-1]+LETTERS[len(Q.shape):len(Q.shape)-1+len(R.shape)]
-        assert(np.allclose(ten,np.einsum(subscripts,Q,R),rtol=1e-6))
+        #assert(np.allclose(ten,backend.einsum(subscripts,Q,R),rtol=1e-6))
     else:
         raise NotImplementedError()
     # Return results
@@ -157,7 +157,7 @@ def svd_ten(ten,split_ind,truncate_mbd=1e100,return_ent=True,return_wgt=True,bac
 
     # Compute Entanglement
     mpiprint(9,'Calculate the entanglment')
-    EE,EEs = calc_entanglement(S)
+    EE,EEs = calc_entanglement(S,backend=backend)
 
     # Truncate results (if necessary)
     D = S.shape[0]
@@ -430,7 +430,11 @@ def einsum(subscripts,opA,opB):
     subscripts = replace_caps(subscripts)
     subscripts = unmerge_subscripts(subscripts,opA.legs,opB.legs)
     # Do einsum
-    res = opA.lib.einsum(subscripts,opA.ten,opB.ten)
+    try:
+        res = opA.lib.einsum(subscripts,opA.ten,opB.ten)
+    except:
+        print('{},{},{},{},{}'.format(subscripts,opA.ten.shape,opB.ten.shape,opA.lib,opB.lib))
+        res = opA.lib.einsum(subscripts,opA.ten,opB.ten)
     # Create a new gen_ten (with correctly lumped legs) from the result
     # Find resulting sym
     if opA.sym is not None:
@@ -458,10 +462,17 @@ def einsum(subscripts,opA,opB):
             legs += [list(range(cnt,cnt+len(opB.legs[strB_loc])))]
             cnt += len(opB.legs[strB_loc])
         #print('\t\t\tcnt {}, legs {}'.format(cnt,legs))
-    res = GEN_TEN(sym = sym,
-                  backend = opA.backend,
-                  ten = res,
-                  legs = legs)
+    if not isinstance(res,float):
+        if len(subscripts.split('->')[0]) == 0:
+            print('Sized one array')
+            # If sized 1 array, convert to float
+            ind = (0,)*len(res.shape)
+            res = res[ind]
+        else:
+            res = GEN_TEN(sym = sym,
+                          backend = opA.backend,
+                          ten = res,
+                          legs = legs)
     return res
 
 ###########################################################
@@ -651,7 +662,7 @@ class GEN_TEN:
         for i in range(len(axes)):
             newlegs.append(list(range(ind,ind+len(self.legs[axes[i]]))))
             ind += len(self.legs[axes[i]])
-        return GEN_TEN(ten=newten,legs=newlegs)
+        return GEN_TEN(ten=newten,backend=self.backend,legs=newlegs)
 
     def remove_empty_ind(self,ind):
         """
@@ -714,7 +725,7 @@ class GEN_TEN:
             if not (i == ind):
                 newlegs += [list(range(cnt,cnt+len(self.legs[i])))]
                 cnt += len(self.legs[i])
-        return GEN_TEN(ten=newten,legs=newlegs)
+        return GEN_TEN(ten=newten,backend=self.backend,legs=newlegs)
 
     def merge_inds(self,combinds,make_cp=True):
         """
@@ -775,8 +786,8 @@ class GEN_TEN:
         else:
             # Do qr on symtensor
             Q,R = symqr(self.ten,[list(range(split)),list(range(split,self.ten.ndim))])
-        Q = GEN_TEN(ten=Q)
-        R = GEN_TEN(ten=R)
+        Q = GEN_TEN(ten=Q,backend=self.backend)
+        R = GEN_TEN(ten=R,backend=self.backend)
         # Update Q legs
         Qlegs = []
         cnt = 0
@@ -815,9 +826,9 @@ class GEN_TEN:
                          return_ent=return_ent,
                          return_wgt=return_wgt)
         U,S,V = res[0],res[1],res[2]
-        U = GEN_TEN(ten=U)
-        S = GEN_TEN(ten=S)
-        V = GEN_TEN(ten=V)
+        U = GEN_TEN(ten=U,backend=self.backend)
+        S = GEN_TEN(ten=S,backend=self.backend)
+        V = GEN_TEN(ten=V,backend=self.backend)
         # Update U legs
         Ulegs = []
         cnt = 0
