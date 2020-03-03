@@ -932,12 +932,12 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
 
     # Check if state is already easily normalized
     try:
-        init_norm = calc_peps_norm(peps,chi=chi,singleLayer=singleLayer)
+        z = calc_peps_norm(peps,chi=chi,singleLayer=singleLayer)
     except:
-        init_norm = None
-    if not (init_norm < 10.**(-1*norm_tol) or init_norm > 10.**(norm_tol)) or (init_norm is None):
-        if init_norm is not None:
-            sfac = init_norm**pwr
+        z = None
+    if not (z < 10.**(-1*norm_tol) or z > 10.**(norm_tol)) or (z is None):
+        if z is not None:
+            sfac = z**pwr
             peps_try = multiply_peps_elements(peps.copy(),sfac)
             z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer)
         else:
@@ -999,7 +999,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
 
     return z, peps_try
 
-def calc_peps_norm(peps,chi=4,singleLayer=True,ket=None):
+def calc_peps_norm(_peps,chi=4,singleLayer=True,ket=None):
     """
     Calculate the norm of the PEPS
 
@@ -1019,11 +1019,11 @@ def calc_peps_norm(peps,chi=4,singleLayer=True,ket=None):
             The (approximate) norm of the PEPS
     """
     # Absorb Lambda tensors if needed
-    if peps.ltensors is not None:
-        peps = peps.copy()
+    if _peps.ltensors is not None:
+        peps = _peps.copy()
         peps.absorb_lambdas()
     else:
-        peps = peps.copy()
+        peps = _peps.copy()
     if ket is not None and ket.ltensors is not None:
         ket = ket.copy()
         ket.absorb_lambdas()
@@ -1690,7 +1690,7 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
     mpiprint(8,'Energy [:,:] = \n{}'.format(E))
 
     if return_sum:
-        return sum(E)
+        return E.sum()
     else:
         return E
 
@@ -1745,7 +1745,7 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
 
     # Return Result
     if return_sum:
-        return sum(col_energy)+sum(row_energy)
+        return col_energy.sum()+row_energy.sum()
     else:
         return col_energy,row_energy
 

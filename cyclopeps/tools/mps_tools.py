@@ -722,7 +722,7 @@ class MPS:
                 The new maximum bond dimension
         """
         res = self.copy()
-        res = mps_apply_svd(res.tensors,chi)
+        res = mps_apply_svd(res,chi)
         return MPS(res)
 
     def make_left_canonical(self,chi=1e100):

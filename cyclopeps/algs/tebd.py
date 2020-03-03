@@ -208,9 +208,8 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,mbd,als_ite
 
         # Normalize everything (to try to avoid some errors)
         norm_fact = bot_envs[row].max()
-        if isfinite(norm_fact):
-            bot_envs[row] /= norm_fact
-            peps_col[row] /= norm_fact**(1./2.)
+        bot_envs[row] /= norm_fact
+        peps_col[row] /= norm_fact**(1./2.)
 
     # Return the result
     return E,peps_col

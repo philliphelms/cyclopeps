@@ -9,7 +9,6 @@ Date: July 2019
 
 from cyclopeps.tools.utils import *
 from cyclopeps.tools.mps_tools import MPS
-from scipy.linalg import expm as sla_expm
 from cyclopeps.tools.gen_ten import einsum
 import copy
 
@@ -95,6 +94,8 @@ def take_exp(ops,a=1.):
         exp_ops : lost of list of lists
             The resulting exponentiated operators
     """
+    # Get correct library
+    lib = ops[0][0][0].backend
     # Make a copy if wanted
     exp_ops = ops
 
@@ -102,7 +103,7 @@ def take_exp(ops,a=1.):
     for i in range(len(exp_ops)):
         for j in range(len(exp_ops[i])):
             for k in range(len(exp_ops[j])):
-                exp_ops[i][j][k] = expm(exp_ops[i][j][k],a=a)
+                exp_ops[i][j][k] = lib.expm(exp_ops[i][j][k],a=a)
     
     return exp_ops    
 

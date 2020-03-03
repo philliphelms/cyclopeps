@@ -29,7 +29,7 @@ class test_cal_energy(unittest.TestCase):
                         chi=chi,
                         backend=backend,
                         n_step=1,
-                        su_step_size=[0.5,0.1],
+                        su_step_size=0.1,
                         su_conv_tol=1e-5,
                         su_n_step=1)
         print('Final  E = {}'.format(Ef))

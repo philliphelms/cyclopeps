@@ -433,7 +433,10 @@ def einsum(subscripts,opA,opB):
     try:
         res = opA.lib.einsum(subscripts,opA.ten,opB.ten)
     except:
-        print('{},{},{},{},{}'.format(subscripts,opA.ten.shape,opB.ten.shape,opA.lib,opB.lib))
+        if opB.sym is None:
+            print('{},{},{},{},{}'.format(subscripts,opA.ten.shape,opB.ten.shape,opA.lib,opB.lib))
+        else:
+            print('{},{},{},{},{}'.format(subscripts,opA.ten.array.shape,opB.ten.array.shape,type(opA.ten.array),type(opB.ten.array)))
         res = opA.lib.einsum(subscripts,opA.ten,opB.ten)
     # Create a new gen_ten (with correctly lumped legs) from the result
     # Find resulting sym
@@ -895,10 +898,16 @@ class GEN_TEN:
         return res
 
     def max(self):
-        return self.ten.max()
+        if self.sym is None:
+            return self.backend.max(self.ten)
+        else:
+            return self.backend.max(self.ten.array)
 
     def min(self):
-        return self.ten.min()
+        if self.sym is None:
+            return self.backend.min(self.ten)
+        else:
+            return self.backend.min(self.ten.array)
 
     def to_val(self):
         """
