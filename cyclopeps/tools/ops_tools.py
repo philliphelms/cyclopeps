@@ -132,7 +132,7 @@ def ops_conj_trans(ops,copy=True):
     for i in range(len(ops)):
         for j in range(len(ops[i])):
             for k in range(len(ops[i][j])):
-                ops[i][j][k] = ops[i][j][k].transpose(2,3,0,1).conj()
+                ops[i][j][k] = ops[i][j][k].transpose([2,3,0,1]).conj()
     
     # return result
     return ops

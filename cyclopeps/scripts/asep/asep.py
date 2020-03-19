@@ -13,26 +13,26 @@ chi= 10#int(argv[4])
 d  = 2
 
 # TEBD Parameters
-step_sizes = [1.0,0.1,0.05, 0.01]
-n_step =     [100,100, 100,  100]
-chi        = [  2, 10,  20,   10]
+step_sizes = [0.1,0.05, 0.01]
+n_step =     [100, 100,  100]
+chi        = [ 10,  20,   20]
 
 # ---------------------------------------------------------
 # Hop to the right
 # ASEP params
-jr = 1.
-jl = 0.
-ju = 0.
-jd = 0.
-cr = 0.35
-cl = 0.
-cu = 0.
-cd = 0.
-dr = 2./3.
-dl = 0.
-du = 0.
-dd = 0.
-sx = 0.2
+jr = 0.9
+jl = 0.1
+ju = 0.5
+jd = 0.5
+cr = 0.5
+cl = 0.5
+cu = 0.5
+cd = 0.5
+dr = 0.5
+dl = 0.5
+du = 0.5
+dd = 0.5
+sx = -0.2
 sy = 0.
 params = (jr,jl,ju,jd,cr,cl,cu,cd,dr,dl,du,dd,sx,sy)
 
@@ -40,81 +40,12 @@ params = (jr,jl,ju,jd,cr,cl,cu,cd,dr,dl,du,dd,sx,sy)
 ops = return_op(Nx,Ny,params)
 
 # Run TEBD
-Ef,_ = run_tebd(Nx,Ny,d,ops,D=D,chi=chi,n_step=n_step,step_size=step_sizes)
-
-"""
-# ---------------------------------------------------------
-# Hop to the left:
-# ASEP params
-jrn = jl
-jln = jr
-jun = ju
-jdn = jd
-crn = cl
-cln = cr
-cun = cu
-cdn = cd
-drn = dl
-dln = dr
-dun = du
-ddn = dd
-sxn = -sx
-syn = sy
-params = (jrn,jln,jun,jdn,crn,cln,cun,cdn,drn,dln,dun,ddn,sxn,syn)
-
-# Create the Suzuki trotter decomposed operator
-ops = return_op(Nx,Ny,params)
-
-# Run TEBD
-Ef,_ = run_tebd(Nx,Ny,d,ops,D=D,chi=chi,n_step=n_step,step_size=step_sizes)
-
-# ---------------------------------------------------------
-# Hop upwards:
-# ASEP params
-jrn = ju
-jln = jd
-jun = jr
-jdn = jl
-crn = cu
-cln = cd
-cun = cr
-cdn = cl
-drn = du
-dln = dd
-dun = dr
-ddn = dl
-sxn = sy
-syn = sx
-params = (jrn,jln,jun,jdn,crn,cln,cun,cdn,drn,dln,dun,ddn,sxn,syn)
-
-# Create the Suzuki trotter decomposed operator
-ops = return_op(Ny,Nx,params)
-
-# Run TEBD
-Ef,_ = run_tebd(Ny,Nx,d,ops,D=D,chi=chi,n_step=n_step,step_size=step_sizes)
-
-# ---------------------------------------------------------
-# Hop downwards
-# ASEP params
-jrn = ju
-jln = jd
-jun = jl
-jdn = jr
-crn = cu
-cln = cd
-cun = cl
-cdn = cr
-drn = du
-dln = dd
-dun = dl
-ddn = dr
-sxn = sy
-syn = -sx
-params = (jrn,jln,jun,jdn,crn,cln,cun,cdn,drn,dln,dun,ddn,sxn,syn)
-
-# Create the Suzuki trotter decomposed operator
-ops = return_op(Ny,Nx,params)
-
-# Run TEBD
-Ef,_ = run_tebd(Ny,Nx,d,ops,D=D,chi=chi,n_step=n_step,step_size=step_sizes)
-"""
+Ef,_ = run_tebd(Nx,Ny,d,ops,
+                D=D,
+                su_step_size=[0.5,0.1,0.05],
+                su_n_step=[50,50,50],
+                su_conv_tol=1e-5,
+                su_chi=20,
+                chi=chi,
+                n_step=n_step,
+                step_size=step_sizes)

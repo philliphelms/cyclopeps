@@ -81,7 +81,7 @@ def op(params,ops,hermitian=False):
         op += exp(-s)*sqrt(c*(1.-c)) * quick_op(X,n)
         op -= c * quick_op(v,n)
         op -= (1.-c) * quick_op(n,n)
-        op = -op
+        op *= -1
     else:
         # Add 'east' interaction
         op  = c*exp(-s) * quick_op(n,Sp)
@@ -93,6 +93,6 @@ def op(params,ops,hermitian=False):
         op += (1.-c)*exp(-s) * quick_op(Sm,n)
         op -= c * quick_op(v,n)
         op -= (1.-c) * quick_op(n,n)
-        op = -op
+        op *= -1
     # Return result
     return op

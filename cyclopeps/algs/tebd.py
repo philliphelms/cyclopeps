@@ -328,6 +328,7 @@ def run_tebd(Nx,Ny,d,ham,
              D=3,
              Zn=None,
              chi=10,
+             su_chi=10,
              norm_tol=20,
              singleLayer=True,
              max_norm_iter=20,
@@ -338,7 +339,8 @@ def run_tebd(Nx,Ny,d,ham,
              su_n_step=None,
              conv_tol=1e-8,
              su_conv_tol=1e-4,
-             als_iter=5,als_tol=1e-10,
+             als_iter=5,
+             als_tol=1e-10,
              peps_fname=None,
              peps_fdir='./'):
     """
@@ -380,6 +382,9 @@ def run_tebd(Nx,Ny,d,ham,
             If None, then a dense, non-symmetric PEPS will be used.
         chi : int
             The boundary mpo maximum bond dimension
+        su_chi : int
+            The boundary mpo maximum bond dimension for computing
+            the energy in the simple update initial guess generation
         norm_tol : float
             How close to 1. the norm should be before
             exact arithmetic is used in the normalization
@@ -395,13 +400,21 @@ def run_tebd(Nx,Ny,d,ham,
         step_size : float
             The trotter step size, may be a list of
             step sizes
+        su_step_size : float
+            The trotter step size for the simple update procedure 
+            may be a list of step sizes
         n_step : int
             The number of steps to be taken for each
             trotter step size. If it is a list, then
             len(step_size) == len(n_step) and
             len(D) == len(n_step) must both be True.
+        su_n_step : int
+            The number of steps to be taken for each
+            trotter step size in the simple update procedure.
         conv_tol : float
             The convergence tolerance
+        su_conv_tol : float
+            The convergence tolerance for the simple update procedure.
         peps_fname : str
             The name of the saved peps file
         peps_fdir : str
@@ -448,7 +461,7 @@ def run_tebd(Nx,Ny,d,ham,
         _,peps = su(Nx,Ny,d,ham,
                     D=D[0],
                     Zn=Zn,
-                    chi=10,
+                    chi=su_chi,
                     backend=backend,
                     singleLayer=singleLayer,
                     max_norm_iter=max_norm_iter,
@@ -458,6 +471,10 @@ def run_tebd(Nx,Ny,d,ham,
                     conv_tol=su_conv_tol,
                     peps_fname=peps_fname,
                     peps_fdir=peps_fdir)
+        peps.absorb_lambdas()
+
+    # Absorb lambda tensors if canonical
+    if peps.ltensors is not None:
         peps.absorb_lambdas()
 
     # Loop over all (bond dims/step sizes/number of steps)

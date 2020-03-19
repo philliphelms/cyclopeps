@@ -9,16 +9,17 @@ from numpy import logspace,linspace
 Nx = int(argv[1])
 Ny = int(argv[2])
 D  = int(argv[3])
+chi= int(argv[4])
 d  = 2
 c = 0.2
 
-#
-sVec = linspace(-0.5,0.5,30)[::-1]
+# Bias sweeps
+sVec = linspace(-0.5,0.5,30)
 
 # TEBD Parameters
-step_sizes = [1.0,0.1,0.05, 0.01]
-n_step =     [ 50, 50,  50,   50]
-chi        = [  2, 10,  20,   50]
+step_sizes = [0.1,0.05, 0.01]
+n_step =     [ 50,  50,   50]
+chi        = [ 10,  20,   50]
 
 # ---------------------------------------------------------
 E = []
@@ -27,37 +28,18 @@ for i,s in enumerate(sVec):
     # Create the Suzuki trotter decomposed operator
     params = (c,s)
     ops = return_op(Nx,Ny,params,hermitian=False)
+    # Run TEBD
+    Ef,peps = run_tebd(Nx,
+                       Ny,
+                       d,
+                       ops,
+                       peps=peps,
+                       D=D,
+                       chi=chi,
+                       n_step=n_step,
+                       step_size=step_sizes)
 
-    try:
-        # Run TEBD
-        Ef,peps = run_tebd(Nx,
-                           Ny,
-                           d,
-                           ops,
-                           peps=peps,
-                           D=D,
-                           chi=chi,
-                           n_step=n_step,
-                           step_size=step_sizes)
-
-        E.append(Ef)
-    except:
-        try:
-            # Run TEBD
-            peps = None
-            Ef,peps = run_tebd(Nx,
-                               Ny,
-                               d,
-                               ops,
-                               peps=peps,
-                               D=D,
-                               chi=chi,
-                               n_step=n_step,
-                               step_size=step_sizes)
-
-            E.append(Ef)
-        except:
-            peps = None
+    E.append(Ef)
 
     for s2 in range(len(E)):
         print('{}\t{}'.format(sVec[s2],E[s2]))

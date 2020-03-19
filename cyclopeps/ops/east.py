@@ -73,6 +73,7 @@ def op(params,ops,hermitian=False):
     v = ops.v
     Sm = ops.Sm
     Sp = ops.Sp
+    I = ops.I
 
     # Create Operator
     c = params[0]
@@ -82,14 +83,14 @@ def op(params,ops,hermitian=False):
         op  = exp(-s)*sqrt(c*(1.-c)) * quick_op(n,X)
         op -= c * quick_op(n,v)
         op -= (1.-c) * quick_op(n,n)
-        op = -op
+        op *= -1
     else:
         # Add 'east' interaction
         op  = c*exp(-s) * quick_op(n,Sp)
         op += (1.-c)*exp(-s) * quick_op(n,Sm)
         op -= c * quick_op(n,v)
         op -= (1.-c) * quick_op(n,n)
-        op = -op
+        op *= -1
     # Return result
     return op
 
@@ -103,6 +104,7 @@ def corner_op(params,ops,hermitian=False):
     v = ops.v
     Sm = ops.Sm
     Sp = ops.Sp
+    I = ops.I
 
     # Create operator
     c = params[0]
@@ -112,14 +114,14 @@ def corner_op(params,ops,hermitian=False):
         op  = exp(-s)*sqrt(c*(1.-c)) * quick_op(I,X)
         op -= c * quick_op(I,v)
         op -= (1.-c) * quick_op(I,n)
-        op = -op
+        op *= -1
     else:
         # Add 'east' interaction
         op  = c*exp(-s) * quick_op(I,Sp)
         op += (1.-c)*exp(-s) * quick_op(I,Sm)
         op -= c * quick_op(I,v)
         op -= (1.-c) * quick_op(I,n)
-        op = -op
+        op *= -1
     # Return result
     return op
 
@@ -188,6 +190,7 @@ def act_op(params,ops,hermitian=False):
     v = ops.v
     Sm = ops.Sm
     Sp = ops.Sp
+    I = ops.I
 
     # Create operator
     c = params[0]
@@ -195,12 +198,12 @@ def act_op(params,ops,hermitian=False):
     if hermitian:
         # Add 'east' interaction
         op  = exp(-s)*sqrt(c*(1.-c)) * quick_op(n,X)
-        op = -op
+        op *= -1
     else:
         # Add 'east' interaction
         op  = c*exp(-s) * quick_op(n,Sp)
         op += (1.-c)*exp(-s) * quick_op(n,Sm)
-        op = -op
+        op *= -1
     # Return result
     return op
 
@@ -214,6 +217,7 @@ def corner_act_op(params,ops,hermitian=False):
     v = ops.v
     Sm = ops.Sm
     Sp = ops.Sp
+    I = ops.I
 
     # Create operator
     c = params[0]
@@ -221,11 +225,11 @@ def corner_act_op(params,ops,hermitian=False):
     if hermitian:
         # Add 'east' interaction
         op  = exp(-s)*sqrt(c*(1.-c)) * quick_op(I,X)
-        op = -op
+        op *= -1
     else:
         # Add 'east' interaction
         op  = c*exp(-s) * quick_op(I,Sp)
         op += (1.-c)*exp(-s) * quick_op(I,Sm)
-        op = -op
+        op *= -1
     # Return result
     return op

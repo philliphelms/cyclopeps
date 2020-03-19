@@ -6,8 +6,8 @@ generator for the 2D simple exclusion process.
 from cyclopeps.tools.utils import *
 from cyclopeps.ops.ops import OPS
 from cyclopeps.tools.ops_tools import *
-from numpy import float_
-from numpy import exp
+from numpy import float_,exp,ones,zeros
+
 import collections
 from cyclopeps.tools.gen_ten import einsum
 
@@ -162,7 +162,8 @@ def make_op(row,ju,jd,cu,cd,du,dd,sy,ops):
         op -= cd[row]*quick_op(v,I)
 
     # Return Result
-    return -op
+    op *= -1
+    return op
 
 
 # Current operators ------------------------------------------------------------------------------
@@ -309,7 +310,8 @@ def make_curr_op(row,ju,jd,cu,cd,du,dd,sy,ops,include_edges=False):
             op -= cd[row]*exp(-sy[row])*quick_op(Sm,I)
 
     # Return Result
-    return -op
+    op *= -1
+    return op
 
 # Helpful Functions ------------------------------------------------------------------------------
 def val2mat_params(Nx,Ny,params):

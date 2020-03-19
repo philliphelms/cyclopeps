@@ -1749,14 +1749,14 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
     else:
         return col_energy,row_energy
 
-def increase_peps_mbd_lambda(Lambda,Dnew,noise=0.01):
+def increase_peps_mbd_lambda(peps,Dnew,noise=0.01):
     """
     Increase the bond dimension of lambda tensors in a
     canonical peps
 
     Args:
-        Lambda : 3D array
-            Lists of lambda tensors for the canonical peps
+        peps : PEPS Object
+            The peps for which we are increasing the bond dimension
         Dnew : int
             The new bond dimension
 
@@ -1766,33 +1766,37 @@ def increase_peps_mbd_lambda(Lambda,Dnew,noise=0.01):
             in increasing the bond dimension
 
     Returns:
-        Lambda : 3D array
-            Lists of lambda tensors with increased bond dimensions
+        peps : PEPS Object
+            The peps with the bond dimension increased
     """
-    if Lambda is not None:
+    if peps.ltensors is None:
+        # Do nothing if there are no lambda tensors
+        return peps
+    else:
         # Figure out peps size
-        Nx = len(Lambda[0])
-        Ny = len(Lambda[0][0])
-        Dold = Lambda[0][0][0].shape[0]
+        Nx = len(peps.ltensors[0])
+        Ny = len(peps.ltensors[0][0])
+        Dold = peps.ltensors[0][0][0].shape[0]
 
         # Get unitary tensor for insertion
-        identity = zeros((Dnew,Dold),dtype=Lambda[0][0][0].dtype)
-        identity[:Dold,:] = eye(Dold,dtype=Lambda[0][0][0].dtype)
-        mat = identity + noise*rand((Dnew,Dold),dtype=Lambda[0][0][0].dtype)
+        identity = zeros((Dnew,Dold),dtype=peps.ltensors[0][0][0].dtype)
+        identity[:Dold,:] = eye(Dold,dtype=peps.ltensors[0][0][0].dtype)
+        mat = identity + noise*rand((Dnew,Dold),dtype=peps.ltensors[0][0][0].dtype)
         mat = svd(mat)[0]
 
         # Loop through all possible tensors and increase their sizes
-        for ind in range(len(Lambda)):
-            for x in range(len(Lambda[ind])):
-                for y in range(len(Lambda[ind][x])):
-                    Lambda[ind][x][y] = einsum('Ll,l->L',mat,Lambda[ind][x][y])
+        for ind in range(len(peps.ltensors)):
+            for x in range(len(peps.ltensors[ind])):
+                for y in range(len(peps.ltensors[ind][x])):
+                    peps.ltensors[ind][x][y] = einsum('Ll,l->L',mat,peps.ltensors[ind][x][y])
 
         # Return result
-        return Lambda
-    else:
-        return None
+        return peps
 
-def increase_peps_mbd(peps,Dnew,noise=1e-10):
+def increase_zn_peps_mbd(peps,Dnew,noise=1e-10):
+    raise NotImplementedError()
+
+def increase_peps_mbd(peps,Dnew,noise=1e-10,chi=None,normalize=True):
     """
     Increase the bond dimension of a peps
 
@@ -1811,33 +1815,73 @@ def increase_peps_mbd(peps,Dnew,noise=1e-10):
         peps : 2D Array
             The new peps tensors with increased bond dimensions
     """
+    # Separate routine if using Zn Symmetry
+    if peps.Zn is not None:
+        return increase_zn_peps_mbd(peps,Dnew,noise=noise)
+
     # Figure out peps size
     Nx = len(peps)
     Ny = len(peps[0])
-    Dold = peps[0][0].shape[3]
 
     for col in range(Nx):
         for row in range(Ny):
+
             # Determine tensor shape
-            old_shape = list(peps[row][col].shape)
-            new_shape = list(peps[row][col].shape)
-            # Increase left bond dimension
+            old_shape = list(peps[row][col].ten.shape)
+            new_shape = list(peps[row][col].ten.shape)
+            legs = peps[row][col].legs
+
+            # Determine new required shape
+            ind = tuple()
+            # Left bond
             if row != 0:
-                new_shape[0] = Dnew
+                new_shape[legs[0][0]] = Dnew
+                ind += (slice(0,old_shape[legs[0][0]]),)
+            else:
+                for i in legs[0]:
+                    ind += (slice(0,old_shape[i]),)
+            # Down Bond
             if col != 0:
-                new_shape[1] = Dnew
+                new_shape[peps[row][col].legs[1][0]] = Dnew
+                ind += (slice(0,old_shape[legs[1][0]]),)
+            else:
+                for i in legs[1]:
+                    ind += (slice(0,old_shape[i]),)
+            # Physical Bond
+            for i in legs[2]:
+                ind += (slice(0,old_shape[i]),)
+            # Right Bond
             if row != Nx-1:
-                new_shape[3] = Dnew
-                if col != Ny-1:
-                    new_shape[4] = Dnew
+                new_shape[peps[row][col].legs[3][0]] = Dnew
+                ind += (slice(0,old_shape[legs[3][0]]),)
+            else:
+                for i in legs[3]:
+                    ind += (slice(0,old_shape[i]),)
+            # Top Bond
+            if col != Ny-1:
+                new_shape[peps[row][col].legs[4][0]] = Dnew
+                ind += (slice(0,old_shape[legs[4][0]]),)
+            else:
+                for i in legs[4]:
+                    ind += (slice(0,old_shape[i]),)
+
             # Create an empty tensor
-            ten = zeros(new_shape,dtype=peps[row][col].dtype)
-            ten[:old_shape[0],:old_shape[1],:old_shape[2],:old_shape[3],:old_shape[4]] = peps[row][col].copy()
+            ten = peps.backend.zeros(new_shape,dtype=peps[row][col].dtype)
+            ten[ind] = peps[row][col].ten.copy()
+
             # Add some noise (if needed
-            ten_noise = noise*rand(new_shape,dtype=peps[row][col].dtype)
+            ten_noise = noise*peps.backend.random(new_shape)
             ten += ten_noise
+
             # Put new tensor back into peps
-            peps[row][col] = ten
+            peps[row][col].ten = ten
+
+    # Increase Lambda tensors as well if needed
+    peps = increase_peps_mbd_lambda(peps,Dnew,noise=noise) 
+
+    # Normalize if needed
+    if normalize: 
+        peps.normalize(chi=chi)
 
     # Return result
     return peps
@@ -2295,7 +2339,7 @@ class PEPS:
         # Calculate the operator's value
         return calc_peps_op(self,ops,chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
 
-    def increase_mbd(self,newD,chi=None,noise=0.01,normalize=True):
+    def increase_mbd(self,newD,chi=None,noise=1e-10,normalize=True):
         """
         Increase the maximum bond dimension of the peps
 
@@ -2310,9 +2354,7 @@ class PEPS:
         """
         if newD is not None:
             self.chi = chi
-        self.tensors = increase_peps_mbd(self.tensors,newD,noise=noise)
-        self.ltensors = increase_peps_mbd_lambda(self.ltensors,newD,noise=noise)
-        self.normalize()
+        self = increase_peps_mbd(self,newD,noise=noise,normalize=normalize,chi=chi)
 
     def absorb_lambdas(self):
         """
@@ -2362,7 +2404,6 @@ class PEPS:
                 for x in range(len(self.ltensors[ind])):
                     for y in range(len(self.ltensors[ind][x])):
                         peps_copy.ltensors[ind][x][y] = self.ltensors[ind][x][y].copy()
-
 
         # Return result
         return peps_copy

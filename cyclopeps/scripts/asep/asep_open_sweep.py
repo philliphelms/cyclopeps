@@ -142,13 +142,13 @@ for ind in range(len(D)):
     # Evaluate X and Y Current and local density
     # Calculate Current
     currents = peps.calc_op(curr_ops,return_sum=False,ket=pepsl)
-    print('Vertical Currents = {}'.format(summ(currents[0])))
+    print('Vertical Currents = {}'.format(currents[0].sum()))
     for i in range(Nx):
         print_str = ''
         for j in range(Ny-1):
             print_str += '{} '.format(currents[0][i][j])
         print(print_str)
-    print('Horizontal Currents = {}'.format(summ(currents[1])))
+    print('Horizontal Currents = {}'.format(currents[1].sum()))
     for i in range(Ny):
         print_str = ''
         for j in range(Nx-1):

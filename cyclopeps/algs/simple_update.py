@@ -6,9 +6,6 @@ from numpy import float_
 def absorb_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas):
     """
     """
-    _peps1 = peps_col[row].copy().make_sparse()
-    _peps2 = peps_col[row+1].copy().make_sparse()
-    # Do Dense version ----------------------------------------------------------------
     peps1 = peps_col[row].copy()
     peps2 = peps_col[row+1].copy()
     # Absorb Bottom lambda
@@ -27,26 +24,6 @@ def absorb_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas):
         peps2 = einsum('ldpru,uU->ldprU',peps2,vert_lambdas[row+1])
     # Absorb middle lambda
     peps1 = einsum('ldpru,uU->ldprU',peps1,vert_lambdas[row])
-    # Do Sparse version ----------------------------------------------------------------
-    # Absorb Bottom lambda
-    if not (row == 0):
-        _peps1 = einsum('ldpru,dD->lDpru',_peps1,vert_lambdas[row-1].make_sparse())
-    # Absorb left lambdas
-    if left_lambdas is not None:
-        _peps1 = einsum('ldpru,lL->Ldpru',_peps1,left_lambdas[row].make_sparse())
-        _peps2 = einsum('ldpru,lL->Ldpru',_peps2,left_lambdas[row+1].make_sparse())
-    # Absorb right lambdas
-    if right_lambdas is not None:
-        _peps1 = einsum('ldpru,rR->ldpRu',_peps1,right_lambdas[row].make_sparse())
-        _peps2 = einsum('ldpru,rR->ldpRu',_peps2,right_lambdas[row+1].make_sparse())
-    # Absorb Top lambda
-    if not (row == len(peps_col)-2):
-        _peps2 = einsum('ldpru,uU->ldprU',_peps2,vert_lambdas[row+1].make_sparse())
-    # Absorb middle lambda
-    _peps1 = einsum('ldpru,uU->ldprU',_peps1,vert_lambdas[row].make_sparse())
-    # Compare results -------------------------------------------------------------------
-    #print('PEPS 1 diff (absorb): {}'.format((_peps1-peps1.make_sparse()).abs().sum()))
-    #print('PEPS 2 diff (absorb): {}'.format((_peps2-peps2.make_sparse()).abs().sum()))
     return peps1,peps2
 
 def separate_sites(combined_sites,D):
@@ -66,14 +43,9 @@ def separate_sites(combined_sites,D):
 def remove_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas):
     """
     """
-    _peps1 = peps_col[row].copy().make_sparse()
-    _peps2 = peps_col[row+1].copy().make_sparse()
-    # Compare invert_diag results
-    v1 = vert_lambdas[row-1].copy().invert_diag().make_sparse()
-    v2 = vert_lambdas[row-1].copy().make_sparse().invert_diag()
-    # Do Dense version ----------------------------------------------------------------
     peps1 = peps_col[row].copy()
     peps2 = peps_col[row+1].copy()
+
     # Absorb Bottom lambda
     if not (row == 0):
         peps1 = einsum('ldpru,dD->lDpru',peps1,vert_lambdas[row-1].invert_diag())
@@ -92,29 +64,12 @@ def remove_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas):
     # Put them back in the list
     peps_col[row] = peps1
     peps_col[row+1] = peps2
-    # Do Sparse version ----------------------------------------------------------------
-    # Absorb Bottom lambda
-    if not (row == 0):
-        _peps1 = einsum('ldpru,dD->lDpru',_peps1,vert_lambdas[row-1].make_sparse().invert_diag())
-    # Absorb left lambdas
-    if left_lambdas is not None:
-        _peps1 = einsum('ldpru,lL->Ldpru',_peps1,left_lambdas[row].make_sparse().invert_diag())
-        _peps2 = einsum('ldpru,lL->Ldpru',_peps2,left_lambdas[row+1].make_sparse().invert_diag())
-    # Absorb right lambdas
-    if right_lambdas is not None:
-        _peps1 = einsum('ldpru,rR->ldpRu',_peps1,right_lambdas[row].make_sparse().invert_diag())
-        _peps2 = einsum('ldpru,rR->ldpRu',_peps2,right_lambdas[row+1].make_sparse().invert_diag())
-    # Absorb Top lambda
-    if not (row == len(peps_col)-2):
-        _peps2 = einsum('ldpru,uU->ldprU',_peps2,vert_lambdas[row+1].make_sparse().invert_diag())
-    #print('PEPS 1 diff (remove): {}'.format((_peps1-peps1.make_sparse()).abs().sum()))
-    #print('PEPS 2 diff (remove): {}'.format((_peps2-peps2.make_sparse()).abs().sum()))
 
     # Return result
     return peps_col
 
 
-def tebd_step_single_col(peps_col,vert_lambdas,left_lambdas,right_lambdas,step_size,ham):
+def tebd_step_single_col(ham,peps_col,vert_lambdas,left_lambdas,right_lambdas,mbd,step_size):
     """
     """
 
@@ -136,16 +91,12 @@ def tebd_step_single_col(peps_col,vert_lambdas,left_lambdas,right_lambdas,step_s
         result = einsum('ldprLPRU,pPqQ->ldqrLQRU',tmp,eH)
 
         # Perform SVD
-        D = peps1.shape[4]
-        peps1,Lambda,peps2 = separate_sites(result,D)
-        comparison_ten = einsum('ldpru,LuPRU->ldprLPRU',einsum('ldpru,uU->ldprU',peps1,Lambda),peps2).make_sparse()
+        peps1,Lambda,peps2 = separate_sites(result,mbd)
 
         # Put result back into vectors
         vert_lambdas[row] = Lambda
         peps_col[row]   = peps1
         peps_col[row+1] = peps2
-        comparison2_ten = einsum('ldpru,LuPRU->ldprLPRU',einsum('ldpru,uU->ldprU',peps_col[row],vert_lambdas[row]),peps_col[row+1]).make_sparse()
-        #print('diff1 = {}'.format((comparison_ten-comparison2_ten).abs().sum()))
 
         # Remove Lambdas
         peps_col = remove_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas)
@@ -154,16 +105,11 @@ def tebd_step_single_col(peps_col,vert_lambdas,left_lambdas,right_lambdas,step_s
         peps_col[row].update_signs(sym1)
         peps_col[row+1].update_signs(sym2)
 
-        # A final check
-        peps1,peps2 = absorb_lambdas(row,peps_col,vert_lambdas,left_lambdas,right_lambdas)
-        comparison3_ten = einsum('ldpru,LuPRU->ldprLPRU',peps1,peps2).make_sparse()
-        #print('diff2 = {}'.format((comparison_ten-comparison3_ten).abs().sum()))
-
     # Return the result
     return peps_col,vert_lambdas
 
 
-def tebd_step_col(peps,ham,step_size):
+def tebd_step_col(peps,ham,mbd,step_size):
     """
     """
     # Figure out peps size
@@ -174,42 +120,45 @@ def tebd_step_col(peps,ham,step_size):
     for col in range(Nx):
         # Take TEBD Step
         if col == 0:
-            peps[col],peps.ltensors[0][col] = tebd_step_single_col(peps[col],
+            peps[col],peps.ltensors[0][col] = tebd_step_single_col(ham[col],
+                                                                   peps[col],
                                                                    peps.ltensors[0][col],
                                                                    None,
                                                                    peps.ltensors[1][col],
-                                                                   step_size,
-                                                                   ham[col])
+                                                                   mbd,
+                                                                   step_size)
         elif col == (Nx-1):
-            peps[col],peps.ltensors[0][col] = tebd_step_single_col(peps[col],
+            peps[col],peps.ltensors[0][col] = tebd_step_single_col(ham[col],
+                                                                   peps[col],
                                                                    peps.ltensors[0][col],
                                                                    peps.ltensors[1][col-1],
                                                                    None,
-                                                                   step_size,
-                                                                   ham[col])
+                                                                   mbd,
+                                                                   step_size)
         else:
-            peps[col],peps.ltensors[0][col] = tebd_step_single_col(peps[col],
+            peps[col],peps.ltensors[0][col] = tebd_step_single_col(ham[col],
+                                                                   peps[col],
                                                                    peps.ltensors[0][col],
                                                                    peps.ltensors[1][col-1],
                                                                    peps.ltensors[1][col],
-                                                                   step_size,
-                                                                   ham[col])
+                                                                   mbd,
+                                                                   step_size)
     # Return result
     return peps
 
-def tebd_step(peps,ham,step_size):
+def tebd_step(peps,ham,mbd,step_size):
     """
     """
     # Columns ----------------------------------
-    peps = tebd_step_col(peps,ham[0],step_size)
+    peps = tebd_step_col(peps,ham[0],mbd,step_size)
     # Rows -------------------------------------
     peps.rotate(clockwise=True)
-    peps = tebd_step_col(peps,ham[1],step_size)
+    peps = tebd_step_col(peps,ham[1],mbd,step_size)
     peps.rotate(clockwise=False)
     # Return results ---------------------------
     return peps
 
-def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None):
+def tebd_steps(peps,ham,mbd,step_size,n_step,conv_tol,chi=None):
     """
     """
     nSite = len(peps)*len(peps[0])
@@ -222,7 +171,7 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None):
     for iter_cnt in range(n_step):
 
         # Do TEBD Step
-        peps = tebd_step(peps,ham,step_size)
+        peps = tebd_step(peps,ham,mbd,step_size)
 
         # Normalize just in case
         peps.normalize()
@@ -382,15 +331,11 @@ def run_tebd(Nx,Ny,d,ham,
         # Do a tebd evolution for given step size
         E,peps = tebd_steps(peps,
                             ham,
+                            D[Dind],
                             step_size[Dind],
                             n_step[Dind],
                             conv_tol[Dind],
                             chi = chi[Dind])
-
-        # Increase MBD if needed
-        if (len(D)-1 > Dind) and (D[Dind+1] > D[Dind]):
-            peps.increase_mbd(D[Dind+1],chi=chi[Dind+1])
-            peps.normalize()
 
     # Print out results
     mpiprint(0,'\n\n'+'#'*50)
