@@ -328,7 +328,7 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None,als_iter=100,als_tol=
         E2 = peps.calc_op(ham,chi=chi)
 
         # Check for convergence
-        mpiprint(0,'Energy/site = {} ({})'.format(E/nSite,E2/nSite))
+        mpiprint(0,'Energy/site = {}'.format(E2/nSite))
         if abs((E-Eprev)/E) < conv_tol:
             mpiprint(3,'Converged E = {} to an accuracy of ~{}'.format(E,abs(E-Eprev)))
             converged = True
@@ -340,16 +340,21 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,chi=None,als_iter=100,als_tol=
 
 def run_tebd(Nx,Ny,d,ham,
              peps=None,
-             D=3,chi=10,
-             norm_tol=20,singleLayer=True,
+             D=3,
+             chi=10,
+             su_chi=10,
+             norm_tol=20,
+             singleLayer=True,
              max_norm_iter=20,
              dtype=float_,
              step_size=[0.1,0.01,0.001],
              su_step_size=None,
              n_step=5,
              su_n_step=None,
-             conv_tol=1e-8,
-             als_iter=5,als_tol=1e-10,
+             conv_tol=1e-5,
+             su_conv_tol=1e-5,
+             als_iter=5,
+             als_tol=1e-10,
              peps_fname=None,
              peps_fdir='./'):
     """
@@ -385,6 +390,9 @@ def run_tebd(Nx,Ny,d,ham,
             performed where it is slowly incremented)
         chi : int
             The boundary mpo maximum bond dimension
+        su_chi : int
+            The boundary mpo maximum bond dimension for computing
+            the energy in the simple update initial guess generation
         norm_tol : float
             How close to 1. the norm should be before
             exact arithmetic is used in the normalization
@@ -400,13 +408,21 @@ def run_tebd(Nx,Ny,d,ham,
         step_size : float
             The trotter step size, may be a list of
             step sizes
+        su_step_size : float
+            The trotter step size for the simple update procedure 
+            may be a list of step sizes
         n_step : int
             The number of steps to be taken for each
             trotter step size. If it is a list, then
             len(step_size) == len(n_step) and
             len(D) == len(n_step) must both be True.
+        su_n_step : int
+            The number of steps to be taken for each
+            trotter step size in the simple update procedure.
         conv_tol : float
             The convergence tolerance
+        su_conv_tol : float
+            The convergence tolerance for the simple update procedure.
         peps_fname : str
             The name of the saved peps file
         peps_fdir : str
@@ -452,15 +468,19 @@ def run_tebd(Nx,Ny,d,ham,
         if su_n_step is None: su_n_step = n_step
         _,peps = su(Nx,Ny,d,ham,
                     D=D[0],
-                    chi=20,
+                    chi=su_chi,
                     singleLayer=singleLayer,
                     max_norm_iter=max_norm_iter,
                     dtype=dtype,
                     step_size=su_step_size,
                     n_step=su_n_step,
-                    conv_tol=conv_tol,
+                    conv_tol=su_conv_tol,
                     peps_fname=peps_fname,
                     peps_fdir=peps_fdir)
+
+    # Absorb lambda tensors if canonical
+    if peps.ltensors is not None:
+        peps.absorb_lambdas()
 
     # Loop over all (bond dims/step sizes/number of steps)
     for Dind in range(len(D)):

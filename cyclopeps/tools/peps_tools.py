@@ -890,16 +890,10 @@ def calc_peps_norm(peps,chi=4,singleLayer=True):
         norm : float
             The (approximate) norm of the PEPS
     """
-    # TODO Add - separate bra and ket
+    peps = peps.copy()
     # Absorb Lambda tensors if needed
     if peps.ltensors is not None:
         peps = peps_absorb_lambdas(peps.tensors,peps.ltensors,mk_copy=True)
-    else:
-        peps = copy.deepcopy(peps.tensors)
-    if ket is not None and ket.ltensors is not None:
-        ket = peps_absorb_lambdas(ket.tensors,ket.ltensors,mk_copy=True)
-    elif ket is not None:
-        ket = copy.deepcopy(ket.tensors)
 
     # Get PEPS Dims
     Nx = len(peps)
