@@ -61,7 +61,6 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
 
     # Find size of peps column and dims of tensors
     Ny = len(bra)
-    _,_,d,D,_ = bra[0].shape
 
     # Copy the ket column if needed
     bra = copy_tensor_list(bra)
@@ -86,8 +85,10 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
         bound_mpo.append(res)
 
         # Add correct identity
-        (_,_,Dr,Du) = ket[row].shape
-        (_,_,Zr,Zu) = ket[row].qn_sectors
+        Dr = ket[row].shape[ket[row].legs[2][0]]
+        Du = ket[row].shape[ket[row].legs[3][0]]
+        Zr = ket[row].qn_sectors[ket[row].legs[2][0]]
+        Zu = ket[row].qn_sectors[ket[row].legs[3][0]]
         I1 = eye(Dr,
                  Zr,
                  is_symmetric=ket[row].is_symmetric,
@@ -134,7 +135,7 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
 
     return bound_mps
 
-def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
+def left_bmpo_sl_add_ket(ket,bound_mpo,Ny,chi=4,truncate=True):
     """
     Add the ket layer to the boundary mpo
     """
@@ -161,8 +162,8 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
             res.merge_inds([2,3])
 
         # Create Correct Identity
-        (Dl,Dd,Dp,Dr,Du) = ket[row].shape
-        (Zl,Zd,Zp,Zr,Zu) = ket[row].qn_sectors
+        Dd = ket[row].shape[ket[row].legs[1][0]]
+        Zd = ket[row].qn_sectors[ket[row].legs[1][0]]
         I1 = eye(Dd,
                  Zd,
                  is_symmetric=ket[row].is_symmetric,
@@ -204,7 +205,7 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=4,truncate=True):
 
     return bound_mps
 
-def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
+def left_bmpo_sl_add_bra(bra,bound_mpo,Ny,chi=4,truncate=True):
     """
     Add the bra layer to the boundary mpo
     """
@@ -233,10 +234,12 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=4,truncate=True):
         mpiprint(6,'Adding Identity to boundary mps')
         # Unmerge bmps tensor
         bound_tens = bound_mpo[2*row+1]
+        thermal = (len(bound_tens.legs[1]) == 3)
         bound_tens.unmerge_ind(1)
+        if thermal: bound_tens.merge_inds([2,3])
         # Create identity tensor
-        (Dl,Dd,Dp,Dr,Du) = bra[row].shape
-        (Zl,Zd,Zp,Zr,Zu) = bra[row].qn_sectors
+        Du = bra[row].shape[bra[row].legs[4][0]]
+        Zu = bra[row].qn_sectors[bra[row].legs[4][0]]
         I1 = eye(Du,
                 Zu,
                 is_symmetric=bra[row].is_symmetric,
@@ -306,7 +309,6 @@ def left_bmpo_sl(bra, bound_mpo, chi=4,truncate=True,ket=None):
     mpiprint(3,'Updating boundary mpo (sl)')
     # Find size of peps column and dims of tensors
     Ny = len(bra)
-    _,_,d,D,_ = bra[0].shape
 
     # Copy the ket column if needed
     bra = copy_tensor_list(bra)
@@ -314,9 +316,9 @@ def left_bmpo_sl(bra, bound_mpo, chi=4,truncate=True,ket=None):
         ket = copy_tensor_list(bra)
 
     # First Layer (ket) #####################################
-    bound_mpo = left_bmpo_sl_add_ket(ket,bound_mpo,D,Ny,chi=chi,truncate=truncate)
+    bound_mpo = left_bmpo_sl_add_ket(ket,bound_mpo,Ny,chi=chi,truncate=truncate)
     # Second Layer (bra) ####################################
-    bound_mpo = left_bmpo_sl_add_bra(bra,bound_mpo,D,Ny,chi=chi,truncate=truncate)
+    bound_mpo = left_bmpo_sl_add_bra(bra,bound_mpo,Ny,chi=chi,truncate=truncate)
 
     # Return result
     return bound_mpo
@@ -707,8 +709,7 @@ def peps_col_to_mps(peps_col):
     peps_col = peps_col_cp
 
     for row in range(Ny):
-        # Copy the tensor
-        (Dl,Dd,d,Dr,Du) = peps_col[row].shape
+
         # Transpose to put left, physical, and right bonds in middle
         peps_col[row] = peps_col[row].transpose([1,0,2,3,4])
         # lump left, physical, and right tensors
@@ -743,7 +744,7 @@ def calc_peps_col_norm(peps_col):
     # Return the resulting norm
     return norm
 
-def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
+def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,thermal=False,dZn=None,backend='numpy',dtype=float_):
     """
     Create a random tensor for a PEPS
 
@@ -761,6 +762,9 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_
         Zn : int
             Create a PEPS which preserves this Zn symmetry,
             i.e. if Zn=2, then Z2 symmetry is preserved.
+        thermal : bool
+            Whether the peps tensor is part of a thermal state,
+            i.e. two physical indices
         dZn : int
             The number of symmetry sectors for the physical bond dimension
             if None, then Zn will be used
@@ -813,14 +817,24 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_
         d  /= dZn
 
         # Create sym argument
-        sym = ['+++--',
-               [range(Znl),range(Znd),range(dZn),range(Znr),range(Znu)],
-               0,
-               Zn]
+        if thermal:
+            sym = ['+++---',
+                   [range(Znl),range(Znd),range(dZn),range(dZn),range(Znr),range(Znu)],
+                   0,
+                   Zn]
+        else:
+            sym = ['+++--',
+                   [range(Znl),range(Znd),range(dZn),range(Znr),range(Znu)],
+                   0,
+                   Zn]
 
     # Create the random tensor
-    dims = (Dl,Dd,d,Dr,Du)
-    ten = rand(dims,sym,backend=backend,dtype=dtype)
+    if thermal:
+        dims = (Dl,Dd,d,d,Dr,Du)
+        ten = rand(dims,sym,backend=backend,dtype=dtype,legs=[[0],[1],[2,3],[4],[5]])
+    else:
+        dims = (Dl,Dd,d,Dr,Du)
+        ten = rand(dims,sym,backend=backend,dtype=dtype)
     #ten = 0.95*ones(dims,sym,backend=backend,dtype=dtype) + 0.1*rand(dims,sym,backend=backend,dtype=dtype)
     
     # Return result
@@ -1046,7 +1060,7 @@ def calc_peps_norm(_peps,chi=4,singleLayer=True,ket=None):
     # Return result
     return norm
 
-def make_rand_peps(Nx,Ny,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
+def make_rand_peps(Nx,Ny,d,D,Zn=None,thermal=False,dZn=None,backend='numpy',dtype=float_):
     """
     Make a random PEPS
 
@@ -1064,6 +1078,9 @@ def make_rand_peps(Nx,Ny,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
         Zn : int
             Create a PEPS which preserves this Zn symmetry,
             i.e. if Zn=2, then Z2 symmetry is preserved.
+        thermal : bool
+            Whether to create a thermal state,
+            i.e. an additional physical index
         dZn : int
             The number of symmetry sectors for the physical bond dimension
             If None, then will be the same as Zn
@@ -1091,7 +1108,7 @@ def make_rand_peps(Nx,Ny,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
     # Place random tensors into the PEPS
     for x in range(Nx):
         for y in range(Ny):
-            tensors[x][y] = rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=Zn,dZn=dZn,backend=backend,dtype=dtype)
+            tensors[x][y] = rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=Zn,thermal=thermal,dZn=dZn,backend=backend,dtype=dtype)
         # At the end of each column, make the norm smaller
         tensors[x][:] = normalize_peps_col(tensors[x][:])
 
@@ -1526,7 +1543,20 @@ def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
         norm = einsum('apqb,apqb->',tmp1,tmp2)
         if ham is not None:
             tmp = einsum('aPQb,apqb->PQpq',tmp1,tmp2)
-            E = einsum('PQpq,PQpq->',tmp,ham)
+            if len(tmp.legs[0]) == 2:
+                # Thermal state
+                tmp.unmerge_ind(3)
+                tmp.unmerge_ind(2)
+                tmp.unmerge_ind(1)
+                tmp.unmerge_ind(0)
+                E = einsum('PaQbpcqd,PQpq->',tmp,ham)
+                tmp.merge_inds([0,1])
+                tmp.merge_inds([1,2])
+                tmp.merge_inds([2,3])
+                tmp.merge_inds([3,4])
+            else:
+                # Normal peps
+                E = einsum('PQpq,PQpq->',tmp,ham)
         else:
             E = norm
         mpiprint(7,'E = {}/{} = {}'.format(E,norm,E/norm))
@@ -2023,7 +2053,8 @@ class PEPS:
     """
 
     def __init__(self,Nx=10,Ny=10,d=2,D=2,
-                 chi=None,Zn=None,dZn=None,canonical=False,backend='numpy',
+                 chi=None,Zn=None,thermal=False,
+                 dZn=None,canonical=False,backend='numpy',
                  singleLayer=True,dtype=float_,
                  normalize=True,norm_tol=20.,
                  max_norm_iter=100,norm_bs_upper=10.0,norm_bs_lower=0.0,
@@ -2048,6 +2079,9 @@ class PEPS:
             Zn : int
                 Create a PEPS which preserves this Zn symmetry,
                 i.e. if Zn=2, then Z2 symmetry is preserved.
+            thermal : bool
+                Whether or not to create a thermal state,
+                i.e. an additional physical index
             dZn : int
                 The number of symmetry sectors in the physical
                 bond dimension. 
@@ -2110,6 +2144,7 @@ class PEPS:
         if chi is None: chi = 4*D**2
         self.chi         = chi
         self.Zn          = Zn
+        self.thermal     = thermal
         if dZn is None: dZn = Zn
         self.dZn         = dZn
         self.canonical   = canonical
@@ -2133,6 +2168,7 @@ class PEPS:
                                       self.d,
                                       self.D,
                                       Zn=self.Zn,
+                                      thermal=self.thermal,
                                       dZn=self.dZn,
                                       backend=self.backend,
                                       dtype=self.dtype)

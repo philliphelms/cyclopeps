@@ -88,7 +88,16 @@ def tebd_step_single_col(ham,peps_col,vert_lambdas,left_lambdas,right_lambdas,mb
 
         # Apply Time Evolution
         tmp = einsum('ldpru,LuPRU->ldprLPRU',peps1,peps2)
-        result = einsum('ldprLPRU,pPqQ->ldqrLQRU',tmp,eH)
+        if len(peps1.legs[2]) == 2:
+            # Thermal State time evolution
+            tmp.unmerge_ind(5)
+            tmp.unmerge_ind(2)
+            result = einsum('ldpyrLPzRU,pPqQ->ldqyrLQzRU',tmp,eH)
+            result.merge_inds([6,7])
+            result.merge_inds([2,3])
+        else:
+            # Regular state time evolution
+            result = einsum('ldprLPRU,pPqQ->ldqrLQRU',tmp,eH)
 
         # Perform SVD
         peps1,Lambda,peps2 = separate_sites(result,mbd)
@@ -199,6 +208,7 @@ def run_tebd(Nx,Ny,d,ham,
              backend='numpy',
              D=3,
              chi=10,
+             thermal=False,
              norm_tol=20,
              singleLayer=True,
              max_norm_iter=20,
@@ -245,6 +255,9 @@ def run_tebd(Nx,Ny,d,ham,
             performed where it is slowly incremented)
         chi : int
             The boundary mpo maximum bond dimension
+        thermal : bool
+            Whether to do the fu algorithm with a thermal state, i.e.
+            two physical indices
         norm_tol : float
             How close to 1. the norm should be before
             exact arithmetic is used in the normalization
@@ -314,6 +327,7 @@ def run_tebd(Nx,Ny,d,ham,
                     D=D[0],
                     chi=chi[0],
                     Zn=Zn,
+                    thermal=thermal,
                     backend=backend,
                     norm_tol=norm_tol,
                     canonical=True,

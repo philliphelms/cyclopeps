@@ -329,6 +329,7 @@ def run_tebd(Nx,Ny,d,ham,
              Zn=None,
              chi=10,
              su_chi=10,
+             thermal=False,
              norm_tol=20,
              singleLayer=True,
              max_norm_iter=20,
@@ -385,6 +386,9 @@ def run_tebd(Nx,Ny,d,ham,
         su_chi : int
             The boundary mpo maximum bond dimension for computing
             the energy in the simple update initial guess generation
+        thermal : bool
+            Whether to do the fu algorithm with a thermal state, i.e.
+            two physical indices
         norm_tol : float
             How close to 1. the norm should be before
             exact arithmetic is used in the normalization
@@ -462,6 +466,7 @@ def run_tebd(Nx,Ny,d,ham,
                     D=D[0],
                     Zn=Zn,
                     chi=su_chi,
+                    thermal=thermal,
                     backend=backend,
                     singleLayer=singleLayer,
                     max_norm_iter=max_norm_iter,
