@@ -744,9 +744,9 @@ def calc_peps_col_norm(peps_col):
     # Return the resulting norm
     return norm
 
-def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,thermal=False,dZn=None,backend='numpy',dtype=float_):
+def thermal_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
     """
-    Create a random tensor for a PEPS
+    Create a thermal (beta=0) tensor for a PEPS
 
     Args:
         Nx : int
@@ -762,9 +762,6 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,thermal=False,dZn=None,backend='numpy
         Zn : int
             Create a PEPS which preserves this Zn symmetry,
             i.e. if Zn=2, then Z2 symmetry is preserved.
-        thermal : bool
-            Whether the peps tensor is part of a thermal state,
-            i.e. two physical indices
         dZn : int
             The number of symmetry sectors for the physical bond dimension
             if None, then Zn will be used
@@ -817,24 +814,110 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,thermal=False,dZn=None,backend='numpy
         d  /= dZn
 
         # Create sym argument
-        if thermal:
-            sym = ['+++---',
-                   [range(Znl),range(Znd),range(dZn),range(dZn),range(Znr),range(Znu)],
-                   0,
-                   Zn]
-        else:
-            sym = ['+++--',
-                   [range(Znl),range(Znd),range(dZn),range(Znr),range(Znu)],
-                   0,
-                   Zn]
+        sym = ['+++---',
+               [range(Znl),range(Znd),range(dZn),range(dZn),range(Znr),range(Znu)],
+               0,
+               Zn]
+
+    # Create an empty tensor
+    dims = (Dl,Dd,d,d,Dr,Du)
+    ten = zeros(dims,sym,backend=backend,dtype=dtype,legs=[[0],[1],[2,3],[4],[5]])
+    
+    # Fill tensor entries where needed
+    if sym is None:
+        for i in range(d):
+            for j in range(d):
+                if i == j:
+                    ten.ten[0,0,i,j,0,0] = 1./ten.backend.sqrt(float(d))
+    else:
+        for i in range(d):
+            for j in range(d):
+                for k in range(dZn):
+                    for l in range(dZn):
+                        if (i == j) and (k == l):
+                            ten.ten.array[0,0,k,l,0,0,0,i,j,0,0] = 1./ten.backend.sqrt(float(d))
+
+    # Return result
+    return ten
+
+def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
+    """
+    Create a random tensor for a PEPS
+
+    Args:
+        Nx : int
+            The PEPS lattice size in the x-direction
+        Ny : int
+            The PEPS lattice size in the y-direction
+        x : int
+            The x-coordinate of the tensor
+        y : int
+            The y-coordinate of the tensor
+
+    Kwargs:
+        Zn : int
+            Create a PEPS which preserves this Zn symmetry,
+            i.e. if Zn=2, then Z2 symmetry is preserved.
+        dZn : int
+            The number of symmetry sectors for the physical bond dimension
+            if None, then Zn will be used
+        backend : str
+            This specifies the backend to be used for the calculation.
+            Options are currently 'numpy' or 'ctf'. If using symmetries,
+            this will be adapted to using symtensors with numpy or ctf as
+            the backend.
+        dtype : dtype
+            The data type of the tensor
+            Default : np.float_
+
+    Returns:
+        ten : ndarray
+            A random tensor with the correct dimensions
+            for the given site
+    """
+    # Determine the correct bond dimensions
+    Dl = D
+    Dr = D
+    Du = D
+    Dd = D
+
+    # Set to one if at an edge
+    if x == 0:    Dl = 1
+    if x == Nx-1: Dr = 1
+    if y == 0:    Dd = 1
+    if y == Ny-1: Du = 1
+
+    # Set default value of sym
+    sym = None
+
+    # Deal with Zn symmetry (if needed)
+    if Zn is not None:
+        # And correct symmetries
+        Znl= Zn
+        Znr= Zn
+        Znu= Zn
+        Znd= Zn
+        # Set to one if at an edge
+        if x == 0:    Znl = 1
+        if x == Nx-1: Znr = 1
+        if y == 0:    Znd = 1
+        if y == Ny-1: Znu = 1
+        # Resize D->Dnew so Dnew*Zn = D
+        Dl /= Znl
+        Dr /= Znr
+        Dd /= Znd
+        Du /= Znu
+        d  /= dZn
+
+        # Create sym argument
+        sym = ['+++--',
+               [range(Znl),range(Znd),range(dZn),range(Znr),range(Znu)],
+               0,
+               Zn]
 
     # Create the random tensor
-    if thermal:
-        dims = (Dl,Dd,d,d,Dr,Du)
-        ten = rand(dims,sym,backend=backend,dtype=dtype,legs=[[0],[1],[2,3],[4],[5]])
-    else:
-        dims = (Dl,Dd,d,Dr,Du)
-        ten = rand(dims,sym,backend=backend,dtype=dtype)
+    dims = (Dl,Dd,d,Dr,Du)
+    ten = rand(dims,sym,backend=backend,dtype=dtype)
     #ten = 0.95*ones(dims,sym,backend=backend,dtype=dtype) + 0.1*rand(dims,sym,backend=backend,dtype=dtype)
     
     # Return result
@@ -1060,9 +1143,9 @@ def calc_peps_norm(_peps,chi=4,singleLayer=True,ket=None):
     # Return result
     return norm
 
-def make_rand_peps(Nx,Ny,d,D,Zn=None,thermal=False,dZn=None,backend='numpy',dtype=float_):
+def make_thermal_peps(Nx,Ny,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
     """
-    Make a random PEPS
+    Make a thermal (beta=0) PEPS
 
     Args:
         d : int
@@ -1078,9 +1161,6 @@ def make_rand_peps(Nx,Ny,d,D,Zn=None,thermal=False,dZn=None,backend='numpy',dtyp
         Zn : int
             Create a PEPS which preserves this Zn symmetry,
             i.e. if Zn=2, then Z2 symmetry is preserved.
-        thermal : bool
-            Whether to create a thermal state,
-            i.e. an additional physical index
         dZn : int
             The number of symmetry sectors for the physical bond dimension
             If None, then will be the same as Zn
@@ -1108,11 +1188,108 @@ def make_rand_peps(Nx,Ny,d,D,Zn=None,thermal=False,dZn=None,backend='numpy',dtyp
     # Place random tensors into the PEPS
     for x in range(Nx):
         for y in range(Ny):
-            tensors[x][y] = rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=Zn,thermal=thermal,dZn=dZn,backend=backend,dtype=dtype)
+            tensors[x][y] = thermal_peps_tensor(Nx,Ny,x,y,d,D,Zn=Zn,dZn=dZn,backend=backend,dtype=dtype)
+
+    return tensors
+
+def make_rand_peps(Nx,Ny,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
+    """
+    Make a random PEPS
+
+    Args:
+        d : int
+            The local bond dimension
+        D : int
+            The auxilliary bond dimension
+        Nx : int
+            The PEPS lattice size in the x-direction
+        Ny : int
+            The PEPS lattice size in the y-direction
+
+    Kwargs:
+        Zn : int
+            Create a PEPS which preserves this Zn symmetry,
+            i.e. if Zn=2, then Z2 symmetry is preserved.
+        dZn : int
+            The number of symmetry sectors for the physical bond dimension
+            If None, then will be the same as Zn
+        backend : str
+            This specifies the backend to be used for the calculation.
+            Options are currently 'numpy' or 'ctf'. If using symmetries,
+            this will be adapted to using symtensors with numpy or ctf as
+            the backend.
+        dtype : dtype
+            The data type of the tensor
+            Default : np.float_
+
+    Returns:
+        peps : array of arrays
+            A random peps held as an array of arrays
+    """
+    # Create a list of lists to hold PEPS tensors
+    tensors = []
+    for x in range(Nx):
+        tmp = []
+        for y in range(Ny):
+            tmp += [None]
+        tensors += [tmp]
+
+    # Place random tensors into the PEPS
+    for x in range(Nx):
+        for y in range(Ny):
+            tensors[x][y] = rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=Zn,dZn=dZn,backend=backend,dtype=dtype)
         # At the end of each column, make the norm smaller
         tensors[x][:] = normalize_peps_col(tensors[x][:])
 
     return tensors
+
+def thermal_lambda_tensor(D,Zn=None,backend='numpy',dtype=float_):
+    """
+    Create a thermal (currently identity) lambda tensor for a canonical PEPS
+
+    Args:
+        D : int
+            The PEPS Bond Dimension
+
+    Kwargs:
+        Zn : int
+            Create a PEPS which preserves this Zn symmetry,
+            i.e. if Zn=2, then Z2 symmetry is preserved.
+        backend : str
+            This specifies the backend to be used for the calculation.
+            Options are currently 'numpy' or 'ctf'. If using symmetries,
+            this will be adapted to using symtensors with numpy or ctf as
+            the backend.
+        dtype : dtype
+            The data type of the tensor
+            Default : np.float_
+
+    Returns:
+        ten : ndarray
+            A random tensor with the correct dimensions
+            for the given site
+    """
+    # Determine symmetry
+    sym = None
+    if Zn is not None:
+        sym = ['+-',[range(Zn)]*2,0,Zn]
+        D /= Zn
+
+    # Create empty tensor
+    l = zeros((D,D),
+              sym=sym,
+              backend=backend,
+              dtype=dtype)
+
+    # Fill Diagonal Elements
+    if l.sym is None:
+        l.ten = l.backend.diag(l.backend.ones(D))
+    else:
+        for i in range(Zn):
+            l.ten.array[i,:,:] = l.backend.diag(l.backend.ones(D))
+
+    # Return result
+    return l
 
 def rand_lambda_tensor(D,Zn=None,backend='numpy',dtype=float_):
     """
@@ -1161,6 +1338,35 @@ def rand_lambda_tensor(D,Zn=None,backend='numpy',dtype=float_):
 
     # Return result
     return l
+
+def make_thermal_lambdas(Nx,Ny,D,Zn=None,backend='numpy',dtype=float_):
+    """
+    Make identites as diagonal matrices to serve as the
+    singular values for the Gamma-Lambda canonical
+    form of the thermal PEPS
+
+    Used primarily for the simple update contraction scheme
+    """
+
+    # Lambda tensors along vertical bonds
+    vert = []
+    for x in range(Nx):
+        tmp = []
+        for y in range(Ny-1):
+            tmp += [thermal_lambda_tensor(D,Zn=Zn,backend=backend,dtype=dtype)]
+        vert += [tmp]
+
+    # Lambda tensors along horizontal bonds
+    horz = []
+    for x in range(Nx-1):
+        tmp = []
+        for x in range(Ny):
+            tmp += [thermal_lambda_tensor(D,Zn=Zn,backend=backend,dtype=dtype)]
+        horz += [tmp]
+
+    # Add horizontal and vertical lambdas to tensor list
+    tensors = [vert,horz]
+    return tensors
 
 def make_rand_lambdas(Nx,Ny,D,Zn=None,backend='numpy',dtype=float_):
     """
@@ -2163,24 +2369,41 @@ class PEPS:
         self.fdir          = fdir
 
         # Make a random PEPS
-        self.tensors = make_rand_peps(self.Nx,
-                                      self.Ny,
-                                      self.d,
-                                      self.D,
-                                      Zn=self.Zn,
-                                      thermal=self.thermal,
-                                      dZn=self.dZn,
-                                      backend=self.backend,
-                                      dtype=self.dtype)
+        if thermal:
+            self.tensors = make_thermal_peps(self.Nx,
+                                             self.Ny,
+                                             self.d,
+                                             self.D,
+                                             Zn=self.Zn,
+                                             dZn=self.dZn,
+                                             backend=self.backend,
+                                             dtype=self.dtype)
+        else:
+            self.tensors = make_rand_peps(self.Nx,
+                                          self.Ny,
+                                          self.d,
+                                          self.D,
+                                          Zn=self.Zn,
+                                          dZn=self.dZn,
+                                          backend=self.backend,
+                                          dtype=self.dtype)
 
         # Add in lambda "singular value" matrices
         if self.canonical:
-            self.ltensors = make_rand_lambdas(self.Nx,
-                                              self.Ny,
-                                              self.D,
-                                              Zn=self.Zn,
-                                              backend=self.backend,
-                                              dtype=self.dtype)
+            if thermal:
+                self.ltensors = make_thermal_lambdas(self.Nx,
+                                                     self.Ny,
+                                                     self.D,
+                                                     Zn=self.Zn,
+                                                     backend=self.backend,
+                                                     dtype=self.dtype)
+            else:
+                self.ltensors = make_rand_lambdas(self.Nx,
+                                                  self.Ny,
+                                                  self.D,
+                                                  Zn=self.Zn,
+                                                  backend=self.backend,
+                                                  dtype=self.dtype)
         else:
             self.ltensors = None
 

@@ -19,10 +19,8 @@ backend = 'numpy'
 d = 2
 
 # TEBD Parameters
-step_sizes = [0.1,0.05, 0.01]
-n_step     = [500, 500,  500]
-chi        = [ 10,  20,   50]
-conv_tol   = [1e-5,1e-5,1e-5]
+step_size = 0.05
+n_step = 500
 
 # Get mpo
 if Zn is None:
@@ -30,22 +28,34 @@ if Zn is None:
 else:
     ham = return_op(Nx,Ny,sym='Z2',backend=backend)
 
+# Run SU
+"""
+Ef,pepssu = su(Nx,
+               Ny,
+               d,
+               ham,
+               thermal=True,
+               D=D,
+               Zn=Zn,
+               chi=chi,
+               backend=backend,
+               n_step=n_step,
+               step_size=step_size,
+               conv_tol=0.)
+"""
+
 # Run SU/FU
-Ef,_ = fu(Nx,
-          Ny,
-          d,
-          ham,
-          thermal=True,
-          D=D,
-          Zn=Zn,
-          chi=chi,
-          backend=backend,
-          n_step=n_step,
-          step_size=step_sizes,
-          conv_tol=conv_tol,
-          su_step_size=step_sizes,
-          su_chi=chi[0],
-          su_conv_tol=conv_tol,
-          su_n_step=n_step)
+Ef,pepsfu = fu(Nx,
+               Ny,
+               d,
+               ham,
+               thermal=True,
+               D=D,
+               Zn=Zn,
+               chi=chi,
+               backend=backend,
+               n_step=n_step,
+               step_size=step_size,
+               conv_tol=0)
 
 print('\n\nFinal  E = {}'.format(Ef))

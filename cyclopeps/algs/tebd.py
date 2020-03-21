@@ -63,7 +63,16 @@ def optimize_bottom(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
     # Calculate S
     tmp = einsum('APD,AaBb->DPaBb',phys_b,N)
     tmp = einsum('DPaBb,DQB->PaQb',tmp,phys_t)
-    tmp = einsum('PaQb,PQpq->abpq',tmp,eH)
+    if len(tmp.legs[0]) == 2:
+        # Then thermal state
+        tmp.unmerge_ind(2)
+        tmp.unmerge_ind(0)
+        tmp = einsum('PxaQyb,PQpq->abpxqy',tmp,eH)
+        tmp.merge_inds([4,5])
+        tmp.merge_inds([2,3])
+    else:
+        # Then regular state
+        tmp = einsum('PaQb,PQpq->abpq',tmp,eH)
     S   = einsum('abpq,dqb->apd',tmp,phys_t_new)
 
     # Take inverse of R
@@ -75,6 +84,38 @@ def optimize_bottom(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
     # Return Results
     return phys_b_new
 
+def svd_evolve(phys_b,phys_t,eH):
+    """
+    Do time evolution by applying gate, then
+    doing svd and truncation to separate sites again
+    """
+    # Do time evolution
+    tmp = einsum('aPb,bQc->aPQc',phys_b,phys_t)
+    if len(tmp.legs[1]) == 2:
+        # Thermal state
+        tmp.unmerge_ind(2)
+        tmp.unmerge_ind(1)
+        result = einsum('aPxQyc,PQpq->apxqyc',tmp,eH)
+        result.merge_inds([1,2])
+        result.merge_inds([2,3])
+    else:
+        # Regular peps state
+        result = einsum('aPQc,PQpq->apqc',tmp,eH)
+    
+    # Do svd & truncation
+    if phys_b.sym is None:
+        D = phys_b.ten.shape[phys_b.legs[2][0]]
+    else:
+        D = len(phys_b.ten.sym[1][phys_b.legs[2][0]])*phys_b.ten.shape[phys_b.legs[2][0]]
+    U,S,V = result.svd(2,
+                       truncate_mbd=D,
+                       return_ent=False,
+                       return_wgt=False)
+    # Absorb singular values
+    U = einsum('ijk,kl->ijl',U,S.sqrt())
+    V = einsum('ij,jkl->ikl',S.sqrt(),V)
+
+    return U,V
 def optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
     """
     Note:
@@ -90,7 +131,14 @@ def optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
     # Calculate S
     tmp = einsum('UQA,DdAa->UQDda',phys_t,N)
     tmp = einsum('UQDda,DPU->PQad',tmp,phys_b)
-    tmp = einsum('PQad,PQpq->pqad',tmp,eH)
+    if len(tmp.legs[0]) == 2:
+        tmp.unmerge_ind(1)
+        tmp.unmerge_ind(0)
+        tmp = einsum('PxQyad,PQpq->pxqyad',tmp,eH)
+        tmp.merge_inds([2,3])
+        tmp.merge_inds([0,1])
+    else:
+        tmp = einsum('PQad,PQpq->pqad',tmp,eH)
     S   = einsum('pqad,dpu->uqa',tmp,phys_b_new)
 
     # Take inverse of R
@@ -102,10 +150,12 @@ def optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
     # Return Results
     return phys_t_new
 
-def alternating_least_squares(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
+def noiseless_als(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
     """
+    Do the Alternating least squares procedure, using the current
+    physical index-holding tensors as the initial guess
     """
-    # Copy tensors (we never change phys_b or phys_t)
+    # Create initial guesses for resulting tensors
     phys_b_new = phys_b.copy()
     phys_t_new = phys_t.copy()
 
@@ -131,6 +181,57 @@ def alternating_least_squares(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
 
     # Return result
     return phys_b_new,phys_t_new
+
+def noisy_als(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
+    """
+    Do the Alternating least squares procedure, using the current
+    physical index-holding tensors (with some noise) as the initial guess
+    """
+    # Create initial guesses for resulting tensors
+    noise_b = phys_b.copy()
+    noise_t = phys_t.copy()
+    noise_b.randomize()
+    noise_t.randomize()
+    phys_b_new = phys_b.copy() + 0.1*noise_b
+    phys_t_new = phys_t.copy() + 0.1*noise_t
+
+    # Initialize cost function
+    cost_prev = cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
+
+    for i in range(als_iter):
+
+        # Optimize Bottom Site
+        phys_b_new = optimize_bottom(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
+
+        # Optimize Top Site
+        phys_t_new = optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
+
+        # Check for convergence
+        cost = cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
+        #print('Cost = {}'.format(cost))
+        if (abs(cost) < als_tol) or (abs((cost-cost_prev)/cost) < als_tol):
+        #if (abs(cost) > abs(cost_prev)) or (abs(cost) < als_tol) or (abs((cost-cost_prev)/cost) < als_tol):
+            break
+        else:
+            cost_prev = cost
+
+    # Return result
+    return phys_b_new,phys_t_new
+
+def alternating_least_squares(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
+    """
+    Do alternating least squares to determine best tensors
+    to represent time evolved tensors at smaller bond dimensions
+    """
+    try:
+        return noiseless_als(phys_b,phys_t,N,eH,als_iter=als_iter,als_tol=als_tol)
+    except:
+        # If als fails, then there are likely many zeros, so we expect
+        # the time evolved tensors to be low rank, meaning doing a simple
+        # update style evolution will work because singular 
+        # values are not being discarded
+        res = svd_evolve(phys_b,phys_t,eH)
+        return res
 
 def make_equal_distance(peps1,peps2,mbd):
     """
@@ -207,7 +308,7 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,mbd,als_ite
                                        prev_env)
 
         # Normalize everything (to try to avoid some errors)
-        norm_fact = bot_envs[row].max()
+        norm_fact = bot_envs[row].abs().max()
         bot_envs[row] /= norm_fact
         peps_col[row] /= norm_fact**(1./2.)
 
@@ -462,21 +563,36 @@ def run_tebd(Nx,Ny,d,ham,
     if peps is None:
         if su_step_size is None: su_step_size = step_size
         if su_n_step is None: su_n_step = n_step
-        _,peps = su(Nx,Ny,d,ham,
-                    D=D[0],
-                    Zn=Zn,
-                    chi=su_chi,
-                    thermal=thermal,
-                    backend=backend,
-                    singleLayer=singleLayer,
-                    max_norm_iter=max_norm_iter,
-                    dtype=dtype,
-                    step_size=su_step_size,
-                    n_step=su_n_step,
-                    conv_tol=su_conv_tol,
-                    peps_fname=peps_fname,
-                    peps_fdir=peps_fdir)
-        peps.absorb_lambdas()
+        if thermal:
+            peps = PEPS(Nx=Nx,
+                        Ny=Ny,
+                        d=d,
+                        D=D[0],
+                        chi=chi[0],
+                        Zn=Zn,
+                        thermal=thermal,
+                        backend=backend,
+                        norm_tol=norm_tol,
+                        singleLayer=singleLayer,
+                        max_norm_iter=max_norm_iter,
+                        dtype=dtype,
+                        fname=peps_fname,
+                        fdir=peps_fdir)
+        else:
+            _,peps = su(Nx,Ny,d,ham,
+                        D=D[0],
+                        Zn=Zn,
+                        chi=su_chi,
+                        backend=backend,
+                        singleLayer=singleLayer,
+                        max_norm_iter=max_norm_iter,
+                        dtype=dtype,
+                        step_size=su_step_size,
+                        n_step=su_n_step,
+                        conv_tol=su_conv_tol,
+                        peps_fname=peps_fname,
+                        peps_fdir=peps_fdir)
+            peps.absorb_lambdas()
 
     # Absorb lambda tensors if canonical
     if peps.ltensors is not None:
