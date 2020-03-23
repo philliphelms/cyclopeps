@@ -1755,7 +1755,7 @@ def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
                 tmp.unmerge_ind(2)
                 tmp.unmerge_ind(1)
                 tmp.unmerge_ind(0)
-                E = einsum('PaQbpcqd,PQpq->',tmp,ham)
+                E = einsum('PaQbpaqb,PQpq->',tmp,ham)
                 tmp.merge_inds([0,1])
                 tmp.merge_inds([1,2])
                 tmp.merge_inds([2,3])
