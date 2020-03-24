@@ -116,6 +116,7 @@ def svd_evolve(phys_b,phys_t,eH):
     V = einsum('ij,jkl->ikl',S.sqrt(),V)
 
     return U,V
+
 def optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
     """
     Note:
@@ -192,8 +193,8 @@ def noisy_als(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
     noise_t = phys_t.copy()
     noise_b.randomize()
     noise_t.randomize()
-    phys_b_new = phys_b.copy() + 0.1*noise_b
-    phys_t_new = phys_t.copy() + 0.1*noise_t
+    phys_b_new = phys_b.copy() + 1e-5*noise_b
+    phys_t_new = phys_t.copy() + 1e-5*noise_t
 
     # Initialize cost function
     cost_prev = cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
@@ -228,10 +229,9 @@ def alternating_least_squares(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
     except:
         # If als fails, then there are likely many zeros, so we expect
         # the time evolved tensors to be low rank, meaning doing a simple
-        # update style evolution will work because singular 
-        # values are not being discarded
-        res = svd_evolve(phys_b,phys_t,eH)
-        return res
+        # update style evolution will provide a better initial guess
+        phys_b,phys_t = svd_evolve(phys_b,phys_t,eH)
+        return noiseless_als(phys_b,phys_t,N,eH,als_iter=als_iter,als_tol=als_tol)
 
 def make_equal_distance(peps1,peps2,mbd):
     """
