@@ -1397,6 +1397,160 @@ def make_rand_lambdas(Nx,Ny,D,Zn=None,backend='numpy',dtype=float_):
     tensors = [vert,horz]
     return tensors
 
+def update_top_env2(bra1,bra2,ket1,ket2,left1,left2,right1,right2,prev_env):
+    """
+    Doing the following contraction:
+
+       +-----------------------------------------------+
+       |                prev_env                       |
+       +-----------------------------------------------+
+       |        |          |       |          |        |  
+       a        b          c       d          e        f  
+       |        |          |       |          |        |  
+    +----+   +----+        |    +----+        |     +----+
+    | l2 |-g-| k1 |-----h--^----| k2 |-----i--^-----| r2 |
+    +----+   +----+        |    +----+        |     +----+  
+       |        |  \       |       |  \       |        |   
+       |        |   \      |       |   \      |        |   
+       j        |    l     |       |    o     |        q    
+       |        |     \    |       |     \    |        |  
+       |        |      \   |       |      \   |        |   
+    +----+      |       +----+     |       +----+   +----+
+    | l1 |---r--^-------| b1 |-----^-s-----| b2 |-t-| r1 |
+    +----+      |       +----+     |       +----+   +----+
+       |        |          |       |          |        |  
+       |        |          |       |          |        |  
+       u        k          v       n          w        x
+
+    """
+    if prev_env is None:
+        # Create first top env
+        tmp = einsum('jga,gklhb->abjklh',left2,ket1).remove_empty_ind(0).remove_empty_ind(0)
+        tmp = einsum('jklh,hnoid->djklnoi',tmp,ket2).remove_empty_ind(0)
+        tmp = einsum('jklnoi,qif->fjklnoq',tmp,right2).remove_empty_ind(0)
+        tmp = einsum('jklnoq,urj->urklnoq',tmp,left1)
+        tmp = einsum('urklnoq,rvlsc->cukvsnoq',tmp,bra1).remove_empty_ind(0)
+        tmp = einsum('ukvsnoq,swote->eukvnwtq',tmp,bra2).remove_empty_ind(0)
+        top_env = einsum('ukvnwtq,xtq->ukvnwx',tmp,right1)
+    else:
+        tmp = einsum('jga,abcdef->jgbcdef',left2,prev_env)
+        tmp = einsum('jgbcdef,gklhb->jklhcdef',tmp,ket1)
+        tmp = einsum('jklhcdef,hnoid->jklcnoief',tmp,ket2)
+        tmp = einsum('jklcnoief,qif->jklcnoeq',tmp,right2)
+        tmp = einsum('jklcnoeq,urj->urklcnoeq',tmp,left1)
+        tmp = einsum('urklcnoeq,rvlsc->ukvnsoeq',tmp,bra1)
+        tmp = einsum('ukvnsoeq,swote->ukvnwtq',tmp,bra2)
+        top_env = einsum('ukvnwtq,xtq->ukvnwx',tmp,right1)
+    return top_env
+
+def calc_top_envs2(bra1,bra2,left_bmpo,right_bmpo,ket1=None,ket2=None):
+    """
+    """
+
+    # Figure out height of peps column
+    Ny = len(bra1)
+
+    # Copy bra if needed
+    if ket1 is None: 
+        ket1 = [None]*len(bra1)
+        ket2 = [None]*len(bra2)
+        for i in range(len(ket1)):
+            ket1[i] = bra1[i].copy()
+            ket2[i] = bra2[i].copy()
+    # TODO - Conjugate this ket col?
+
+    # Compute top environment
+    top_env = [None]*Ny
+    for row in reversed(range(Ny)):
+        if row == Ny-1: prev_env = None
+        else: prev_env = top_env[row+1]
+        top_env[row] = update_top_env2(bra1[row],
+                                       bra2[row],
+                                       ket1[row],
+                                       ket2[row],
+                                       left_bmpo[2*row],
+                                       left_bmpo[2*row+1],
+                                       right_bmpo[2*row],
+                                       right_bmpo[2*row+1],
+                                       prev_env)
+    return top_env
+
+def update_bot_env2(bra1,bra2,ket1,ket2,left1,left2,right1,right2,prev_env):
+    """
+    Doing the following contraction:
+
+       s        t          l       v          n        x  
+       |        |          |       |          |        |  
+       |        |          |       |          |        |  
+    +----+   +----+        |    +----+        |     +----+
+    | l2 |-p-| k1 |----q---^----| k2 |---r----^-----| r2 |
+    +----+   +----+        |    +----+        |     +----+  
+       |        |  \       |       |  \       |        |   
+       |        |   \      |       |   \      |        |   
+       j        |    k     |       |    m     |        o    
+       |        |     \    |       |     \    |        |  
+       |        |      \   |       |      \   |        |   
+    +----+      |       +----+     |       +----+   +----+
+    | l1 |---g--^-------| b1 |--h--^-------| b2 |-i-| r1 |
+    +----+      |       +----+     |       +----+   +----+
+       |        |          |       |          |        |  
+       a        b          c       d          e        f  
+       |        |          |       |          |        |  
+       +-----------------------------------------------+
+       |                prev_env                       |
+       +-----------------------------------------------+
+
+    """
+    if prev_env is None:
+        tmp = einsum('agj,gckhl->acjklh',left1,bra1).remove_empty_ind(0).remove_empty_ind(0)
+        tmp = einsum('jklh,hemin->ejklmni',tmp,bra2).remove_empty_ind(0)
+        tmp = einsum('jklmni,fio->fjklmno',tmp,right1).remove_empty_ind(0)
+        tmp = einsum('jklmno,jps->spklmno',tmp,left2)
+        tmp = einsum('spklmno,pbkqt->bstqlmno',tmp,ket1).remove_empty_ind(0)
+        tmp = einsum('stqlmno,qdmrv->dstlvrno',tmp,ket2).remove_empty_ind(0)
+        bot_env = einsum('stlvrno,orx->stlvnx',tmp,right2)
+    else:
+        tmp = einsum('agj,abcdef->jgbcdef',left1,prev_env)
+        tmp = einsum('jgbcdef,gckhl->jbklhdef',tmp,bra1)
+        tmp = einsum('jbklhdef,hemin->jbkldmnif',tmp,bra2)
+        tmp = einsum('jbkldmnif,fio->jbkldmno',tmp,right1)
+        tmp = einsum('jbkldmno,jps->spbkldmno',tmp,left2)
+        tmp = einsum('spbkldmno,pbkqt->stqldmno',tmp,ket1)
+        tmp = einsum('stqldmno,qdmrv->stlvrno',tmp,ket2)
+        bot_env = einsum('stlvrno,orx->stlvnx',tmp,right2)
+    return bot_env
+
+def calc_bot_envs2(bra1,bra2,left_bmpo,right_bmpo,ket1=None,ket2=None):
+    """
+    """
+
+    # Figure out height of peps column
+    Ny = len(bra1)
+
+    # Copy bra if needed
+    if ket1 is None: 
+        ket1 = [None]*len(bra1)
+        ket2 = [None]*len(bra2)
+        for i in range(len(ket1)):
+            ket1[i] = bra1[i].copy()
+            ket2[i] = bra2[i].copy()
+
+    # Compute the bottom environment
+    bot_env = [None]*Ny
+    for row in range(Ny):
+        if row == 0: prev_env = None
+        else: prev_env = bot_env[row-1]
+        bot_env[row] = update_bot_env2(bra1[row],
+                                       bra2[row],
+                                       ket1[row],
+                                       ket2[row],
+                                       left_bmpo[2*row],
+                                       left_bmpo[2*row+1],
+                                       right_bmpo[2*row],
+                                       right_bmpo[2*row+1],
+                                       prev_env)
+    return bot_env
+
 def update_top_env(bra,ket,left1,left2,right1,right2,prev_env):
     """
     Doing the following contraction:
@@ -1842,6 +1996,52 @@ def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,pos
                              positive=positive)
     return res
 
+def calc_single_column_nn_op(peps1,peps2,left_bmpo,right_bmpo,ops_col,normalize=True,ket1=None,ket2=None):
+    """
+    Calculate contribution to an operator with next nearest (nn) neighbr interactions
+    from two neighboring columns of a peps
+
+    Args:
+        peps1: List of ndarrays
+            A single column of the peps
+        peps2: List of ndarrays
+            A single column of the peps
+        left_bmpo:
+            The boundary mpo to the left of the two peps columns
+        right_bmpo:
+            The boundary mpo to the right of the two peps columns
+        ops_col: list of list of ndarrays
+            The operators acting on next nearest neighboring sites
+            within the two columns
+
+    Kwargs:
+        normalize: bool
+            Whether to normalize the operator evaluations
+        ket1: list of ndarrays
+            A single column of the ket
+        ket2: list of ndarrays
+            A single column of the ket
+
+    Returns:
+        E: float
+            The operator value for interactions between the two columns
+    """
+
+    # Calculate top and bottom environments
+    top_envs = calc_top_envs2(peps1,peps2,left_bmpo,right_bmpo,ket1=ket1,ket2=ket2)
+    bot_envs = calc_bot_envs2(peps1,peps2,left_bmpo,right_bmpo,ket1=ket1,ket2=ket2)
+    print('Able to calculate all environments')
+    import sys
+    sys.exit()
+
+    # Calculate Energy
+    E = peps_col[0].backend.zeros(len(ops_col))
+    for row in range(len(ops_col)):
+        res = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=False,positive=False,ket_col=ket_col)
+        _,phys_b,phys_t,_,_,phys_bk,phys_tk,_,N = res
+        E[row] = calc_local_op(phys_b,phys_t,N,ops_col[row],normalize=normalize,phys_b_ket=phys_bk,phys_t_ket=phys_tk)
+    return E
+
 def calc_single_column_op(peps_col,left_bmpo,right_bmpo,ops_col,normalize=True,ket_col=None):
     """
     Calculate contribution to operator from interactions within
@@ -1929,6 +2129,99 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
         return E.sum()
     else:
         return E
+
+def calc_peps_nn_op(peps,ops,chi=10,normalize=True,ket=None):
+    """
+    Calculate the expectation value for a given next nearest (nn) neighbor operator
+
+    Args:
+        peps : A PEPS object
+            The PEPS to be normalized
+        ops :
+            The operator to be contracted with the peps
+
+    Kwargs:
+        chi : int
+            The maximum bond dimension for the boundary mpo
+        normalize : bool
+            Whether to divide the resulting operator value by the peps norm
+        ket : PEPS Object
+            A second peps, to use as the ket, in the operator contraction
+
+    Returns:
+        val : float
+            The resulting observable's expectation value
+    """
+    # Absorb Lambda tensors if needed
+    if peps.ltensors is not None:
+        peps = peps.copy()
+        peps.absorb_lambdas()
+    else:
+        peps = peps.copy()
+    if ket is not None and ket.ltensors is not None:
+        ket = ket.copy()
+        ket.absorb_lambdas()
+    elif ket is not None:
+        ket = ket.copy()
+
+    # Figure out peps size
+    Nx = len(peps)
+    Ny = len(peps[0])
+
+    # Compute the boundary MPOs
+    right_bmpo = calc_right_bound_mpo(peps, 0,chi=chi,return_all=True,ket=ket)
+    left_bmpo  = calc_left_bound_mpo (peps,Nx,chi=chi,return_all=True,ket=ket)
+    ident_bmpo = identity_mps(len(right_bmpo[0]),
+                              dtype=peps[0][0].dtype,
+                              sym=(peps[0][0].sym is not None),
+                              backend=peps.backend)
+
+    # Loop through all columns
+    E = peps.backend.zeros((len(ops),len(ops[0])),dtype=peps[0][0].dtype)
+    for col in range(Nx-1):
+        # Use None if no ket tensor
+        if ket is None:
+            ket1 = None
+            ket2 = None
+        else: 
+            ket1 = ket[col]
+            ket2 = ket[col+1]
+        # Evaluate energy for single column
+        if col == 0:
+            # Use identity on left side
+            E[col,:] = calc_single_column_nn_op(peps[col],
+                                                peps[col+1],
+                                                ident_bmpo,
+                                                right_bmpo[col+1],
+                                                ops[col],
+                                                normalize=normalize,
+                                                ket1=ket1,
+                                                ket2=ket2)
+        elif col == Nx-1:
+            # Use Identity on the right side
+            E[col,:] = calc_single_column_nn_op(peps[col],
+                                                peps[col+1],
+                                                left_bmpo[col-1],
+                                                ident_bmpo,
+                                                ops[col],
+                                                normalize=normalize,
+                                                ket1=ket1,
+                                                ket2=ket2)
+        else:
+            E[col,:] = calc_single_column_nn_op(peps[col],
+                                                peps[col+1],
+                                                left_bmpo[col-1],
+                                                right_bmpo[col+1],
+                                                ops[col],
+                                                normalize=normalize,
+                                                ket1=ket1,
+                                                ket2=ket2)
+
+    # Print out results if wanted
+    mpiprint(8,'Energy [:,:] = \n{}'.format(E))
+
+    # Return Result
+    return E.sum()
 
 def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
     """
@@ -2569,7 +2862,7 @@ class PEPS:
 
         return norm
 
-    def calc_op(self,ops,chi=None,normalize=True,return_sum=True,ket=None):
+    def calc_op(self,ops,chi=None,normalize=True,return_sum=True,ket=None,nn=False):
         """
         Calculate the expectation value for a given operator
 
@@ -2589,6 +2882,8 @@ class PEPS:
                 as ops, or a summation of all operators
             ket : PEPS Object
                 A second peps, to use as the ket, in the operator contraction
+            nn : bool
+                Whether the Hamiltonian involves next nearest (nn) neighbor interactions
 
         Returns:
             val : float
@@ -2596,7 +2891,10 @@ class PEPS:
         """
         if chi is None: chi = self.chi
         # Calculate the operator's value
-        return calc_peps_op(self,ops,chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
+        if nn:
+            return calc_peps_nn_op(self,ops,chi=chi,normalize=normalize,ket=ket)
+        else:
+            return calc_peps_op(self,ops,chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
 
     def increase_mbd(self,newD,chi=None,noise=1e-10,normalize=True):
         """

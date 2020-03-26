@@ -45,6 +45,7 @@ from cyclopeps.tools.utils import *
 from cyclopeps.tools.ops_tools import *
 from cyclopeps.ops.ops import OPS
 from cyclopeps.tools.gen_ten import einsum,zeros
+from symtensor.settings import load_lib
 
 def return_op(Nx,Ny,j1=1.,j2=0.,sym=None,backend='numpy'):
     """
@@ -112,17 +113,16 @@ def return_op(Nx,Ny,j1=1.,j2=0.,sym=None,backend='numpy'):
 
     return all_cols
 
-
 def mpo(ops,j1,j2,backend,edge=False):
     """
     MPO creation for interaction on left and bottom 
     edges of the 2x2 square
     """
     # Collect operators
-    Sz = ops.Sz
-    Sp = ops.Sp
-    Sm = ops.Sm
-    I  = ops.I
+    Sz = ops.Sz.ten
+    Sp = ops.Sp.ten
+    Sm = ops.Sm.ten
+    I  = ops.I.ten
     # First (top left) site -------------------------
     op1 = zeros((2,2,5),sym=None,backend=backend)
     op1[:,:,1] = j1*Sz
@@ -133,7 +133,7 @@ def mpo(ops,j1,j2,backend,edge=False):
     op2 = zeros((5,2,2,5),sym=None,backend=backend)
     # Left column
     op2[0,:,:,0] = I
-    if leftmost:
+    if edge:
         op2[1,:,:,0] = Sz
         op2[2,:,:,0] = Sm
         op2[3,:,:,0] = Sp
