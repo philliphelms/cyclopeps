@@ -381,15 +381,71 @@ def move_gauge_left_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wgt
     else:
         return ten1,ten2
 
-def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True):
+def move_gauge_right_rsvd(ten1,ten2,truncate_mbd):
+    """
+    """
+    # Perform the svd on the tensor
+    U,S,V = ten1.rsvd(2,truncate_mbd)
+    ten1 = U
+
+    # Multiply remainder into neighboring site
+    gauge = einsum('ab,bc->ac',S,V)
+    ten2 = einsum('ab,bpc->apc',gauge,ten2)
+
+    # Return results
+    return ten1,ten2
+
+def move_gauge_left_rsvd(ten1,ten2,truncate_mbd):
+    """
+    """
+    # Perform the svd on the tensor
+    U,S,V = ten2.rsvd(1,truncate_mbd)
+    ten2 = V
+
+    # Multiply remainder into neighboring site
+    gauge = einsum('ab,bc->ac',U,S)
+    ten1 = einsum('apb,bc->apc',ten1,gauge)
+
+    # Return results
+    return ten1,ten2
+
+def move_gauge_right_eig(ten1,ten2,truncate_mbd):
+    """
+    """
+    # Perform the svd on the tensor
+    U,S,V,EE,EEs,wgt = ten1.svd_eig(2,truncate_mbd=truncate_mbd)
+    ten1 = U
+
+    # Multiply remainder into neighboring site
+    gauge = einsum('ab,bc->ac',S,V)
+    ten2 = einsum('ab,bpc->apc',gauge,ten2)
+
+    # Return results
+    return ten1,ten2,EE,EEs,wgt
+
+def move_gauge_left_eig(ten1,ten2,truncate_mbd):
+    """
+    """
+    # Perform the svd on the tensor
+    U,S,V,EE,EEs,wgt = ten2.svd(1,truncate_mbd=truncate_mbd)
+    ten2 = V
+
+    # Multiply remainder into neighboring site
+    gauge = einsum('ab,bc->ac',U,S)
+    ten1 = einsum('apb,bc->apc',ten1,gauge)
+
+    # Return results
+    return ten1,ten2,EE,EEs,wgt
+
+def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True,useeig=False,usersvd=False):
     """
     Move the gauge via svd from ten1 to ten2
 
     Args:
-        ten1 : np or ctf array
-            The site currently holding the gauge
-        ten2 : np or ctf array
-            The neighboring right site
+        mps : MPS Object
+            The MPS object for which the gauge should be moved
+        site : int
+            The site the gauge where the MPS is initially gauged
 
     Kwargs:
         return_ent : bool
@@ -402,12 +458,15 @@ def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True
             Default: True
         truncate_mbd : int
             The Maximum retained Bond Dimension
+        useeig : bool
+            Convert SVD/QR into eigenvalue problem
+        usersvd : bool
+            Do SVD using randomized SVD routine
 
     Returns:
-        ten1 : np or ctf array
-            The now isometrized tensor
-        ten2 : np or ctf array
-            The tensor now holding the gauge
+        mps : MPS Object
+            The original MPS object, with the gauge transferred
+            from site to site-1
         EE : float
             The von neumann entanglement entropy
             Only returned if return_ent == True
@@ -433,10 +492,19 @@ def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True
             mpiprint(0,'\tInitial Shape ten2 = {}, {}, {}, {}'.format(mps[site+1].ten.array.shape,mps[site+1].legs,mps[site+1].sym[0],mps[site+1].sym[1]))
 
     # Move the gauge
-    ten1,ten2,EE,EEs,wgt = move_gauge_right_tens(ten1,ten2,
-                                                truncate_mbd=truncate_mbd,
-                                                return_ent=True,
-                                                return_wgt=True)
+    if usersvd:
+        ten1,ten2 = move_gauge_right_rsvd(ten1,ten2,truncate_mbd)
+        EE,EEs,wgt = None,None,None
+    elif useeig:
+        ten1,ten2,EE,EEs,wgt = move_gauge_right_eig(ten1,ten2,
+                                                    truncate_mbd=truncate_mbd,
+                                                    return_ent=True,
+                                                    return_wgt=True)
+    else:
+        ten1,ten2,EE,EEs,wgt = move_gauge_right_tens(ten1,ten2,
+                                                     truncate_mbd=truncate_mbd,
+                                                     return_ent=True,
+                                                     return_wgt=True)
 
     # Put back into the mps
     mps[site] = ten1
@@ -465,15 +533,15 @@ def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True
     else:
         return mps
 
-def move_gauge_left(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True):
+def move_gauge_left(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True,useeig=False,usersvd=False):
     """
     Move the gauge via svd from ten2 to ten1
 
     Args:
-        ten1 : np or ctf array
-            The neighboring left site
-        ten2 : np or ctf array
-            The site currently holding the gauge
+        mps : MPS Object
+            The MPS object for which the gauge should be moved
+        site : int
+            The site the gauge where the MPS is initially gauged
 
     Kwargs:
         return_ent : bool
@@ -486,12 +554,15 @@ def move_gauge_left(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True)
             Default: True
         truncate_mbd : int
             The Maximum retained Bond Dimension
+        useeig : bool
+            Convert SVD/QR into eigenvalue problem
+        usersvd : bool
+            Do SVD using randomized SVD routine
 
     Returns:
-        ten1 : np or ctf array
-            The tensor now holding the gauge
-        ten2 : np or ctf array
-            The now isometrized tensor
+        mps : MPS Object
+            The original MPS object, with the gauge transferred
+            from site to site+1
         EE : float
             The von neumann entanglement entropy
             Only returned if return_ent == True
@@ -516,10 +587,19 @@ def move_gauge_left(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True)
             mpiprint(0,'\tInitial Shape ten2 = {}, {}, {}, {}'.format(mps[site].ten.array.shape,mps[site].legs,mps[site].sym[0],mps[site].sym[1]))
 
     # Move the gauge
-    ten1,ten2,EE,EEs,wgt = move_gauge_left_tens(ten1,ten2,
-                                                truncate_mbd=truncate_mbd,
-                                                return_ent=True,
-                                                return_wgt=True)
+    if usersvd:
+        ten1,ten2 = move_gauge_left_rsvd(ten1,ten2,truncate_mbd)
+        EE,EEs,wgt = None,None,None
+    elif useeig:
+        ten1,ten2,EE,EEs,wgt = move_gauge_left_eig(ten1,ten2,
+                                                   truncate_mbd=truncate_mbd,
+                                                   return_ent=True,
+                                                   return_wgt=True)
+    else:
+        ten1,ten2,EE,EEs,wgt = move_gauge_left_tens(ten1,ten2,
+                                                    truncate_mbd=truncate_mbd,
+                                                    return_ent=True,
+                                                    return_wgt=True)
 
     # Put back into the mps
     mps[site-1] = ten1
@@ -548,7 +628,7 @@ def move_gauge_left(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True)
     else:
         return mps
 
-def make_mps_left(mps,truncate_mbd=1e100):
+def make_mps_left(mps,truncate_mbd=1e100,useeig=False,usersvd=False):
     """
     Put an mps into left canonical form
 
@@ -560,6 +640,10 @@ def make_mps_left(mps,truncate_mbd=1e100):
         truncate_mbd : int
             The maximum bond dimension to which the 
             mps should be truncated
+        useeig : bool
+            Convert SVD/QR into eigenvalue problem
+        usersvd : bool
+            Do SVD using randomized SVD routine
 
     Returns:
         mps : list of mps tensors
@@ -572,12 +656,14 @@ def make_mps_left(mps,truncate_mbd=1e100):
         mps = move_gauge_right(mps,site,
                                truncate_mbd=truncate_mbd,
                                return_ent=False,
-                               return_wgt=False)
+                               return_wgt=False,
+                               useeig=useeig,
+                               usersvd=usersvd)
 
     # Return results
     return mps
 
-def make_mps_right(mps,truncate_mbd=1e100):
+def make_mps_right(mps,truncate_mbd=1e100,useeig=False,usersvd=False):
     """
     Put an mps into right canonical form
 
@@ -589,6 +675,10 @@ def make_mps_right(mps,truncate_mbd=1e100):
         truncate_mbd : int
             The maximum bond dimension to which the 
             mps should be truncated
+        useeig : bool
+            Convert SVD/QR into eigenvalue problem
+        usersvd : bool
+            Do SVD using randomized SVD routine
 
     Returns:
         mps : list of mps tensors
@@ -601,12 +691,14 @@ def make_mps_right(mps,truncate_mbd=1e100):
         mps = move_gauge_left(mps,site,
                               truncate_mbd=truncate_mbd,
                               return_ent=False,
-                              return_wgt=False)
+                              return_wgt=False,
+                              useeig=useeig,
+                              usersvd=usersvd)
 
     # Return results
     return mps
 
-def mps_apply_svd(mps,chi):
+def mps_apply_svd(mps,chi,useeig=False,usersvd=False):
     """
     Shrink the maximum bond dimension of an mps
 
@@ -616,14 +708,20 @@ def mps_apply_svd(mps,chi):
         chi : int
             The new maximum bond dimension
 
+    Kwargs:
+        useeig : bool
+            Convert SVD/QR into eigenvalue problem
+        usersvd : bool
+            Do SVD using randomized SVD routine
+
     Returns:
         mps : List of mps tensors
             The mps with a maximum bond dimension of \chi
     """
     mpiprint(8,'Moving gauge to left, prep for truncation')
-    mps = make_mps_left(mps)
+    mps = make_mps_left(mps,useeig=useeig,usersvd=usersvd)
     mpiprint(8,'Truncating as moving to right')
-    mps = make_mps_right(mps,truncate_mbd=chi)
+    mps = make_mps_right(mps,truncate_mbd=chi,useeig=useeig,usersvd=usersvd)
     return mps
 
 def identity_mps(N,dtype=float_,sym=False,backend='numpy',alternating=True):
@@ -709,7 +807,7 @@ class MPS:
                 mps_tmp[site] *= -1.
         return mps_tmp
 
-    def apply_svd(self,chi):
+    def apply_svd(self,chi,useeig=False,usersvd=False):
         """
         Shrink the maximum bond dimension of an mps
 
@@ -720,12 +818,21 @@ class MPS:
         Kwargs:
             chi : int
                 The new maximum bond dimension
+            useeig : bool
+                Convert SVD/QR into eigenvalue problem
+            usersvd : bool
+                Do SVD using randomized SVD routine
+
+        Returns:
+            mps : MPS Object
+                A copy of the input MPS, now with a truncated
+                bond dimension
         """
         res = self.copy()
         res = mps_apply_svd(res,chi)
         return MPS(res)
 
-    def make_left_canonical(self,chi=1e100):
+    def make_left_canonical(self,chi=1e100,useeig=False,usersvd=False):
         """
         Make the MPS Left canonical (and possibly truncate bond dim)
 
@@ -736,12 +843,20 @@ class MPS:
         Kwargs:
             chi : int
                 The new maximum bond dimension
+            useeig : bool
+                Convert SVD/QR into eigenvalue problem
+            usersvd : bool
+                Do SVD using randomized SVD routine
+
+        Returns:
+            mps : MPS Object
+                A copy of the input MPS, now left canonical
         """
         res = self.copy()
-        res = make_mps_left(res.tensors,truncate_mbd=chi)
+        res = make_mps_left(res.tensors,truncate_mbd=chi,useeig=useeig,usersvd=usersvd)
         return MPS(res)
 
-    def make_right_canonical(self,chi=1e100):
+    def make_right_canonical(self,chi=1e100,useeig=False,usersvd=False):
         """
         Make the MPS Right canonical (and possibly truncate bond dim)
 
@@ -752,12 +867,20 @@ class MPS:
         Kwargs:
             chi : int
                 The new maximum bond dimension
+            useeig : bool
+                Convert SVD/QR into eigenvalue problem
+            usersvd : bool
+                Do SVD using randomized SVD routine
+
+        Returns:
+            mps : MPS Object
+                A copy of the input MPS, now right canonical
         """
         res = self.copy()
-        res = make_mps_right(res.tensors,truncate_mbd=chi)
+        res = make_mps_right(res.tensors,truncate_mbd=chi,useeig=useeig,usersvd=usersvd)
         return MPS(res)
 
-    def move_gauge_right(self,site,truncate_mbd=1e100):
+    def move_gauge_right(self,site,truncate_mbd=1e100,useeig=False,usersvd=False):
         """
         Do a tensor decomposition on site to move the gauge to site+1
 
@@ -770,6 +893,15 @@ class MPS:
         Kwargs:
             truncate_mbd : int
                 The bond dimension to be truncated to
+            useeig : bool
+                Convert SVD/QR into eigenvalue problem
+            usersvd : bool
+                Do SVD using randomized SVD routine
+
+        Returns:
+            mps : MPS Object
+                A copy of the input MPS with the gauge
+                moved one site to the left
         """
         res = self.copy()
         res = move_gauge_right(res.tensors,site,
@@ -778,7 +910,7 @@ class MPS:
                                return_wgt=False)
         return MPS(res)
 
-    def move_gauge_left(self,site,truncate_mbd=1e100):
+    def move_gauge_left(self,site,truncate_mbd=1e100,useeig=False,usersvd=False):
         """
         Do a tensor decomposition on site to move the gauge to site-1
 
@@ -791,6 +923,15 @@ class MPS:
         Kwargs:
             truncate_mbd : int
                 The bond dimension to be truncated to
+            useeig : bool
+                Convert SVD/QR into eigenvalue problem
+            usersvd : bool
+                Do SVD using randomized SVD routine
+
+        Returns:
+            mps : MPS Object
+                A copy of the input MPS with the gauge
+                moved one site to the left
         """
         res = self.copy()
         res = move_gauge_left(res.tensors,site,

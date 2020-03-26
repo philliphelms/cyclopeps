@@ -808,6 +808,31 @@ class GEN_TEN:
         R.legs = Rlegs
         return Q,R
 
+    def svd_eig(self,split,truncate_mbd=1e100,return_ent=True,return_wgt=True):
+        """
+        Returns the U,S, and V tensors from an svd (cast as an eigenproblem) of the tensor
+        """
+
+
+    def rsvd(self,split,k):
+        """
+        Do SVD using randomized svd
+
+        Args:
+            self : gen_ten object
+                The tensor to be decomposed
+            split : int
+                Where to split the tensor
+            k : int
+                The resulting bond dimension
+
+        Returns :
+            U : gen_ten object
+                The resulting unitary tensor
+            B : gen_ten object
+                The S*V tensor
+        """
+
     def svd(self,split,truncate_mbd=1e100,return_ent=True,return_wgt=True):
         """
         Returns the U,S, and V from an svd of the tensor
