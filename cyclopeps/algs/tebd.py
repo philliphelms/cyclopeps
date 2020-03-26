@@ -323,7 +323,8 @@ def tebd_step_col(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10):
 
     # Compute the boundary MPOs
     right_bmpo = calc_right_bound_mpo(peps, 0,chi=chi,return_all=True)
-    left_bmpo  = calc_left_bound_mpo (peps,Nx,chi=chi,return_all=True)
+    #left_bmpo  = calc_left_bound_mpo (peps,Nx,chi=chi,return_all=True)
+    left_bmpo  = [None]*(Nx-1)
     ident_bmpo = identity_mps(len(right_bmpo[0]),
                               dtype=peps[0][0].dtype,
                               sym=(peps[0][0].sym is not None),
