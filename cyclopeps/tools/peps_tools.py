@@ -1397,6 +1397,621 @@ def make_rand_lambdas(Nx,Ny,D,Zn=None,backend='numpy',dtype=float_):
     tensors = [vert,horz]
     return tensors
 
+def update_top_env_gen(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,truncate=True):
+    """
+    Doing the following contraction:
+
+    +----+   +----+     +----+           +----+    +----+   +----+   
+    | p1 |---| p2 |-----| p3 |-   ...   -| p4 |----| p5 |---| p6 |
+    +----+   +----+     +----+           +----+    +----+   +----+   
+       |        |          |               |          |        |  
+       a        b          c               d          e        f  
+       |        |          |               |          |        |  
+    +----+   +----+        |             +----+       |     +----+
+    | l2 |-g-| k1 |-----h--^---   ...   -| k2 |----i--^-----| r2 |
+    +----+   +----+        |             +----+       |     +----+  
+       |        |  \       |               |  \       |        |   
+       |        |   \      |               |   \      |        |   
+       j        |    l     |               |    o     |        q    
+       |        |     \    |               |     \    |        |  
+       |        |      \   |               |      \   |        |   
+    +----+      |       +----+             |       +----+   +----+
+    | l1 |---r--^-------| b1 |-   ...   ---^-s-----| b2 |-t-| r1 |
+    +----+      |       +----+             |       +----+   +----+
+       |        |          |               |          |        |  
+       |        |          |               |          |        |  
+       u        k          v               n          w        x
+
+    """
+    # Figure out number of columns
+    ncol = len(bra)
+
+    # Create the new top environment
+    if prev_env is None:
+        # Create the first top environment
+        top_env = []
+
+        # First site is the current left bound_mpo
+        res = einsum('urj,jga->urga',left1,left2).transpose([3,0,1,2])
+        # Merge needed inds
+        res.merge_inds([2,3])
+        top_env.append(res)
+
+        # Loop through and add bras and kets
+        for col in range(ncol):
+            # Copy the needed tensors
+            ketten = ket[col][row].copy()
+            braten = bra[col][row].copy()
+
+            # Add ket -----------------------------------
+            # Remove top ind
+            ketten = ketten.remove_empty_ind(4) 
+            # Create correct identity
+            # TODO - Make sure signs are correct (will give error in symmetric case)
+            Dl = braten.shape[braten.legs[0][0]]
+            Zl = braten.qn_sectors[braten.legs[0][0]]
+            I = eye(Dl,
+                    Zl,
+                    is_symmetric=braten.is_symmetric,
+                    backend=braten.backend)
+            # Contract identity with the ket
+            res = einsum('gklh,Rr->gRkrlh',ketten,I)
+            # Merge Correct inds
+            res.merge_inds([0,1])
+            res.merge_inds([2,3,4])
+            # Add to top_env
+            top_env.append(res)
+
+            # Add bra ----------------------------------
+            # Remove top ind
+            braten = braten.remove_empty_ind(4)
+            # Create correct identity
+            # TODO - Make sure signs are correct (will give error in symmetric case)
+            Dl = ketten.shape[ketten.legs[3][0]]
+            Zl = ketten.qn_sectors[ketten.legs[3][0]]
+            I = eye(Dl,
+                    Zl,
+                    is_symmetric=ketten.is_symmetric,
+                    backend=ketten.backend)
+            # Contract identity with the ket
+            res = einsum('rvls,Hh->rlHvhs',braten,I)
+            # Merge Correct inds
+            res.merge_inds([0,1,2])
+            res.merge_inds([2,3])
+            # Add to top_env
+            top_env.append(res)
+
+        # Last site is the current right bound_mpo
+        res = einsum('xtq,qif->itxf',right1,right2)
+        # Merge needed inds
+        res.merge_inds([0,1])
+        top_env.append(res)
+
+        # Put result into an MPS -------------------------------------------
+        top_env = MPS(top_env)
+
+        # Reduce bond dimension
+        if truncate:
+            mpiprint(5,'Truncating Boundary MPS')
+            if DEBUG:
+                mpiprint(6,'Computing initial bmpo norm')
+                norm0 = top_env.norm()
+            top_env = top_env.apply_svd(chi)
+            if DEBUG:
+                mpiprint(6,'Computing resulting bmpo norm')
+                norm1 = top_env.norm()
+                mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+    else:
+        # Add the ket layer --------------------------------------------------
+        """
+        Doing the following contraction:
+           +----+   +----+     +----+           +----+    +----+   +----+   
+        z--| p1 |-y-| p2 |--x--| p3 |-w  ...   -| p4 |-v--| p5 |-u-| p6 |--t
+           +----+   +----+     +----+           +----+    +----+   +----+   
+              |        |          |               |          |        |  
+              a        b          c               d          e        f  
+              |        |          |               |          |        |  
+           +----+   +----+        |             +----+       |     +----+
+           | l2 |-g-| k1 |-----h--^---   ...   -| k2 |----i--^-----| r2 |
+           +----+   +----+-------+|             +----+------+|     +----+  
+              |        |         ||               |         ||        |   
+              |        |         ||               |         ||        |   
+              j        k         lc               n         ow        q    
+        """
+        # Create the next top environment
+        top_env = []
+        # First absorb left boundary mpo
+        res = einsum('jga,zay->zjyg',left2,prev_env[0])
+        # Merge correct inds
+        res.merge_inds([2,3])
+        # Add to top_env
+        top_env.append(res)
+        
+        # Loop through and add kets
+        for col in range(ncol):
+            # Add ket --------------------------
+            ketten = ket[col][row].copy()
+            # Contract with previous top env
+            res = einsum('gklhb,ybx->ygkxhl',ketten,prev_env[2*col+1])
+            # Merge correct indices
+            res.merge_inds([0,1])
+            res.merge_inds([2,3,4])
+            # Add to top_env
+            top_env.append(res)
+
+            # Add identity ---------------------
+            # TODO - Make sure signs are correct (will give error in symmetric case)
+            D1 = ketten.shape[ketten.legs[3][0]]
+            Z1 = ketten.qn_sectors[ketten.legs[3][0]]
+            I1 = eye(D1,
+                     Z1,
+                     is_symmetric=ketten.is_symmetric,
+                     backend=ketten.backend)
+            D2 = ketten.shape[ketten.legs[2][0]]
+            Z2 = ketten.qn_sectors[ketten.legs[2][0]]
+            I2 = eye(D2,
+                     Z2,
+                     is_symmetric=ketten.is_symmetric,
+                     backend=ketten.backend)
+            # Contract with previous environment
+            res = einsum('xcw,Hh->xHcwh',prev_env[2*col+2],I1)
+            res = einsum('xHcwh,Ll->xHLlcwh',res,I2)
+            # Merge correct indices
+            res.merge_inds([0,1,2])
+            res.merge_inds([1,2])
+            res.merge_inds([2,3])
+            # Add to top_env
+            top_env.append(res)
+
+        # Last, absorb right boundary mpo
+        res = einsum('qif,uft->uiqt',right2,prev_env[2*ncol+1])
+        # Merge needed inds
+        res.merge_inds([0,1])
+        # Add to top_env
+        top_env.append(res)
+
+        # Put result into an MPS ------------------
+        top_env = MPS(top_env)
+
+        # Reduce bond dimension
+        if truncate:
+            mpiprint(5,'Truncating Boundary MPS')
+            if DEBUG:
+                mpiprint(6,'Computing initial bmpo norm')
+                norm0 = top_env.norm()
+            top_env = top_env.apply_svd(chi)
+            if DEBUG:
+                mpiprint(6,'Computing resulting bmpo norm')
+                norm1 = top_env.norm()
+                mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+
+        # Update prev_env
+        prev_env = top_env
+
+        # Add the bra layer --------------------------------------------------
+        """
+        Doing the following contraction:
+           +----+   +----+     +----+           +----+    +----+   +----+   
+        z--| p1 |-y-| p2 |--x--| p3 |-w  ...   -| p4 |-v--| p5 |-u-| p6 |--g
+           +----+   +----+     +----+           +----+    +----+   +----+   
+              |        |         ||               |         ||        |  
+              a        |         lc               d         oe        f  
+              |        |         ||               |         ||        |  
+           +----+      |       +----+             |       +----+   +----+
+           | l1 |---r--^-------| b1 |-   ...   ---^-s-----| b2 |-t-| r1 |
+           +----+      |       +----+             |       +----+   +----+
+              |        |          |               |          |        |  
+              |        |          |               |          |        |  
+              u        b          v               n          w        x
+        """
+        # Create the next top environment
+        top_env = []
+        # First absorb left boundary mpo
+        res = einsum('zay,ura->zuyr',prev_env[0],left1)
+        # Merge correct inds
+        res.merge_inds([2,3])
+        top_env.append(res)
+
+        # Loop through and add bras
+        for col in range(ncol):
+            # Get the bra tensor
+            braten = bra[col][row].copy()
+            # Add identity ---------------------
+            # TODO - Make sure signs are correct (will give error in symmetric case)
+            D1 = braten.shape[braten.legs[0][0]]
+            Z1 = braten.qn_sectors[braten.legs[0][0]]
+            I1 = eye(D1,
+                     Z1,
+                     is_symmetric=braten.is_symmetric,
+                     backend=braten.backend)
+            # Contract with previous environment
+            res = einsum('ybx,Rr->yRbxr',prev_env[2*col+1],I1)
+            # Merge correct indices
+            res.merge_inds([0,1])
+            res.merge_inds([2,3])
+            # Add to top_env
+            top_env.append(res)
+
+            # Add bra --------------------------
+            envten = prev_env[2*col+2].copy()
+            # Unmerge physical index
+            envten.unmerge_ind(1)
+            # Contract with bra
+            res = einsum('xlcw,rvlsc->xrvws',envten,braten)
+            # Merge correct inds
+            res.merge_inds([0,1])
+            res.merge_inds([2,3])
+            # Add to top_env
+            top_env.append(res)
+
+        # Last, absorb right boundary mpo
+        res = einsum('ufg,xtf->utxg',prev_env[2*ncol+1],right1)
+        # Merge needed inds
+        res.merge_inds([0,1])
+        # Add to top_env
+        top_env.append(res)
+
+        # Put result into an MPS ------------------
+        top_env = MPS(top_env)
+
+        # Reduce bond dimension
+        if truncate:
+            mpiprint(5,'Truncating Boundary MPS')
+            if DEBUG:
+                mpiprint(6,'Computing initial bmpo norm')
+                norm0 = top_env.norm()
+            top_env = top_env.apply_svd(chi)
+            if DEBUG:
+                mpiprint(6,'Computing resulting bmpo norm')
+                norm1 = top_env.norm()
+                mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+
+    return top_env
+
+def calc_top_envs_gen(bra,left_bmpo,right_bmpo,ket=None,chi=10):
+    """
+    """
+    # Figure out height of peps column
+    Ny = len(bra[0])
+
+    # Copy bra if needed
+    copy_ket = False
+    if ket is None: copy_ket = True
+    elif hasattr(ket,'__len__'):
+        if ket[0] is None: copy_ket = True
+    if copy_ket:
+        ket = [[None]*len(bra[0])]*len(bra)
+        for i in range(len(bra)):
+            for j in range(len(ket[0])):
+                ket[i][j] = bra[i][j].copy()
+                # TODO - Conjugate this ket col?
+
+    # Compute top environment
+    top_env = [None]*Ny
+    for row in reversed(range(Ny)):
+        # Figure out previous environment MPO
+        if row == Ny-1: prev_env = None
+        else: prev_env = top_env[row+1]
+        # Compute next environment MPO
+        top_env[row] = update_top_env_gen(row,
+                                          bra,
+                                          ket,
+                                          left_bmpo[2*row],
+                                          left_bmpo[2*row+1],
+                                          right_bmpo[2*row],
+                                          right_bmpo[2*row+1],
+                                          prev_env,
+                                          chi=chi)
+    return top_env
+
+def update_bot_env_gen(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,truncate=True):
+    """
+    Doing the following contraction:
+
+              s        t          l               v          n        x  
+              |        |          |               |          |        |  
+              |        |          |               |          |        |  
+           +----+   +----+        |            +----+        |     +----+
+           | l2 |-p-| k1 |----q---^----  ...  -| k2 |---r----^-----| r2 |
+           +----+   +----+        |            +----+        |     +----+  
+              |        |  \       |               |  \       |        |   
+              |        |   \      |               |   \      |        |   
+              j        |    k     |               |    m     |        o    
+              |        |     \    |               |     \    |        |  
+              |        |      \   |               |      \   |        |   
+           +----+      |       +----+             |       +----+   +----+
+           | l1 |---g--^-------| b1 |-h  ...  ----^-------| b2 |-i-| r1 |
+           +----+      |       +----+             |       +----+   +----+
+              |        |          |               |          |        |  
+              a        b          c               d          e        f  
+              |        |          |               |          |        |  
+           +----+   +----+     +----+           +----+    +----+   +----+   
+        z--| p1 |-y-| p2 |--x--| p3 |-w  ...  --| p4 |--v-| p5 |-y-| p6 |--t
+           +----+   +----+     +----+           +----+    +----+   +----+   
+
+    """
+    # Figure out number of columns
+    ncol = len(bra)
+
+    # Create the new top environment
+    if prev_env is None:
+        # Create the first top environment
+        bot_env = []
+
+        # First site is the current left bound_mpo
+        res = einsum('agj,jps->asgp',left1,left2)
+        # Merge correct inds
+        res.merge_inds([2,3])
+        # Add to bot env
+        bot_env.append(res)
+
+        for col in range(ncol):
+            # Copy the needed tensors
+            ketten = ket[col][row].copy()
+            braten = bra[col][row].copy()
+
+            # Add ket -----------------------------------
+            # Remove bottom index
+            ketten = ketten.remove_empty_ind(1)
+            # Create needed identity
+            # TODO - Make sure signs are correct (will give error in symmetric case)
+            Dl = braten.shape[braten.legs[0][0]]
+            Zl = braten.qn_sectors[braten.legs[0][0]]
+            I = eye(Dl,
+                    Zl,
+                    is_symmetric=braten.is_symmetric,
+                    backend=braten.backend)
+            # Contract identity with the ket
+            res = einsum('pkqt,Gg->Gptgkq',ketten,I)
+            # Merge correct inds
+            res.merge_inds([0,1])
+            res.merge_inds([2,3,4])
+            # Add to bot_env
+            bot_env.append(res)
+
+            # Add bra ----------------------------------
+            # Remove bottom index
+            braten = braten.remove_empty_ind(1)
+            # Create correect identity
+            # TODO - Make sure signs are correct (will give error in symmetric case)
+            Dl = ketten.shape[ketten.legs[2][0]]
+            Zl = ketten.qn_sectors[ketten.legs[2][0]]
+            I = eye(Dl,
+                    Zl,
+                    is_symmetric=ketten.is_symmetric,
+                    backend=ketten.backend)
+            # Contract identity with the bra
+            res = einsum('gkhl,Qq->gkQlhq',braten,I)
+            # Merge correct inds
+            res.merge_inds([0,1,2])
+            res.merge_inds([2,3])
+            # Add to bot_env
+            bot_env.append(res)
+
+        # Last site is the current right bound_mpo
+        res = einsum('fio,orx->irxf',right1,right2)
+        # Merge correct inds
+        res.merge_inds([0,1])
+        # Add to bot env
+        bot_env.append(res)
+
+        # Put result into an MPS -------------------------------------------
+        bot_env = MPS(bot_env)
+
+        # Reduce bond dimension
+        if truncate:
+            mpiprint(5,'Truncating Boundary MPS')
+            if DEBUG:
+                mpiprint(6,'Computing initial bmpo norm')
+                norm0 = bot_env.norm()
+            bot_env = bot_env.apply_svd(chi)
+            if DEBUG:
+                mpiprint(6,'Computing resulting bmpo norm')
+                norm1 = bot_env.norm()
+                mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+    else:
+        # Add the bra layer --------------------------------------------------
+        """
+        Doing the following contraction:
+
+              j        bk         l               vm         n        x    
+              |        ||         |               ||         |        |  
+              |        ||         |               ||         |        |   
+           +----+      |+------+----+             |+------+----+   +----+
+           | l1 |---g--^-------| b1 |-h  ...  ----^-------| b2 |-i-| r1 |
+           +----+      |       +----+             |       +----+   +----+
+              |        |          |               |          |        |  
+              a        b          c               d          e        f  
+              |        |          |               |          |        |  
+           +----+   +----+     +----+           +----+    +----+   +----+   
+        z--| p1 |-y-| p2 |--x--| p3 |-w  ...  --| p4 |--v-| p5 |-y-| p6 |--t
+           +----+   +----+     +----+           +----+    +----+   +----+   
+        """
+        # Create the next bot environment
+        bot_env = []
+        # First, absorb left boundary mps
+        res = einsum('agj,zay->zjyg',left1,prev_env[0])
+        # Merge correct inds
+        res.merge_inds([2,3])
+        # Add to bottom env
+        bot_env.append(res)
+
+        # Loop through to add bras
+        for col in range(ncol):
+            braten = bra[col][row].copy()
+            # Add identity ---------------------
+            # TODO - Make sure signs are correct (will give error in symmetric case)
+            D1 = braten.shape[braten.legs[0][0]]
+            Z1 = braten.qn_sectors[braten.legs[0][0]]
+            I1 = eye(D1,
+                     Z1,
+                     is_symmetric=braten.is_symmetric,
+                     backend=braten.backend)
+            D2 = braten.shape[braten.legs[2][0]]
+            Z2 = braten.qn_sectors[braten.legs[2][0]]
+            I2 = eye(D2,
+                     Z2,
+                     is_symmetric=braten.is_symmetric,
+                     backend=braten.backend)
+            # Contract with previous environment
+            res = einsum('ybx,Gg->yGbxg',prev_env[2*col+1],I1)
+            res = einsum('yGbxg,Kk->yGbKxgk',res,I2)
+            # Merge correct indices
+            res.merge_inds([0,1])
+            res.merge_inds([1,2])
+            res.merge_inds([2,3,4])
+            # Add to bot_env
+            bot_env.append(res)
+
+            # Add ket --------------------------
+            # Contract with previous bot_env
+            res = einsum('gckhl,xcw->xgklwh',braten,prev_env[2*col+2])
+            # Merge correct indices
+            res.merge_inds([0,1,2])
+            res.merge_inds([2,3])
+            # Add to bot_env
+            bot_env.append(res)
+
+        # Last, absorb right boundary mpo
+        res = einsum('fix,yft->yixt',right1,prev_env[2*ncol+1])
+        # Merge needed inds
+        res.merge_inds([0,1])
+        # Add to bot_env
+        bot_env.append(res)
+
+        # Put result into an MPS ------------------
+        bot_env = MPS(bot_env)
+
+        # Reduce bond dimension
+        if truncate:
+            mpiprint(5,'Truncating Boundary MPS')
+            if DEBUG:
+                mpiprint(6,'Computing initial bmpo norm')
+                norm0 = bot_env.norm()
+            bot_env = bot_env.apply_svd(chi)
+            if DEBUG:
+                mpiprint(6,'Computing resulting bmpo norm')
+                norm1 = bot_env.norm()
+                mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+
+        # Update prev_env
+        prev_env = bot_env
+
+        # Add the bra layer --------------------------------------------------
+        """
+        Doing the following contraction:
+              s        t                          v                   x  
+              |        |          |               |          |        |  
+              |        |          |               |          |        |  
+           +----+   +----+        |             +----+       |     +----+
+           | l2 |-p-| k1 |----q---^----  ...  --| k2 |---r---^-----| r2 |
+           +----+   +----+        |             +----+       |     +----+  
+              |       ||          |               ||         |        |  
+              a       bk          c               dm         e        f  
+              |       ||          |               ||         |        |  
+           +----+   +----+     +----+           +----+    +----+   +----+   
+        z--| p1 |-y-| p2 |--x--| p3 |-w  ...  --| p4 |--v-| p5 |-y-| p6 |--t
+           +----+   +----+     +----+           +----+    +----+   +----+   
+        """
+        # Create the next bottom environment
+        bot_env = []
+        # First, absorb left boundary mpo
+        res = einsum('zay,qps->zsyp',prev_env[0],left2)
+        # Merge correct inds
+        res.merge_inds([2,3])
+        # Add to bot_env
+        bot_env.append(res)
+
+        # Loop through and add ket tensors
+        for col in range(ncol):
+            # Get the ket tensor
+            ketten = ket[col][row].copy()
+            # Add ket --------------------------
+            envten = prev_env[2*col+1].copy()
+            # Unmerge physical index
+            envten.unmerge_ind(1)
+            # Contract with ket
+            res = einsum('ybkx,pbkqt->yptxq',envten,ketten)
+            # Merge correct indices
+            res.merge_inds([0,1])
+            res.merge_inds([2,3])
+            # Add to bot_env
+            bot_env.append(res)
+
+            # Add identity ---------------------
+            # TODO - Make sure signs are correct (will give error in symmetric case)
+            D1 = ketten.shape[ketten.legs[3][0]]
+            Z1 = ketten.qn_sectors[ketten.legs[3][0]]
+            I1 = eye(D1,
+                     Z1,
+                     is_symmetric=ketten.is_symmetric,
+                     backend=ketten.backend)
+            # Contract with previous environment
+            res = einsum('xcw,Qq->xQcwq',prev_env[2*col+2],I1)
+            # Merge correct indices
+            res.merge_inds([0,1])
+            res.merge_inds([2,3])
+            # Add to bot_env
+            bot_env.append(res)
+
+        # Last, absorb right boundary mpo
+        res = einsum('yft,frx->yrxt',prev_env[2*ncol+1],right2)
+        # Merge needed inds
+        res.merge_inds([0,1])
+        # Add to bot_env
+        bot_env.append(res)
+
+        # Put result into an MPS ------------------
+        bot_env = MPS(bot_env)
+
+        # Reduce bond dimension
+        if truncate:
+            mpiprint(5,'Truncating Boundary MPS')
+            if DEBUG:
+                mpiprint(6,'Computing initial bmpo norm')
+                norm0 = bot_env.norm()
+            bot_env = bot_env.apply_svd(chi)
+            if DEBUG:
+                mpiprint(6,'Computing resulting bmpo norm')
+                norm1 = bot_env.norm()
+                mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+
+    # return result
+    return bot_env
+
+def calc_bot_envs_gen(bra,left_bmpo,right_bmpo,ket=None,chi=10):
+    """
+    """
+    Ny = len(bra[0])
+
+    # Copy bra if needed
+    copy_ket = False
+    if ket is None: copy_ket = True
+    elif hasattr(ket,'__len__'):
+        if ket[0] is None: copy_ket = True
+    if copy_ket:
+        ket = [[None]*len(bra[0])]*len(bra)
+        for i in range(len(bra)):
+            for j in range(len(ket[0])):
+                ket[i][j] = bra[i][j].copy()
+                # TODO - Conjugate this ket col?
+
+    # Compute the bottom environment
+    bot_env = [None]*Ny
+    for row in range(Ny):
+        if row == 0: prev_env = None
+        else: prev_env = bot_env[row-1]
+        bot_env[row] = update_bot_env_gen(row,
+                                          bra,
+                                          ket,
+                                          left_bmpo[2*row],
+                                          left_bmpo[2*row+1],
+                                          right_bmpo[2*row],
+                                          right_bmpo[2*row+1],
+                                          prev_env,
+                                          chi=chi)
+    return bot_env
+
 def update_top_env2(bra1,bra2,ket1,ket2,left1,left2,right1,right2,prev_env):
     """
     Doing the following contraction:
@@ -1996,16 +2611,14 @@ def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,pos
                              positive=positive)
     return res
 
-def calc_single_column_nn_op(peps1,peps2,left_bmpo,right_bmpo,ops_col,normalize=True,ket1=None,ket2=None):
+def calc_single_column_nn_op(peps,left_bmpo,right_bmpo,ops_col,normalize=True,ket=None,chi=10,contracted=False):
     """
     Calculate contribution to an operator with next nearest (nn) neighbr interactions
     from two neighboring columns of a peps
 
     Args:
-        peps1: List of ndarrays
-            A single column of the peps
-        peps2: List of ndarrays
-            A single column of the peps
+        peps: List of list of ndarrays
+            The needed columns of the peps
         left_bmpo:
             The boundary mpo to the left of the two peps columns
         right_bmpo:
@@ -2017,10 +2630,8 @@ def calc_single_column_nn_op(peps1,peps2,left_bmpo,right_bmpo,ops_col,normalize=
     Kwargs:
         normalize: bool
             Whether to normalize the operator evaluations
-        ket1: list of ndarrays
-            A single column of the ket
-        ket2: list of ndarrays
-            A single column of the ket
+        peps: List of list of ndarrays
+            The needed columns of the ket
 
     Returns:
         E: float
@@ -2028,15 +2639,22 @@ def calc_single_column_nn_op(peps1,peps2,left_bmpo,right_bmpo,ops_col,normalize=
     """
 
     # Calculate top and bottom environments
-    top_envs = calc_top_envs2(peps1,peps2,left_bmpo,right_bmpo,ket1=ket1,ket2=ket2)
-    bot_envs = calc_bot_envs2(peps1,peps2,left_bmpo,right_bmpo,ket1=ket1,ket2=ket2)
-    print('Able to calculate all environments')
-    import sys
-    sys.exit()
+    if contracted:
+        # Calculate with environment contracted into a single tensor
+        top_envs = calc_top_envs2(peps[0],peps[1],left_bmpo,right_bmpo,ket1=ket[0],ket2=ket[1])
+        bot_envs = calc_bot_envs2(peps[0],peps[1],left_bmpo,right_bmpo,ket1=ket[0],ket2=ket[1])
+    else:
+        top_envs = calc_top_envs_gen(peps,left_bmpo,right_bmpo,ket=ket,chi=chi)
+        bot_envs = calc_bot_envs_gen(peps,left_bmpo,right_bmpo,ket=ket,chi=chi)
 
     # Calculate Energy
     E = peps_col[0].backend.zeros(len(ops_col))
     for row in range(len(ops_col)):
+        
+
+
+
+
         res = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=False,positive=False,ket_col=ket_col)
         _,phys_b,phys_t,_,_,phys_bk,phys_tk,_,N = res
         E[row] = calc_local_op(phys_b,phys_t,N,ops_col[row],normalize=normalize,phys_b_ket=phys_bk,phys_t_ket=phys_tk)
@@ -2189,33 +2807,30 @@ def calc_peps_nn_op(peps,ops,chi=10,normalize=True,ket=None):
         # Evaluate energy for single column
         if col == 0:
             # Use identity on left side
-            E[col,:] = calc_single_column_nn_op(peps[col],
-                                                peps[col+1],
+            E[col,:] = calc_single_column_nn_op([peps[col],peps[col+1]],
                                                 ident_bmpo,
                                                 right_bmpo[col+1],
                                                 ops[col],
                                                 normalize=normalize,
-                                                ket1=ket1,
-                                                ket2=ket2)
+                                                ket=[ket1,ket2],
+                                                chi=chi)
         elif col == Nx-1:
             # Use Identity on the right side
-            E[col,:] = calc_single_column_nn_op(peps[col],
-                                                peps[col+1],
+            E[col,:] = calc_single_column_nn_op([peps[col],peps[col+1]],
                                                 left_bmpo[col-1],
                                                 ident_bmpo,
                                                 ops[col],
                                                 normalize=normalize,
-                                                ket1=ket1,
-                                                ket2=ket2)
+                                                ket=[ket1,ket2],
+                                                chi=chi)
         else:
-            E[col,:] = calc_single_column_nn_op(peps[col],
-                                                peps[col+1],
+            E[col,:] = calc_single_column_nn_op([peps[col],peps[col+1]],
                                                 left_bmpo[col-1],
                                                 right_bmpo[col+1],
                                                 ops[col],
                                                 normalize=normalize,
-                                                ket1=ket1,
-                                                ket2=ket2)
+                                                ket=[ket1,ket2],
+                                                chi=chi)
 
     # Print out results if wanted
     mpiprint(8,'Energy [:,:] = \n{}'.format(E))
