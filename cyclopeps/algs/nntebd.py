@@ -219,32 +219,10 @@ def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,hermitian=True,positive=True,ch
     Hbra_red[1][1] = Hbra[1][1].copy()
     # Replace top and bottoms with ones if needed ----
     if bot is None:
-        nlegs_mid = [len(left[0].legs[0]),
-                     len(peps[0][0].legs[1]),
-                     len(peps[0][0].legs[1]),
-                     len(peps[1][0].legs[1]),
-                     len(peps[1][0].legs[1]),
-                     len(right[0].legs[0])]
-        bot = [ones((1,)*(1+nlegs_mid[0]+1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[0]+1)),[nlegs_mid[0]+1]]),
-               ones((1,)*(1+nlegs_mid[1]+1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[1]+1)),[nlegs_mid[1]+1]]),
-               ones((1,)*(1+nlegs_mid[2]+1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[2]+1)),[nlegs_mid[2]+1]]),
-               ones((1,)*(1+nlegs_mid[3]+1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[3]+1)),[nlegs_mid[3]+1]]),
-               ones((1,)*(1+nlegs_mid[4]+1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[4]+1)),[nlegs_mid[4]+1]]),
-               ones((1,)*(1+nlegs_mid[5]+1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[5]+1)),[nlegs_mid[5]+1]])]
+        bot = fill_empty_bot(peps,left,right)
         #bot = [ones((1,1,1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype) for i in range(6)]
     if top is None:
-        nlegs_mid = [len(left[3].legs[2]),
-                     len(peps[0][1].legs[4]),
-                     len(peps[0][1].legs[4]),
-                     len(peps[1][1].legs[4]),
-                     len(peps[1][1].legs[4]),
-                     len(right[3].legs[2])]
-        top = [ones((1,)*(1+nlegs_mid[0]+1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[0]+1)),[nlegs_mid[0]+1]]),
-               ones((1,)*(1+nlegs_mid[1]+1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[1]+1)),[nlegs_mid[1]+1]]),
-               ones((1,)*(1+nlegs_mid[2]+1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[2]+1)),[nlegs_mid[2]+1]]),
-               ones((1,)*(1+nlegs_mid[3]+1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[3]+1)),[nlegs_mid[3]+1]]),
-               ones((1,)*(1+nlegs_mid[4]+1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[4]+1)),[nlegs_mid[4]+1]]),
-               ones((1,)*(1+nlegs_mid[5]+1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[5]+1)),[nlegs_mid[5]+1]])]
+        top = fill_empty_top(peps,left,right)
         #top = [ones((1,1,1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype) for i in range(6)]
     # Contract environment around p and q tensors
     # Contract right half
@@ -584,7 +562,7 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
         u,v,p,q = su_init_als_guess_lb(peps,eH,mbd)
 
     # Determine initial cost function value -------------------------------------------
-    cost_prev = 1e10#cost_func(peps,eH,top,bot,left,right,u,v,p,q,mbd)
+    cost_prev = None#cost_func(peps,eH,top,bot,left,right,u,v,p,q,mbd)
     cost_prev_in = cost_prev
 
     # Begin ALS iterations ------------------------------------------------------------
@@ -599,11 +577,15 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
             for j in range(maxiter):
                 # Do optimization for u and v tensors
                 u,cost = optimize_u_lb(N,K,u,v)
+                # Save iniital cost (in case this is the first cost calculation
+                if cost_prev is None:
+                    cost_prev = cost
+                    cost_prev_in = cost
                 #print('\t\t\tAfter u opt {}'.format(cost))
                 v,cost = optimize_v_lb(N,K,u,v)
                 #print('\t\t\tAfter v opt {}'.format(cost))
                 # Check for convergence
-                if (abs(cost) < tol) or (abs((cost-cost_prev_in)/cost) < tol):
+                if (abs(cost) < tol) or (abs(cost-cost_prev_in) < tol):
                     #print('\t\tuv als converged {} ({})'.format(cost,abs((cost-cost_prev_in)/cost)))
                     cost_prev_in = cost
                     break
@@ -623,7 +605,7 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
                 q,cost = optimize_q_lb(N,K,p,q)
                 #print('\t\t\tAfter q opt {}'.format(cost))
                 # Check for convergence
-                if (abs(cost) < tol) or (abs((cost-cost_prev_in)/cost) < tol):
+                if (abs(cost) < tol) or (abs(cost-cost_prev_in) < tol):
                     #print('\t\tpq als converged {} ({})'.format(cost,abs((cost-cost_prev_in)/cost)))
                     cost_prev_in = cost
                     break
@@ -634,7 +616,7 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
                     cost_prev_in = cost
 
             # Check for convergence between u/v and p/q results -----------------------
-            if (abs(cost) < tol) or (abs((cost-cost_prev)/cost) < tol):
+            if (abs(cost) < tol) or (abs(cost-cost_prev) < tol):
                 print('\toverall als converged {} ({})'.format(cost,abs((cost-cost_prev)/cost)))
                 break
             elif i == maxiter-1:
@@ -665,47 +647,126 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
     # Return result
     return Hbra_red
 
+def fill_empty_top(peps,left,right):
+    """
+    When the top is empty, this will put dummy matrices in 
+    the correct places
+    """
+    nlegs_mid = [len(left[3].legs[2]),
+                 len(peps[0][1].legs[4]),
+                 len(peps[0][1].legs[4]),
+                 len(peps[1][1].legs[4]),
+                 len(peps[1][1].legs[4]),
+                 len(right[3].legs[2])]
+    top = [ones((1,)*(1+nlegs_mid[0]+1),sym=None,backend=peps[0][0].backend,dtype=peps[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[0]+1)),[nlegs_mid[0]+1]]),
+           ones((1,)*(1+nlegs_mid[1]+1),sym=None,backend=peps[0][0].backend,dtype=peps[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[1]+1)),[nlegs_mid[1]+1]]),
+           ones((1,)*(1+nlegs_mid[2]+1),sym=None,backend=peps[0][0].backend,dtype=peps[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[2]+1)),[nlegs_mid[2]+1]]),
+           ones((1,)*(1+nlegs_mid[3]+1),sym=None,backend=peps[0][0].backend,dtype=peps[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[3]+1)),[nlegs_mid[3]+1]]),
+           ones((1,)*(1+nlegs_mid[4]+1),sym=None,backend=peps[0][0].backend,dtype=peps[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[4]+1)),[nlegs_mid[4]+1]]),
+           ones((1,)*(1+nlegs_mid[5]+1),sym=None,backend=peps[0][0].backend,dtype=peps[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[5]+1)),[nlegs_mid[5]+1]])]
+    return top
+
+def fill_empty_bot(peps,left,right):
+    """
+    When the top is empty, this will put dummy matrices in 
+    the correct places
+    """
+    nlegs_mid = [len(left[0].legs[0]),
+                 len(peps[0][0].legs[1]),
+                 len(peps[0][0].legs[1]),
+                 len(peps[1][0].legs[1]),
+                 len(peps[1][0].legs[1]),
+                 len(right[0].legs[0])]
+    bot = [ones((1,)*(1+nlegs_mid[0]+1),sym=None,backend=peps[0][0].backend,dtype=peps[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[0]+1)),[nlegs_mid[0]+1]]),
+           ones((1,)*(1+nlegs_mid[1]+1),sym=None,backend=peps[0][0].backend,dtype=peps[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[1]+1)),[nlegs_mid[1]+1]]),
+           ones((1,)*(1+nlegs_mid[2]+1),sym=None,backend=peps[0][0].backend,dtype=peps[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[2]+1)),[nlegs_mid[2]+1]]),
+           ones((1,)*(1+nlegs_mid[3]+1),sym=None,backend=peps[0][0].backend,dtype=peps[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[3]+1)),[nlegs_mid[3]+1]]),
+           ones((1,)*(1+nlegs_mid[4]+1),sym=None,backend=peps[0][0].backend,dtype=peps[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[4]+1)),[nlegs_mid[4]+1]]),
+           ones((1,)*(1+nlegs_mid[5]+1),sym=None,backend=peps[0][0].backend,dtype=peps[0][0].dtype,legs=[[0],list(range(1,nlegs_mid[5]+1)),[nlegs_mid[5]+1]])]
+    return bot
+
+def mirror_rt2bl(peps,top,bot,left,right):
+    """
+    Flip the right top tensors to become the bottom left tensors
+    """
+    # Replace top and bottoms with ones if needed ----
+    if bot is None:
+        bot = fill_empty_bot(peps,left,right)
+    if top is None:
+        top = fill_empty_top(peps,left,right)
+    # Save all the old stuff
+    old_peps = peps
+    old_top = top
+    old_bot = bot
+    old_left = left
+    old_right = right
+    # Create lists to hold new stuff
+    top   = [None,None,None,None,None,None]
+    bot   = [None,None,None,None,None,None]
+    left  = [None,None,None,None]
+    right = [None,None,None,None]
+    # Flip the peps so we can use the lb als routines
+    peps = [[None,None],[None,None]]
+    peps[0][0] = old_peps[1][1].copy().transpose([4,3,2,1,0])
+    peps[0][1] = old_peps[0][1].copy().transpose([4,3,2,1,0])
+    peps[1][0] = old_peps[1][0].copy().transpose([4,3,2,1,0])
+    peps[1][1] = old_peps[0][0].copy().transpose([4,3,2,1,0])
+    # Put the old right environment into the bottom environment
+    bot[0] = old_top[5].copy().transpose([2,0,1])
+    bot[1] = old_right[3].copy().transpose([2,1,0])
+    bot[2] = old_right[2].copy().transpose([2,1,0])
+    bot[3] = old_right[1].copy().transpose([2,1,0])
+    bot[4] = old_right[0].copy().transpose([2,1,0])
+    bot[5] = old_bot[5].copy().transpose([1,0,2])
+    bot = MPS(bot)
+    # Put the old top environment into the left environment
+    left[0] = old_top[4].copy().transpose([2,1,0])
+    left[1] = old_top[3].copy().transpose([2,1,0])
+    left[2] = old_top[2].copy().transpose([2,1,0])
+    left[3] = old_top[1].copy().transpose([2,1,0])
+    left = MPS(left)
+    # Put the old bottom environment into the right environment
+    right[0] = old_bot[4].copy().transpose([2,1,0])
+    right[1] = old_bot[3].copy().transpose([2,1,0])
+    right[2] = old_bot[2].copy().transpose([2,1,0])
+    right[3] = old_bot[1].copy().transpose([2,1,0])
+    # Put the old left environment into the top environment
+    top[0] = old_top[0].copy().transpose([0,2,1])
+    top[1] = old_left[3].copy().transpose([2,1,0])
+    top[2] = old_left[2].copy().transpose([2,1,0])
+    top[3] = old_left[1].copy().transpose([2,1,0])
+    top[4] = old_left[0].copy().transpose([2,1,0])
+    top[5] = old_bot[0].copy().transpose([1,2,0])
+    # Return flipped results
+    return peps,top,bot,left,right
+
+def mirror_bl2rt(peps):
+    """
+    Flip the bottom left tensors to become the right top tensors
+    NOTE - Only flips the peps, unlike rt2bl, which flips
+    the peps and all environment tensors
+    """
+    old_peps = peps
+    peps = [[None,None],[None,None]]
+    peps[0][0] = old_peps[1][1].copy().transpose([4,3,2,1,0])
+    peps[0][1] = old_peps[0][1].copy().transpose([4,3,2,1,0])
+    peps[1][0] = old_peps[1][0].copy().transpose([4,3,2,1,0])
+    peps[1][1] = old_peps[0][0].copy().transpose([4,3,2,1,0])
+    return peps
+
 def do_als_rt(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=True):
     """
     Do the alternating least squares procedure for hamiltonian acting on 
     left and bottom sites
     """
     # Flip the peps so we can use the lb als routines
-
-
-#def do_als_rt(peps,eH,top,bot,left,right,mbd,maxiter=100,tol=1e-10,full_update=True):
-#    """
-#    Do the alternating least squares procedure for hamiltonian acting on 
-#    left and bottom sites
-#    """
-#    # Generate initial guesses for the bond reducing tensors
-#    D = peps[0][0].shape[peps[0][0].legs[3][0]]
-#    Dh = eH[0].shape[eH[0].legs[2][0]]
-#    u = init_als_guess(D,Dh,mbd)
-#    v = init_als_guess(D,Dh,mbd)
-#    p = init_als_guess(D,Dh,mbd)
-#    q = init_als_guess(D,Dh,mbd)
-#
-#    # Begin ALS iterations
-#    if full_update:
-#        for i in range(maxiter):
-#
-#            # Optimize all four tensors
-#            u = optimize_u_rt(peps,eH,top,bot,left,right,u,v,p,q)
-#            v = optimize_v_rt(peps,eH,top,bot,left,right,u,v,p,q)
-#            p = optimize_p_rt(peps,eH,top,bot,left,right,u,v,p,q)
-#            q = optimize_q_rt(peps,eH,top,bot,left,right,u,v,p,q)
-#
-#            # Check for convergence
-#            if False:
-#                break
-#            else:
-#                pass
-#    
-#    # Absorb all bond reducers into the peps tensors
-#
-#    # Return result
-#    return peps
+    peps,top,bot,left,right = mirror_rt2bl(peps,top,bot,left,right)
+    # Evolve peps now using the lb full update routines
+    peps = do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=maxiter,tol=tol,full_update=full_update)
+    # Flip the peps back
+    peps = mirror_bl2rt(peps)
+    # Return result
+    return peps
 
 def do_als(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,lb=True,full_update=True):
     """
@@ -914,8 +975,6 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,als_iter=10,als_t
         peps.normalize()
         _,peps = tebd_step(peps,ham,step_size,mbd,chi=chi,als_iter=als_iter,als_tol=als_tol,lb=False,full_update=full_update)
         peps.normalize()
-        import sys
-        sys.exit()
 
         # Save PEPS
         #peps.save()
