@@ -976,17 +976,24 @@ class GEN_TEN:
                 newten.ten.array[i] = self.backend.diag(1./self.backend.diag(newten.ten.array[i]))
         return newten
 
-    def square_inv(self):
+    def square_inv(self,split=None):
         """
         Take the inverse of a 'square' tensor, used in ALS for PEPS Full Update
         """
         newten = self._as_new_tensor(self.ten)
+
         if newten.sym is None:
-            assert(len(self.ten.shape) == 4)
-            (n1,n2,n3,n4) = self.ten.shape
-            mat = self.backend.reshape(self.ten,(n1*n2,n3*n4))
-            inv = self.backend.inv(mat)
-            newten.ten = self.backend.reshape(inv,(n1,n2,n3,n4))
+            if split is None:
+                split = len(self.legs)/2
+            matsz = 1
+            for i in range(split):
+                matsz *= np.prod([self.shape[i] for i in self.legs[i]])
+            mat = self.backend.reshape(self.ten.copy(),(matsz,-1))
+            np.savez('mat',mat)
+            print('Condition number {}'.format(np.linalg.cond(mat)))
+            _mat = self.backend.inv(mat+1e-16)
+            print(self.backend.einsum('ij,jk->ik',_mat,mat))
+            newten.ten = self.backend.reshape(_mat,newten.shape)
         else:
             # Do the inversion with the full tensor
             mat = self.ten.make_sparse()
@@ -1001,3 +1008,13 @@ class GEN_TEN:
             inv = self.backend.einsum('ABCDabcd,ABCD->ABCabcd',inv,delta)
             newten.ten.array = inv
         return newten
+
+    #def ten_inv(self,split):
+    #    """
+    #    Take the pseudoinverse of a tensor, first reshaping it into a 
+    #    matrix, then reshaping the result back into a tensor
+    #    """
+    #    if self.sym is None:
+    #
+    #     else:
+    #        raise NotImplementedError()

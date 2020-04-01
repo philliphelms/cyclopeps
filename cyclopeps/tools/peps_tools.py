@@ -20,6 +20,7 @@ from symtensor.settings import load_lib
 from cyclopeps.tools.utils import *
 from cyclopeps.tools.mps_tools import MPS,identity_mps
 from numpy import float_
+import numpy as np
 import copy
 FLIP = {'+':'-','-':'+'}
 
@@ -2543,14 +2544,17 @@ def make_N_positive(N,hermitian=True,positive=True):
         try:
             if N.sym is None:
                 N = N.transpose([0,2,1,3])
-                (n1,n2,n3,n4) = N.ten.shape
+                n1 = np.prod([N.ten.shape[i] for i in N.legs[0]])
+                n2 = np.prod([N.ten.shape[i] for i in N.legs[1]])
+                n3 = np.prod([N.ten.shape[i] for i in N.legs[2]])
+                n4 = np.prod([N.ten.shape[i] for i in N.legs[3]])
                 Nmat = N.backend.reshape(N.ten,(n1*n2,n3*n4))
                 u,v = N.backend.eigh(Nmat)
                 u = pos_sqrt_vec(u)
                 Nmat = N.backend.einsum('ij,j,kj->ik',v,u,v)
-                Nmat = Nmat.reshape((n1,n2,n3,n4))
-                Nmat = Nmat.transpose([0,2,1,3])
-                N.ten = Nmat
+                print('Must check this (tools.peps_tools:2556)')
+                N.ten = Nmat.reshape(N.shape)
+                N = N.transpose([0,2,1,3])
             else:
                 N = N.copy().transpose([0,2,1,3])
                 # Make this a sparse tensor

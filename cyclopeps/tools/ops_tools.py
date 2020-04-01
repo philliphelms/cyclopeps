@@ -9,8 +9,9 @@ Date: July 2019
 
 from cyclopeps.tools.utils import *
 from cyclopeps.tools.mps_tools import MPS
-from cyclopeps.tools.gen_ten import einsum
+from cyclopeps.tools.gen_ten import einsum,GEN_TEN
 import copy
+import numpy as np
 
 def quick_op(op1,op2):
     """
@@ -76,6 +77,53 @@ def exp_gate(h,a=1.):
         return exp_gate_nosym(h,a=a)
     else:
         return exp_gate_sym(h,a=a)
+
+def exp_mpo_nosym(h,a=1.):
+    """
+    Take the exponential of a three site
+    gate stored as an MPO for a non-symmetric tensor
+    """
+    # Get correct library
+    lib = h[0].backend
+    # Contract MPO into a single tensor
+    ten = einsum('oOa,apPqQ->opqOPQ',h[0],einsum('apPb,bqQ->apPqQ',h[1],h[2]))
+    ten = ten.ten
+    shape = ten.shape
+    # reshape into a matrix
+    ten = ten.reshape((np.prod(shape[:3]),np.prod(shape[3:])))
+    # Take the exponential of the matrix
+    ten *= a
+    exph = lib.expm(ten)
+    # Do some reshaping and transposing
+    res = exph.reshape(shape)
+    res = res.transpose([0,3,1,4,2,5])
+    shape = res.shape
+    # Do SVD on results to get back into an MPO
+    res = res.reshape((np.prod(shape[:2]),-1))
+    U,S,V = lib.svd(res,full_matrices=False)
+    ten1 = lib.einsum('ij,j->ij',U,lib.sqrt(S))
+    ten1 = ten1.reshape(shape[:2]+(-1,))
+    res = lib.einsum('j,jk->jk',lib.sqrt(S),V)
+    res = res.reshape((np.prod([ten1.shape[2],shape[2],shape[3]]),-1))
+    U,S,V = lib.svd(res,full_matrices=False)
+    ten2 = lib.einsum('ij,j->ij',U,lib.sqrt(S))
+    ten2 = ten2.reshape((ten1.shape[2],shape[2],shape[3],-1))
+    ten3 = lib.einsum('j,jk->jk',lib.sqrt(S),V)
+    ten3 = ten3.reshape((-1,shape[4],shape[5]))
+    # Put into gen_tens
+    ten1 = GEN_TEN(ten=ten1)
+    ten2 = GEN_TEN(ten=ten2)
+    ten3 = GEN_TEN(ten=ten3)
+    return [ten1,ten2,ten3]
+
+def exp_mpo(h,a=1.):
+    """
+    Take the exponential of a three site gate stored as an MPO
+    """
+    if h[0].sym is None:
+        return exp_mpo_nosym(h,a=a)
+    else:
+        raise NotImplementedError()
 
 def take_exp(ops,a=1.):
     """
