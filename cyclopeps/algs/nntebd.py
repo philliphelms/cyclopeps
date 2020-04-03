@@ -13,12 +13,29 @@ def cost_func(bra,eH,top,bot,left,right,u,v,p,q,chi):
     Compute <psi_t|psi_t>-2*<psi_t|psi_p>
     which should be zero for a perfect fit
     """
-    # Absorb MPO into bra ----------------------------
+    # Check if dealing with a thermal state
+    thermal = len(bra[0][0].legs[2]) == 2
+    # Contract state with time evolution operator
     Hbra = [[None,None],[None,None]]
-    Hbra[0][1] = einsum('ldpru,pPx->ldxPru',bra[0][1],eH[0]) # Top left site
-    Hbra[0][0] = einsum('ldpru,xpPy->ldPryux',bra[0][0],eH[1]) # Bottom left site
-    Hbra[1][0] = einsum('ldpru,ypP->lydPru',bra[1][0],eH[2]) # Bottom right site
-    Hbra[1][1] = bra[1][1].copy()
+    if thermal:
+        bra[0][1].unmerge_ind(2)
+        Hbra[0][1] = einsum('ldparu,pPx->ldxParu',bra[0][1],eH[0])
+        Hbra[0][1].merge_inds([3,4])
+        bra[0][1].merge_inds([2,3])
+        bra[0][0].unmerge_ind(2)
+        Hbra[0][0] = einsum('ldparu,xpPy->ldParyux',bra[0][0],eH[1])
+        Hbra[0][0].merge_inds([2,3])
+        bra[0][0].merge_inds([2,3])
+        bra[1][0].unmerge_ind(2)
+        Hbra[1][0] = einsum('ldparu,ypP->lydParu',bra[1][0],eH[2])
+        Hbra[1][0].merge_inds([3,4])
+        bra[1][0].merge_inds([2,3])
+        Hbra[1][1] = bra[1][1].copy()
+    else:
+        Hbra[0][1] = einsum('ldpru,pPx->ldxPru',bra[0][1],eH[0]) # Top left site
+        Hbra[0][0] = einsum('ldpru,xpPy->ldPryux',bra[0][0],eH[1]) # Bottom left site
+        Hbra[1][0] = einsum('ldpru,ypP->lydPru',bra[1][0],eH[2]) # Bottom right site
+        Hbra[1][1] = bra[1][1].copy()
     # Merge indices as needed
     Hbra[0][1].merge_inds([1,2])
     Hbra[0][0].merge_inds([3,4])
@@ -94,12 +111,29 @@ def su_init_als_guess_lb(bra,eH,mbd,add_noise=False):
     using a simple splitting of tensors with svd
     """
     lib = bra[0][0].backend
-    # Absorb MPO into bra ----------------------------
+    # Check if dealing with a thermal state
+    thermal = len(bra[0][0].legs[2]) == 2
+    # Contract state with time evolution operator
     Hbra = [[None,None],[None,None]]
-    Hbra[0][1] = einsum('ldpru,pPx->ldxPru',bra[0][1],eH[0]) # Top left site
-    Hbra[0][0] = einsum('ldpru,xpPy->ldPryux',bra[0][0],eH[1]) # Bottom left site
-    Hbra[1][0] = einsum('ldpru,ypP->lydPru',bra[1][0],eH[2]) # Bottom right site
-    Hbra[1][1] = bra[1][1].copy()
+    if thermal:
+        bra[0][1].unmerge_ind(2)
+        Hbra[0][1] = einsum('ldparu,pPx->ldxParu',bra[0][1],eH[0])
+        Hbra[0][1].merge_inds([3,4])
+        bra[0][1].merge_inds([2,3])
+        bra[0][0].unmerge_ind(2)
+        Hbra[0][0] = einsum('ldparu,xpPy->ldParyux',bra[0][0],eH[1])
+        Hbra[0][0].merge_inds([2,3])
+        bra[0][0].merge_inds([2,3])
+        bra[1][0].unmerge_ind(2)
+        Hbra[1][0] = einsum('ldparu,ypP->lydParu',bra[1][0],eH[2])
+        Hbra[1][0].merge_inds([3,4])
+        bra[1][0].merge_inds([2,3])
+        Hbra[1][1] = bra[1][1].copy()
+    else:
+        Hbra[0][1] = einsum('ldpru,pPx->ldxPru',bra[0][1],eH[0]) # Top left site
+        Hbra[0][0] = einsum('ldpru,xpPy->ldPryux',bra[0][0],eH[1]) # Bottom left site
+        Hbra[1][0] = einsum('ldpru,ypP->lydPru',bra[1][0],eH[2]) # Bottom right site
+        Hbra[1][1] = bra[1][1].copy()
     # Merge indices as needed
     Hbra[0][1].merge_inds([1,2])
     Hbra[0][0].merge_inds([3,4])
@@ -128,21 +162,36 @@ def su_init_als_guess_lb(bra,eH,mbd,add_noise=False):
 
     # Determine u ------------------------------------
     H01 = Hbra[0][1].ten.copy()
-    H01 = H01.transpose([0,3,4,5,1,2])
-    H01mat = H01.reshape((np.prod(H01.shape[:4]),np.prod(H01.shape[4:])))
-    _H01mat = lib.pinv(H01mat)
-    _H01 = _H01mat.reshape(H01.shape[4:]+H01.shape[:4])
-    _H01 = GEN_TEN(ten=_H01)
+    if thermal:
+        H01 = H01.transpose([0,3,4,5,6,1,2])
+        H01mat = H01.reshape((np.prod(H01.shape[:5]),np.prod(H01.shape[5:])))
+        _H01mat = lib.pinv(H01mat)
+        _H01 = _H01mat.reshape(H01.shape[5:]+H01.shape[:5])
+        _H01 = GEN_TEN(ten=_H01)
+        _H01.merge_inds([3,4])
+    else:
+        H01 = H01.transpose([0,3,4,5,1,2])
+        H01mat = H01.reshape((np.prod(H01.shape[:4]),np.prod(H01.shape[4:])))
+        _H01mat = lib.pinv(H01mat)
+        _H01 = _H01mat.reshape(H01.shape[4:]+H01.shape[:4])
+        _H01 = GEN_TEN(ten=_H01)
     u = einsum('ldpru,DXlpru->DXd',Hbra_red[0][1],_H01)
     u.merge_inds([0,1])
     tmp = einsum('Dd,lDpru->ldpru',u,Hbra[0][1])
 
     # Determine v ------------------------------------
     H00 = Hbra[0][0].ten.copy()
-    H00mat = H00.reshape((np.prod(H00.shape[:5]),np.prod(H00.shape[5:])))
-    _H00mat = lib.pinv(H00mat)
-    _H00 = _H00mat.reshape(H00.shape[5:]+H00.shape[:5])
-    _H00 = GEN_TEN(ten=_H00)
+    if thermal:
+        H00mat = H00.reshape((np.prod(H00.shape[:6]),np.prod(H00.shape[6:])))
+        _H00mat = lib.pinv(H00mat)
+        _H00 = _H00mat.reshape(H00.shape[6:]+H00.shape[:6])
+        _H00 = GEN_TEN(ten=_H00)
+        _H00.merge_inds([4,5])
+    else:
+        H00mat = H00.reshape((np.prod(H00.shape[:5]),np.prod(H00.shape[5:])))
+        _H00mat = lib.pinv(H00mat)
+        _H00 = _H00mat.reshape(H00.shape[5:]+H00.shape[:5])
+        _H00 = GEN_TEN(ten=_H00)
     _H00.merge_inds([5,6])
     v = einsum('ldpru,UXldpr->UXu',Hbra_red[0][0],_H00)
     v.merge_inds([0,1])
@@ -162,22 +211,38 @@ def su_init_als_guess_lb(bra,eH,mbd,add_noise=False):
 
     # Determine p ------------------------------------
     H00 = Hbra[0][0].ten.copy()
-    H00 = H00.transpose([0,1,2,5,3,4])
-    H00mat = H00.reshape((np.prod(H00.shape[:4]),np.prod(H00.shape[4:])))
-    _H00mat = lib.pinv(H00mat)
-    _H00 = _H00mat.reshape(H00.shape[4:]+H00.shape[:4])
-    _H00 = GEN_TEN(ten=_H00)
+    if thermal:
+        H00 = H00.transpose([0,1,2,3,6,4,5])
+        H00mat = H00.reshape((np.prod(H00.shape[:5]),np.prod(H00.shape[5:])))
+        _H00mat = lib.pinv(H00mat)
+        _H00 = _H00mat.reshape(H00.shape[5:]+H00.shape[:5])
+        _H00 = GEN_TEN(ten=_H00)
+        _H00.merge_inds([4,5])
+    else:
+        H00 = H00.transpose([0,1,2,5,3,4])
+        H00mat = H00.reshape((np.prod(H00.shape[:4]),np.prod(H00.shape[4:])))
+        _H00mat = lib.pinv(H00mat)
+        _H00 = _H00mat.reshape(H00.shape[4:]+H00.shape[:4])
+        _H00 = GEN_TEN(ten=_H00)
     p = einsum('ldpru,RYldpu->RYr',Hbra_red[0][0],_H00)
     p.merge_inds([0,1])
     tmp = einsum('ldpru,rR->ldpRu',Hbra[0][0],p)
 
     # Determine q ------------------------------------
     H10 = Hbra[1][0].ten.copy()
-    H10 = H10.transpose([2,3,4,5,0,1])
-    H10mat = H10.reshape((np.prod(H10.shape[:4]),np.prod(H10.shape[4:])))
-    _H10mat = lib.pinv(H10mat)
-    _H10 = _H10mat.reshape(H10.shape[4:]+H10.shape[:4])
-    _H10 = GEN_TEN(ten=_H10)
+    if thermal:
+        H10 = H10.transpose([2,3,4,5,6,0,1])
+        H10mat = H10.reshape((np.prod(H10.shape[:5]),np.prod(H10.shape[5:])))
+        _H10mat = lib.pinv(H10mat)
+        _H10 = _H10mat.reshape(H10.shape[5:]+H10.shape[:5])
+        _H10 = GEN_TEN(ten=_H10)
+        _H10.merge_inds([3,4])
+    else:
+        H10 = H10.transpose([2,3,4,5,0,1])
+        H10mat = H10.reshape((np.prod(H10.shape[:4]),np.prod(H10.shape[4:])))
+        _H10mat = lib.pinv(H10mat)
+        _H10 = _H10mat.reshape(H10.shape[4:]+H10.shape[:4])
+        _H10 = GEN_TEN(ten=_H10)
     q = einsum('ldpru,LYdpru->LYl',Hbra_red[1][0],_H10)
     q.merge_inds([0,1])
     tmp = einsum('ldpru,lL->Ldpru',Hbra[1][0],q)
@@ -198,12 +263,29 @@ def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,hermitian=True,positive=True,ch
             where the ket is the full evolved state
             and the bra is the truncated evolved state
     """
+    # Check if dealing with a thermal state
+    thermal = len(peps[0][0].legs[2]) == 2
     # Contract state with time evolution operator
     Hbra = [[None,None],[None,None]]
-    Hbra[0][1] = einsum('ldpru,pPx->ldxPru',peps[0][1],eH[0]) # Top left site
-    Hbra[0][0] = einsum('ldpru,xpPy->ldPryux',peps[0][0],eH[1]) # Bottom left site
-    Hbra[1][0] = einsum('ldpru,ypP->lydPru',peps[1][0],eH[2]) # Bottom right site
-    Hbra[1][1] = peps[1][1].copy()
+    if thermal:
+        peps[0][1].unmerge_ind(2)
+        Hbra[0][1] = einsum('ldparu,pPx->ldxParu',peps[0][1],eH[0])
+        Hbra[0][1].merge_inds([3,4])
+        peps[0][1].merge_inds([2,3])
+        peps[0][0].unmerge_ind(2)
+        Hbra[0][0] = einsum('ldparu,xpPy->ldParyux',peps[0][0],eH[1])
+        Hbra[0][0].merge_inds([2,3])
+        peps[0][0].merge_inds([2,3])
+        peps[1][0].unmerge_ind(2)
+        Hbra[1][0] = einsum('ldparu,ypP->lydParu',peps[1][0],eH[2])
+        Hbra[1][0].merge_inds([3,4])
+        peps[1][0].merge_inds([2,3])
+        Hbra[1][1] = peps[1][1].copy()
+    else:
+        Hbra[0][1] = einsum('ldpru,pPx->ldxPru',peps[0][1],eH[0]) # Top left site
+        Hbra[0][0] = einsum('ldpru,xpPy->ldPryux',peps[0][0],eH[1]) # Bottom left site
+        Hbra[1][0] = einsum('ldpru,ypP->lydPru',peps[1][0],eH[2]) # Bottom right site
+        Hbra[1][1] = peps[1][1].copy()
     # Merge indices as needed
     Hbra[0][1].merge_inds([1,2])
     Hbra[0][0].merge_inds([3,4])
@@ -301,12 +383,29 @@ def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,hermitian=True,positive=True,ch
             where the ket is the full evolved state
             and the bra is the truncated evolved state
     """
+    # Check if dealing with a thermal state
+    thermal = len(peps[0][0].legs[2]) == 2
     # Contract state with time evolution operator
     Hbra = [[None,None],[None,None]]
-    Hbra[0][1] = einsum('ldpru,pPx->ldxPru',peps[0][1],eH[0]) # Top left site
-    Hbra[0][0] = einsum('ldpru,xpPy->ldPryux',peps[0][0],eH[1]) # Bottom left site
-    Hbra[1][0] = einsum('ldpru,ypP->lydPru',peps[1][0],eH[2]) # Bottom right site
-    Hbra[1][1] = peps[1][1].copy()
+    if thermal:
+        peps[0][1].unmerge_ind(2)
+        Hbra[0][1] = einsum('ldparu,pPx->ldxParu',peps[0][1],eH[0])
+        Hbra[0][1].merge_inds([3,4])
+        peps[0][1].merge_inds([2,3])
+        peps[0][0].unmerge_ind(2)
+        Hbra[0][0] = einsum('ldparu,xpPy->ldParyux',peps[0][0],eH[1])
+        Hbra[0][0].merge_inds([2,3])
+        peps[0][0].merge_inds([2,3])
+        peps[1][0].unmerge_ind(2)
+        Hbra[1][0] = einsum('ldparu,ypP->lydParu',peps[1][0],eH[2])
+        Hbra[1][0].merge_inds([3,4])
+        peps[1][0].merge_inds([2,3])
+        Hbra[1][1] = peps[1][1].copy()
+    else:
+        Hbra[0][1] = einsum('ldpru,pPx->ldxPru',peps[0][1],eH[0]) # Top left site
+        Hbra[0][0] = einsum('ldpru,xpPy->ldPryux',peps[0][0],eH[1]) # Bottom left site
+        Hbra[1][0] = einsum('ldpru,ypP->lydPru',peps[1][0],eH[2]) # Bottom right site
+        Hbra[1][1] = peps[1][1].copy()
     # Merge indices as needed
     Hbra[0][1].merge_inds([1,2])
     Hbra[0][0].merge_inds([3,4])
@@ -542,6 +641,9 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
       +----+           +----+
 
     """
+    # Check if this is a thermal state -------------------------------------------------
+    thermal = len(peps[0][0].legs[2]) == 2
+
     # Generate initial guesses for the bond reducing tensors ---------------------------
     D = peps[0][0].shape[peps[0][0].legs[3][0]]
     Dh = eH[0].shape[eH[0].legs[2][0]]
@@ -613,10 +715,25 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
     
     # Absorb all bond reducers into the peps tensors ----------------------------------
     Hbra = [[None,None],[None,None]]
-    Hbra[0][1] = einsum('ldpru,pPx->ldxPru',peps[0][1],eH[0]) # Top left site
-    Hbra[0][0] = einsum('ldpru,xpPy->ldPryux',peps[0][0],eH[1]) # Bottom left site
-    Hbra[1][0] = einsum('ldpru,ypP->lydPru',peps[1][0],eH[2]) # Bottom right site
-    Hbra[1][1] = peps[1][1].copy()
+    if thermal:
+        peps[0][1].unmerge_ind(2)
+        Hbra[0][1] = einsum('ldparu,pPx->ldxParu',peps[0][1],eH[0])
+        Hbra[0][1].merge_inds([3,4])
+        peps[0][1].merge_inds([2,3])
+        peps[0][0].unmerge_ind(2)
+        Hbra[0][0] = einsum('ldparu,xpPy->ldParyux',peps[0][0],eH[1])
+        Hbra[0][0].merge_inds([2,3])
+        peps[0][0].merge_inds([2,3])
+        peps[1][0].unmerge_ind(2)
+        Hbra[1][0] = einsum('ldparu,ypP->lydParu',peps[1][0],eH[2])
+        Hbra[1][0].merge_inds([3,4])
+        peps[1][0].merge_inds([2,3])
+        Hbra[1][1] = peps[1][1].copy()
+    else:
+        Hbra[0][1] = einsum('ldpru,pPx->ldxPru',peps[0][1],eH[0]) # Top left site
+        Hbra[0][0] = einsum('ldpru,xpPy->ldPryux',peps[0][0],eH[1]) # Bottom left site
+        Hbra[1][0] = einsum('ldpru,ypP->lydPru',peps[1][0],eH[2]) # Bottom right site
+        Hbra[1][1] = peps[1][1].copy()
     # Merge indices as needed
     Hbra[0][1].merge_inds([1,2])
     Hbra[0][0].merge_inds([3,4])
@@ -1131,9 +1248,11 @@ def run_tebd(Nx,Ny,d,ham,
     mpiprint(0,'\n\nStarting TEBD Calculation')
     mpiprint(0,'#'*50)
 
-    # Ensure the optimization parameters, namely the
+    # Ensure the optimization parameters, the
     # bond dimension, trotter step size, and number
     # of trotter steps are compatable.
+    if thermal:
+        conv_tol = 0.
     if hasattr(D,'__len__'):
         n_calcs = len(D)
     elif hasattr(step_size,'__len__'):

@@ -1424,6 +1424,9 @@ def update_top_env_gen(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,tru
        u              k          v                  x
 
     """
+    # Determine if it is a thermal state
+    thermal = len(bra[0][row].legs[2]) == 2
+    
     # Figure out number of columns
     ncol = len(bra)
 
@@ -1491,8 +1494,8 @@ def update_top_env_gen(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,tru
                     Zli = ketten.qn_sectors[ketten.legs[3][legind]]
                     Ii = eye(Dli,
                              Zli,
-                             is_symmetric=braten.is_symmetric,
-                             backend=braten.backend)
+                             is_symmetric=ketten.is_symmetric,
+                             backend=ketten.backend)
                     I = einsum('ij,IJ->iIjJ',I,Ii)
                     I.merge_inds([0,1])
                     I.merge_inds([1,2])
@@ -1576,8 +1579,8 @@ def update_top_env_gen(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,tru
                     Zli = ketten.qn_sectors[ketten.legs[3][legind]]
                     Ii = eye(Dli,
                              Zli,
-                             is_symmetric=braten.is_symmetric,
-                             backend=braten.backend)
+                             is_symmetric=ketten.is_symmetric,
+                             backend=ketten.backend)
                     I1 = einsum('ij,IJ->iIjJ',I1,Ii)
                     I1.merge_inds([0,1])
                     I1.merge_inds([1,2])
@@ -1593,8 +1596,8 @@ def update_top_env_gen(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,tru
                     Zli = ketten.qn_sectors[ketten.legs[2][legind]]
                     Ii = eye(Dli,
                              Zli,
-                             is_symmetric=braten.is_symmetric,
-                             backend=braten.backend)
+                             is_symmetric=ketten.is_symmetric,
+                             backend=ketten.backend)
                     I2 = einsum('ij,IJ->iIjJ',I2,Ii)
                     I2.merge_inds([0,1])
                     I2.merge_inds([1,2])
@@ -1691,7 +1694,11 @@ def update_top_env_gen(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,tru
             # Add bra --------------------------
             envten = prev_env[2*col+2].copy()
             # Unmerge physical index
-            envten.unmerge_ind(1)
+            if thermal:
+                envten.unmerge_ind(1)
+                envten.merge_inds([1,2])
+            else:
+                envten.unmerge_ind(1)
             # Contract with bra
             res = einsum('xlcw,rvlsc->xrvws',envten,braten)
             # Merge correct inds
@@ -1790,6 +1797,9 @@ def update_bot_env_gen(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,tru
     """
     # Figure out number of columns
     ncol = len(bra)
+    
+    # Determine if it is a thermal state
+    thermal = len(bra[0][row].legs[2]) == 2
 
     # Create the new top environment
     if prev_env is None:
@@ -2031,7 +2041,11 @@ def update_bot_env_gen(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,tru
             # Add ket --------------------------
             envten = prev_env[2*col+1].copy()
             # Unmerge physical index
-            envten.unmerge_ind(1)
+            if thermal:
+                envten.unmerge_ind(1)
+                envten.merge_inds([2,3])
+            else:
+                envten.unmerge_ind(1)
             # Contract with ket
             res = einsum('ybkx,pbkqt->yptxq',envten,ketten)
             # Merge correct indices
@@ -2776,16 +2790,37 @@ def calc_local_nn_op_lb(mpo,bra,ket,top,bot,left,right,normalize=True,contracted
     Calculate the value of an operator as an mpo acting on the left
     and bottom bonds of a 2x2 peps grid
     """
+    # Check if it is a thermal state:
+    thermal = len(bra[0][1].legs[2]) == 2
     # Absorb MPO into bra
     Hbra = [[None,None],[None,None]]
-    Hbra[0][1] = einsum('ldpru,pPx->ldxPru',bra[0][1],mpo[0]) # Top left site
-    Hbra[0][1].merge_inds([1,2])
-    Hbra[0][0] = einsum('ldpru,xpPy->ldPryux',bra[0][0],mpo[1]) # Bottom left site
-    Hbra[0][0].merge_inds([3,4])
-    Hbra[0][0].merge_inds([4,5])
-    Hbra[1][0] = einsum('ldpru,ypP->lydPru',bra[1][0],mpo[2]) # Bottom right site
-    Hbra[1][0].merge_inds([0,1])
-    Hbra[1][1] = bra[1][1].copy()
+    if thermal:
+        bra[0][1].unmerge_ind(2)
+        Hbra[0][1] = einsum('ldparu,pPx->ldxParu',bra[0][1],mpo[0]) # Top left site
+        Hbra[0][1].merge_inds([1,2])
+        Hbra[0][1].merge_inds([2,3])
+        bra[0][1].merge_inds([2,3])
+        bra[0][0].unmerge_ind(2)
+        Hbra[0][0] = einsum('ldparu,xpPy->ldParyux',bra[0][0],mpo[1]) # Bottom left site
+        Hbra[0][0].merge_inds([2,3])
+        Hbra[0][0].merge_inds([3,4])
+        Hbra[0][0].merge_inds([4,5])
+        bra[0][0].merge_inds([2,3])
+        bra[1][0].unmerge_ind(2)
+        Hbra[1][0] = einsum('ldparu,ypP->lydParu',bra[1][0],mpo[2]) # Bottom right site
+        Hbra[1][0].merge_inds([0,1])
+        Hbra[1][0].merge_inds([2,3])
+        Hbra[1][1] = bra[1][1].copy()
+        bra[1][0].merge_inds([2,3])
+    else:
+        Hbra[0][1] = einsum('ldpru,pPx->ldxPru',bra[0][1],mpo[0]) # Top left site
+        Hbra[0][1].merge_inds([1,2])
+        Hbra[0][0] = einsum('ldpru,xpPy->ldPryux',bra[0][0],mpo[1]) # Bottom left site
+        Hbra[0][0].merge_inds([3,4])
+        Hbra[0][0].merge_inds([4,5])
+        Hbra[1][0] = einsum('ldpru,ypP->lydPru',bra[1][0],mpo[2]) # Bottom right site
+        Hbra[1][0].merge_inds([0,1])
+        Hbra[1][1] = bra[1][1].copy()
     # Calculate Operator -------------------------------------
     # Compute bottom environment as a boundary mpo
     Hbot = update_bot_env2(0,
@@ -2856,16 +2891,37 @@ def calc_local_nn_op_ru(mpo,bra,ket,top,bot,left,right,normalize=True,contracted
     Calculate the value of an operator as an mpo acting on the right
     and top bonds of a 2x2 peps grid
     """
+    # Check if it is a thermal state:
+    thermal = len(bra[0][1].legs[2]) == 2
     # Absorb MPO into bra
     Hbra = [[None,None],[None,None]]
-    Hbra[0][1] = einsum('ldpru,pPx->ldPrxu',bra[0][1],mpo[0]) # Top Left Site
-    Hbra[0][1].merge_inds([3,4])
-    Hbra[1][1] = einsum('ldpru,xpPy->lxdyPru',bra[1][1],mpo[1]) # Top Right Site
-    Hbra[1][1].merge_inds([0,1])
-    Hbra[1][1].merge_inds([1,2])
-    Hbra[1][0] = einsum('ldpru,ypP->ldPruy',bra[1][0],mpo[2]) # Bottom right site
-    Hbra[1][0].merge_inds([4,5])
-    Hbra[0][0] = bra[0][0].copy()
+    if thermal:
+        bra[0][1].unmerge_ind(2)
+        Hbra[0][1] = einsum('ldparu,pPx->ldParxu',bra[0][1],mpo[0]) # Top Left Site
+        Hbra[0][1].merge_inds([2,3])
+        Hbra[0][1].merge_inds([3,4])
+        bra[0][1].merge_inds([2,3])
+        bra[1][1].unmerge_ind(2)
+        Hbra[1][1] = einsum('ldparu,xpPy->lxdyParu',bra[1][1],mpo[1]) # Top Right Site
+        Hbra[1][1].merge_inds([0,1])
+        Hbra[1][1].merge_inds([1,2])
+        Hbra[1][1].merge_inds([2,3])
+        bra[1][1].merge_inds([2,3])
+        bra[1][0].unmerge_ind(2)
+        Hbra[1][0] = einsum('ldparu,ypP->ldParuy',bra[1][0],mpo[2]) # Bottom right site
+        Hbra[1][0].merge_inds([2,3])
+        Hbra[1][0].merge_inds([4,5])
+        bra[1][0].merge_inds([2,3])
+        Hbra[0][0] = bra[0][0].copy()
+    else:
+        Hbra[0][1] = einsum('ldpru,pPx->ldPrxu',bra[0][1],mpo[0]) # Top Left Site
+        Hbra[0][1].merge_inds([3,4])
+        Hbra[1][1] = einsum('ldpru,xpPy->lxdyPru',bra[1][1],mpo[1]) # Top Right Site
+        Hbra[1][1].merge_inds([0,1])
+        Hbra[1][1].merge_inds([1,2])
+        Hbra[1][0] = einsum('ldpru,ypP->ldPruy',bra[1][0],mpo[2]) # Bottom right site
+        Hbra[1][0].merge_inds([4,5])
+        Hbra[0][0] = bra[0][0].copy()
     # Calculate Operator -------------------------------------
     # Compute bottom environment as a boundary mpo
     Hbot = update_bot_env2(0,

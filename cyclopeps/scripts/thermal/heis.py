@@ -14,7 +14,6 @@ Ny = int(argv[2])
 D  = int(argv[3])
 chi= int(argv[4])
 Zn = int(argv[5])
-step_size_ind = int(argv[6])
 if Zn == 0:
     Zn = None
 backend = 'numpy'
@@ -22,7 +21,7 @@ dofu = True
 d = 2
 
 # TEBD Parameters
-step_size = [0.1,0.05,0.01,0.005,0.001][step_size_ind]
+step_size = 0.001
 n_step = int(10./step_size)
 
 # Get mpo
@@ -30,9 +29,6 @@ if Zn is None:
     ham = return_op(Nx,Ny,sym=None,backend=backend)
 else:
     ham = return_op(Nx,Ny,sym='Z2',backend=backend)
-
-# Get a thermal state peps
-peps = PEPS(Nx=2,Ny=2,d=2,D=2,chi=100,thermal=True)
 
 
 if dofu:

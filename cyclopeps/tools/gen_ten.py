@@ -989,7 +989,7 @@ class GEN_TEN:
             for i in range(split):
                 matsz *= np.prod([self.shape[i] for i in self.legs[i]])
             mat = self.backend.reshape(self.ten.copy(),(matsz,-1))
-            _mat = self.backend.inv(mat+1e-16)
+            _mat = self.backend.pinv(mat+1e-16)
             newten.ten = self.backend.reshape(_mat,newten.shape)
         else:
             # Do the inversion with the full tensor
@@ -997,7 +997,7 @@ class GEN_TEN:
             (N1,N2,N3,N4,n1,n2,n3,n4) = mat.shape
             mat = mat.transpose([0,4,1,5,2,6,3,7])
             mat = mat.reshape((N1*n1*N2*n2,N3*n3*N4*n4))
-            inv = self.backend.inv(mat)
+            inv = self.backend.pinv(mat)
             inv = inv.reshape((N1,n1,N2,n2,N3,n3,N4,n4))
             inv = inv.transpose([0,2,4,6,1,3,5,7])
             # Convert back into sparse tensor
