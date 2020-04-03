@@ -76,8 +76,6 @@ def cost_func(bra,eH,top,bot,left,right,u,v,p,q,chi):
                            truncate=False,
                            chi=chi)
     tp = tpbot.contract(tptop)
-    #print('tt {}'.format(tt))
-    #print('tp {}'.format(tp))
 
     return 1.+tt-2.*tp
 
@@ -400,8 +398,7 @@ def calc_NK(peps,eH,top,bot,left,right,u,v,p,q,lb=True,pq=True,chi=10):
         else:
             return calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,chi=chi)
     else:
-        import sys
-        sys.exit()
+        raise NotImplementedError()
 
 def calc_cost_uv_lb(N,K,u,v):
     """
@@ -414,7 +411,6 @@ def calc_cost_uv_lb(N,K,u,v):
     # Contract K with the u and v tensors
     tp = einsum('xX,xz->zX',K,v)
     tp = einsum('xX,Xx->',tp,u)
-    #print('\tuv: {},{}'.format(tt,tp))
     return 1.+tt-2.*tp
 
 def calc_cost_pq_lb(N,K,p,q):
@@ -428,7 +424,6 @@ def calc_cost_pq_lb(N,K,p,q):
     # Contract K with the p and q tensors
     tp = einsum('rR,RS->rS',K,q)
     tp = einsum('rR,rR->',tp,p)
-    #print('\tpq: {},{}'.format(tt,tp))
     return 1.+tt-2.*tp
 
 def optimize_u_lb(N,K,u,v):
@@ -566,7 +561,6 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
     cost_prev_in = cost_prev
 
     # Begin ALS iterations ------------------------------------------------------------
-    #print('\toverall als started')
     if full_update:
         for i in range(maxiter):
 
@@ -581,12 +575,9 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
                 if cost_prev is None:
                     cost_prev = cost
                     cost_prev_in = cost
-                #print('\t\t\tAfter u opt {}'.format(cost))
                 v,cost = optimize_v_lb(N,K,u,v)
-                #print('\t\t\tAfter v opt {}'.format(cost))
                 # Check for convergence
                 if (abs(cost) < tol) or (abs(cost-cost_prev_in) < tol):
-                    #print('\t\tuv als converged {} ({})'.format(cost,abs((cost-cost_prev_in)/cost)))
                     cost_prev_in = cost
                     break
                 elif j == maxiter-1:
@@ -601,29 +592,24 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
             for j in range(maxiter):
                 # Do optimization for p and q tensors
                 p,cost = optimize_p_lb(N,K,p,q)
-                #print('\t\t\tAfter p opt {}'.format(cost))
                 q,cost = optimize_q_lb(N,K,p,q)
-                #print('\t\t\tAfter q opt {}'.format(cost))
                 # Check for convergence
                 if (abs(cost) < tol) or (abs(cost-cost_prev_in) < tol):
-                    #print('\t\tpq als converged {} ({})'.format(cost,abs((cost-cost_prev_in)/cost)))
                     cost_prev_in = cost
                     break
                 elif j == maxiter-1:
                     cost_prev_in = cost
-                    #print('\t\tpq als not cnvrg {} ({})'.format(cost,abs((cost-cost_prev_in)/cost)))
                 else:
                     cost_prev_in = cost
 
             # Check for convergence between u/v and p/q results -----------------------
             if (abs(cost) < tol) or (abs(cost-cost_prev) < tol):
-                print('\toverall als converged {} ({})'.format(cost,abs((cost-cost_prev)/cost)))
                 break
             elif i == maxiter-1:
-                print('\toverall als not cnvrg {} ({})'.format(cost,abs((cost-cost_prev)/cost)))
-            else:
-                #print('\toverall als not cnvrg {} ({})'.format(cost,abs((cost-cost_prev)/cost)))
                 cost_prev = cost
+            else:
+                cost_prev = cost
+    #print('\tEnding cost {} ({})'.format(cost,abs(cost-cost_prev)))
     
     # Absorb all bond reducers into the peps tensors ----------------------------------
     Hbra = [[None,None],[None,None]]
@@ -643,6 +629,12 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
     Hbra_red[0][0] = einsum('ldpru,uU->ldprU',Hbra_red[0][0],v)
     Hbra_red[1][0] = einsum('ldpru,lL->Ldpru',Hbra[1][0],q)
     Hbra_red[1][1] = Hbra[1][1].copy()
+
+    # Do some scaling to prevent large values
+    Hbra_red[0][0] /= Hbra_red[0][0].abs().max()
+    Hbra_red[0][1] /= Hbra_red[0][1].abs().max()
+    Hbra_red[1][0] /= Hbra_red[1][0].abs().max()
+    Hbra_red[1][1] /= Hbra_red[1][1].abs().max()
 
     # Return result
     return Hbra_red
@@ -777,6 +769,62 @@ def do_als(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,lb=True,full_upda
     else:
         return do_als_rt(peps,eH,top,bot,left,right,mbd,maxiter=maxiter,tol=tol,full_update=full_update)
 
+def make_equal_distance_twotens(ten1,ten2,mbd,vertical=True):
+    """
+    Multiply two nearest neighbor peps tensors
+    together and resplit them so singular values are
+    equally split between the two tensors
+    """
+    # Create copies of the tensors first
+    ten1 = ten1.copy()
+    ten2 = ten2.copy()
+    # Flip tensors along horizontal bonds
+    if not vertical:
+        ten1 = ten1.transpose([4,0,2,1,3])
+        ten2 = ten2.transpose([4,0,2,1,3])
+    # Pull the physical index off each tensor
+    ten1 = ten1.transpose([0,1,3,2,4])
+    (ub,sb,vb) = ten1.svd(3,return_ent=False,return_wgt=False)
+    phys_b = einsum('aA,APU->aPU',sb,vb)
+    ten2 = ten2.transpose([1,2,0,3,4])
+    (ut,st,vt) = ten2.svd(2,return_ent=False,return_wgt=False)
+    phys_t = einsum('DPa,aA->DPA',ut,st)
+    # combine the two reduced tensors
+    theta = einsum('aPU,UQb->aPQb',phys_b,phys_t)
+    # take svd of result and truncate d if needed
+    (u,s,v) = theta.svd(2,truncate_mbd=mbd,return_ent=False,return_wgt=False)
+    # normalize s
+    normfact = s.backend.sqrt(einsum('ij,jk->',s,s))
+    #s /= normfact
+    # recombine the tensors
+    phys_b = einsum('aPU,Uu->aPu',u,s.sqrt())
+    phys_t = einsum('dD,DPa->dPa',s.sqrt(),v)
+    ten1 = einsum('LDRa,aPU->LDPRU',ub,phys_b)
+    ten2 = einsum('DPa,aLRU->LDPRU',phys_t,vt)
+    # Flip back horizontally bonded tensors
+    if not vertical:
+        ten1 = ten1.transpose([1,3,2,4,0])
+        ten2 = ten2.transpose([1,3,2,4,0])
+    return ten1,ten2
+
+def make_equal_distance(peps,mbd,niter=1):
+    """
+    Multiply nearest neighbor peps tensors together and resplit them
+    so that the singular values are equally split between the two tensors
+    """
+    # Possibly repeat a few times (if this improves things)
+    for i in range(niter):
+        # Make equal distance 00,01 --------------------------
+        peps[0][0],peps[0][1] = make_equal_distance_twotens(peps[0][0],peps[0][1],mbd)
+        # Make equal distance 00,10 -------------------------- 
+        peps[0][0],peps[1][0] = make_equal_distance_twotens(peps[0][0],peps[1][0],mbd,vertical=False)
+        # Make equal distance 10,11 -------------------------- 
+        peps[1][0],peps[1][1] = make_equal_distance_twotens(peps[1][0],peps[1][1],mbd)
+        # Make equal distance 00,10 -------------------------- 
+        peps[0][1],peps[1][1] = make_equal_distance_twotens(peps[0][1],peps[1][1],mbd,vertical=False)
+    # Return resulting tensors
+    return peps
+
 def tebd_step_single_col(peps_col1,peps_col2,step_size,left_bmpo,right_bmpo,ham_col,mbd,als_iter=10,als_tol=1e-10,lb=True,full_update=True):
     """
     """
@@ -793,7 +841,7 @@ def tebd_step_single_col(peps_col1,peps_col2,step_size,left_bmpo,right_bmpo,ham_
     # Loop through rows in the column
     E = peps_col1[0].backend.zeros(len(ham_col),dtype=peps_col1[0].dtype)
     for row in range(len(ham_col)):
-        print('Row tebd col = {}'.format(row))
+        #print('\tRow tebd col = {}'.format(row))
         # Take exponential of the MPO
         if lb:
             eH = exp_mpo(ham_col[row][0],-step_size)
@@ -830,6 +878,11 @@ def tebd_step_single_col(peps_col1,peps_col2,step_size,left_bmpo,right_bmpo,ham_
                       tol=als_tol,
                       lb=lb,
                       full_update=full_update)
+
+        # Combine and equally split the tensors (and scale to avoid precision errors)
+        res = make_equal_distance(res,mbd)
+
+        # Put results back into the peps columns
         peps_col1[row] = res[0][0]
         peps_col1[row+1] = res[0][1]
         peps_col2[row] = res[1][0]
@@ -845,10 +898,6 @@ def tebd_step_single_col(peps_col1,peps_col2,step_size,left_bmpo,right_bmpo,ham_
                                   top_envs,
                                   chi=mbd)
 
-        # Combine and equally split each set of two tensors
-        # TODO!
-        #peps_col[row],peps_col[row+1] = make_equal_distance(peps_col[row],peps_col[row+1],mbd)
-
         # Update top and bottom environments
         if row == 0: prev_env = None
         else: prev_env = bot_envs[row-1]
@@ -861,11 +910,6 @@ def tebd_step_single_col(peps_col1,peps_col2,step_size,left_bmpo,right_bmpo,ham_
                                         right_bmpo[2*row+1],
                                         prev_env,
                                         chi=mbd)
-
-        # Normalize everything (to try to avoid some infinities)
-        #norm_fact = bot_envs[row].abs().max()
-        #bot_envs[row] /= norm_fact
-        #peps_col[row] /= norm_fact**(1./2.)
 
     # Return the result
     return E.sum(),[peps_col1,peps_col2]
@@ -905,7 +949,7 @@ def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=10,als_tol=1e-10,lb=True,
     # Loop through all columns
     E = peps.backend.zeros((len(ham)),dtype=peps[0][0].dtype)
     for col in range(Nx-1):
-        print('column {}'.format(col))
+        #print('column {}'.format(col))
         # Take TEBD Step
         if col == 0:
             res = tebd_step_single_col(peps[col],
@@ -1006,8 +1050,8 @@ def run_tebd(Nx,Ny,d,ham,
              dtype=float_,
              step_size=[0.1,0.01,0.001],
              n_step=5,
-             conv_tol=1e-10,
-             als_iter=10,
+             conv_tol=1e-5,
+             als_iter=20,
              als_tol=1e-8,
              peps_fname=None,
              peps_fdir='./',

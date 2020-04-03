@@ -2552,7 +2552,6 @@ def make_N_positive(N,hermitian=True,positive=True):
                 u,v = N.backend.eigh(Nmat)
                 u = pos_sqrt_vec(u)
                 Nmat = N.backend.einsum('ij,j,kj->ik',v,u,v)
-                print('Must check this (tools.peps_tools:2556)')
                 N.ten = Nmat.reshape(N.shape)
                 N = N.transpose([0,2,1,3])
             else:

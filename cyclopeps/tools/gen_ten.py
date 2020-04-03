@@ -989,10 +989,7 @@ class GEN_TEN:
             for i in range(split):
                 matsz *= np.prod([self.shape[i] for i in self.legs[i]])
             mat = self.backend.reshape(self.ten.copy(),(matsz,-1))
-            np.savez('mat',mat)
-            print('Condition number {}'.format(np.linalg.cond(mat)))
             _mat = self.backend.inv(mat+1e-16)
-            print(self.backend.einsum('ij,jk->ik',_mat,mat))
             newten.ten = self.backend.reshape(_mat,newten.shape)
         else:
             # Do the inversion with the full tensor

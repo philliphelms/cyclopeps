@@ -15,10 +15,9 @@ backend = 'numpy'
 d = 2
 
 # TEBD Parameters
-step_sizes = [1e-10,0.05, 0.01]
-n_step     = [500, 500,  500]
-chi        = [ 10,  20,   50]
-conv_tol   = [1e-5,1e-5,1e-5]
+step_sizes = [0.1,0.01,0.001]
+n_step     = 100
+conv_tol   = 1e-10
 
 # Get mpo
 ham = return_op(Nx,Ny,sym=None,backend=backend)
