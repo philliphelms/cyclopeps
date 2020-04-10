@@ -262,6 +262,337 @@ def su_init_als_guess_lb(bra,eH,mbd,add_noise=False):
     # Return Result!
     return u,v,p,q
 
+def make_left_env(bra,ket,left,right,top,bot,truncate=False,chi=10):
+    """
+    """
+    # Determine if it is a thermal state
+    thermal = len(bra[0][0].legs[2]) == 2
+    # Contract first layer --------------------------------------------------------------
+    Nl = [None,None,None,None,None,None]
+    # bottom bmpo site -------------------------------
+    Nl[0] = einsum('ach,hns->ascn',bot[0],bot[1])
+    Nl[0].merge_inds([2,3])
+    # next bmpo site --------------------------------
+    # TODO - Make sure signs are correct 
+    # (will give error in symmetric case
+    Db = ket[0][0].shape[ket[0][0].legs[1][0]]
+    Zb = ket[0][0].qn_sectors[ket[0][0].legs[1][0]]
+    I1 = eye(Db,Zb,is_symmetric=ket[0][0].is_symmetric,backend=ket[0][0].backend)
+    if len(ket[0][0].legs[1]) > 1:
+        for legind in range(1,len(ket[0][0].legs[1])):
+            Dbi = ket[0][0].shape[ket[0][0].legs[1][legind]]
+            Zbi = ket[0][0].qn_sectors[ket[0][0].legs[1][legind]]
+            Ii = eye(Dbi,Zbi,is_symmetric=ket[0][0].is_symmetric,backend=ket[0][0].backend)
+            I1 = einsum('ij,IJ->iIjJ',I1,Ii)
+            I1.merge_inds([0,1])
+            I1.merge_inds([1,2])
+    Nl[1] = einsum('pfq,iI->pifqI',left[0],I1)
+    Nl[1].merge_inds([0,1])
+    Nl[1].merge_inds([2,3])
+    # next bmpo site --------------------------------
+    Nl[2] = einsum('dje,jouvp->douvep',left[1],ket[0][0])
+    Nl[2].merge_inds([0,1])
+    Nl[2].merge_inds([1,2])
+    Nl[2].merge_inds([2,3])
+    # next bmpo site --------------------------------
+    # TODO - Make sure signs are correct 
+    # (will give error in symmetric case
+    Db = ket[0][1].shape[ket[0][1].legs[1][0]]
+    Zb = ket[0][1].qn_sectors[ket[0][1].legs[1][0]]
+    I1 = eye(Db,Zb,is_symmetric=ket[0][1].is_symmetric,backend=ket[0][1].backend)
+    if len(ket[0][1].legs[1]) > 1:
+        for legind in range(1,len(ket[0][1].legs[1])):
+            Dbi = ket[0][1].shape[ket[0][1].legs[1][legind]]
+            Zbi = ket[0][1].qn_sectors[ket[0][1].legs[1][legind]]
+            Ii = eye(Dbi,Zbi,is_symmetric=ket[0][1].is_symmetric,backend=ket[0][1].backend)
+            I1 = einsum('ij,IJ->iIjJ',I1,Ii)
+            I1.merge_inds([0,1])
+            I1.merge_inds([1,2])
+    Nl[3] = einsum('ekf,pq->epkfq',left[2],I1)
+    Nl[3].merge_inds([0,1])
+    Nl[3].merge_inds([2,3])
+    # next bmpo site --------------------------------
+    Nl[4] = einsum('flg,lqxyr->fqxygr',left[3],ket[0][1])
+    Nl[4].merge_inds([0,1])
+    Nl[4].merge_inds([1,2])
+    Nl[4].merge_inds([2,3])
+    # last bmpo site --------------------------------
+    Nl[5] = einsum('bgm,mrz->grzb',top[0],top[1])
+    Nl[5].merge_inds([0,1])
+    # Truncate bmpo --------------------------------
+    Nl = MPS(Nl)
+    if truncate:
+        mpiprint(5,'Truncating Boundary MPS')
+        if DEBUG:
+            mpiprint(6,'Computing initial bmpo norm')
+            norm0 = Nl.norm()
+        Nl = Nl.apply_svd(chi)
+        if DEBUG:
+            mpiprint(6,'Computing resulting bmpo norm')
+            norm1 = Nl.norm()
+            mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+    # Contract second layer --------------------------------------------------------------
+    Nl = Nl.tensors
+    # bottom bmpo site -------------------------------
+    Nl[0] = einsum('asn,sAH->aHnA',Nl[0],bot[2])
+    Nl[0].merge_inds([2,3])
+    # next bmpo site --------------------------------
+    Nl[1] = einsum('nio,iAuIC->nAIouC',Nl[1],bra[0][0])
+    Nl[1].merge_inds([0,1])
+    Nl[1].merge_inds([2,3,4])
+    # next bmpo site --------------------------------
+    # Create identity
+    Du = bra[0][0].shape[bra[0][0].legs[4][0]]
+    Zu = bra[0][0].qn_sectors[bra[0][0].legs[4][0]]
+    I1 = eye(Du,Zu,is_symmetric=bra[0][0].is_symmetric,backend=bra[0][0].backend)
+    if len(bra[0][0].legs[4]) > 1:
+        for legind in range(1,len(bra[0][0].legs[4])):
+            Dbi = bra[0][0].shape[bra[0][0].legs[4][legind]]
+            Zbi = bra[0][0].qn_sectors[bra[0][0].legs[4][legind]]
+            Ii = eye(Dbi,Zbi,is_symmetric=bra[0][0].is_symmetric,backend=bra[0][0].backend)
+            I1 = einsum('ij,IJ->iIjJ',I1,Ii)
+            I1.merge_inds([0,1])
+            I1.merge_inds([1,2])
+    # Remove physical from right legs
+    if thermal:
+        if len(Nl[2].legs[1]) == 3:
+            Nl[2].unmerge_ind(1)
+            Nl[2].merge_inds([1,2]) # Merge back two physical inds
+        elif len(Nl[2].legs[1]) == 4:
+            Nl[2].unmerge_ind(1)
+            Nl[2].merge_inds([1,2]) # Merge back two physical inds
+            Nl[2].merge_inds([2,3]) # Merge back two right inds
+        else:
+            raise NotImplementedError()
+    else:
+        if len(Nl[2].legs[1]) == 2:
+            Nl[2].unmerge_ind(1)
+        elif len(Nl[2].legs[1]) == 3:
+            Nl[2].unmerge_ind(1)
+            Nl[2].merge_inds([2,3]) # Merge two right inds
+        else:
+            raise NotImplementedError()
+    # Contract results
+    Nl[2] = einsum('ouvp,CO->ouCvpO',Nl[2],I1)
+    Nl[2].merge_inds([0,1,2])
+    Nl[2].merge_inds([2,3])
+    # next bmpo site --------------------------------
+    Nl[3] = einsum('pkq,kOxKF->pOKqxF',Nl[3],bra[0][1])
+    Nl[3].merge_inds([0,1])
+    Nl[3].merge_inds([2,3,4])
+    # next bmpo site --------------------------------
+    # Create identity
+    Du = bra[0][1].shape[bra[0][1].legs[4][0]]
+    Zu = bra[0][1].qn_sectors[bra[0][1].legs[4][0]]
+    I1 = eye(Du,Zu,is_symmetric=bra[0][1].is_symmetric,backend=bra[0][1].backend)
+    if len(bra[0][1].legs[4]) > 1:
+        for legind in range(1,len(bra[0][1].legs[4])):
+            Dbi = bra[0][1].shape[bra[0][1].legs[4][legind]]
+            Zbi = bra[0][1].qn_sectors[bra[0][1].legs[4][legind]]
+            Ii = eye(Dbi,Zbi,is_symmetric=bra[0][1].is_symmetric,backend=bra[0][1].backend)
+            I1 = einsum('ij,IJ->iIjJ',I1,Ii)
+            I1.merge_inds([0,1])
+            I1.merge_inds([0,1])
+    # Remove physical from right legs
+    if thermal:
+        if len(Nl[4].legs[1]) == 3:
+            Nl[4].unmerge_ind(1)
+            Nl[4].merge_inds([1,2]) # Merge back two physical inds
+        elif len(Nl[4].legs[1]) == 4:
+            Nl[4].unmerge_ind(1)
+            Nl[4].merge_inds([1,2]) # Merge back two physical inds
+            Nl[4].merge_inds([2,3]) # Merge back two right inds
+        else:
+            raise NotImplementedError()
+    else:
+        if len(Nl[4].legs[1]) == 2:
+            Nl[4].unmerge_ind(1)
+        elif len(Nl[4].legs[1]) == 3:
+            Nl[4].unmerge_ind(1)
+            Nl[4].merge_inds([2,3]) # Merge two right inds
+        else:
+            raise NotImplementedError()
+    # Contract results
+    Nl[4] = einsum('qxyr,FG->qxFyrG',Nl[4],I1)
+    Nl[4].merge_inds([0,1,2])
+    Nl[4].merge_inds([2,3])
+    # last bmpo site --------------------------------
+    Nl[5] = einsum('rzb,zGM->rGMb',Nl[5],top[2])
+    Nl[5].merge_inds([0,1])
+    # Truncate bmpo --------------------------------
+    Nl = MPS(Nl)
+    if truncate:
+        mpiprint(5,'Truncating Boundary MPS')
+        if DEBUG:
+            mpiprint(6,'Computing initial bmpo norm')
+            norm0 = Nl.norm()
+        Nl = Nl.apply_svd(chi)
+        if DEBUG:
+            mpiprint(6,'Computing resulting bmpo norm')
+            norm1 = Nl.norm()
+            mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+    # Return result
+    return Nl
+
+def make_right_env(bra,ket,left,right,top,bot,truncate=False,chi=10):
+    """
+    """
+    # Determine if it is a thermal state
+    thermal = len(bra[0][0].legs[2]) == 2
+    # Contract first layer --------------------------------------------------------------
+    Nr = [None,None,None,None,None,None]
+    # bottom bmpo site -------------------------------
+    Nr[0] = einsum('hca,qnh->aqnc',bot[5],bot[4])
+    Nr[0].merge_inds([2,3])
+    # next bmpo site --------------------------------
+    Nr[1] = einsum('cid,rnPio->ncrPod',right[0],bra[1][0])
+    Nr[1].merge_inds([0,1])
+    Nr[1].merge_inds([2,3,4])
+    # next bmpo site --------------------------------
+    # TODO - Make sure signs are correct 
+    # (will give error in symmetric case
+    Dr = bra[1][0].shape[bra[1][0].legs[4][0]]
+    Zr = bra[1][0].qn_sectors[bra[1][0].legs[4][0]]
+    I1 = eye(Dr,Zr,is_symmetric=bra[1][0].is_symmetric,backend=bra[1][0].backend)
+    if len(bra[1][0].legs[4]) > 1:
+        for legind in range(1,len(bra[1][0].legs[4])):
+            Dri = bra[1][0].shape[bra[1][0].legs[4][legind]]
+            Zri = bra[1][0].qn_sectors[bra[1][0].legs[4][legind]]
+            Ii = eye(Dri,Zri,is_symmetric=bra[1][0].is_symmetric,backend=bra[1][0].backend)
+            I1 = einsum('ij,IJ->iIjJ',I1,Ii)
+            I1.merge_inds([0,1])
+            I1.merge_inds([1,2])
+    Dp = bra[1][0].shape[bra[1][0].legs[2][0]]
+    Zp = bra[1][0].qn_sectors[bra[1][0].legs[2][0]]
+    I2 = eye(Dp,Zp,is_symmetric=bra[1][0].is_symmetric,backend=bra[1][0].backend)
+    if len(bra[1][0].legs[2]) > 1:
+        for legind in range(1,len(bra[1][0].legs[2])):
+            Dpi = bra[1][0].shape[bra[1][0].legs[2][legind]]
+            Zpi = bra[1][0].qn_sectors[bra[1][0].legs[2][legind]]
+            Ii = eye(Dpi,Zpi,is_symmetric=bra[1][0].is_symmetric,backend=bra[1][0].backend)
+            I2 = einsum('ij,IJ->iIjJ',I2,Ii)
+            I2.merge_inds([0,1])
+            I2.merge_inds([1,2])
+    Nr[2] = einsum('dje,Oo->djeOo',right[1],I1)
+    Nr[2] = einsum('djeOo,Pp->POdpjoe',Nr[2],I2)
+    Nr[2].merge_inds([0,1,2])
+    Nr[2].merge_inds([1,2])
+    Nr[2].merge_inds([2,3])
+    # next bmpo site --------------------------------
+    Nr[3] = einsum('ekf,soQkp->oesQpf',right[2],bra[1][1])
+    Nr[3].merge_inds([0,1])
+    Nr[3].merge_inds([2,3,4])
+    # next bmpo site --------------------------------
+    Dr = bra[1][1].shape[bra[1][1].legs[4][0]]
+    Zr = bra[1][1].qn_sectors[bra[1][1].legs[4][0]]
+    I1 = eye(Dr,Zr,is_symmetric=bra[1][1].is_symmetric,backend=bra[1][1].backend)
+    if len(bra[1][1].legs[4]) > 1:
+        for legind in range(1,len(bra[1][1].legs[4])):
+            Dri = bra[1][1].shape[bra[1][1].legs[4][legind]]
+            Zri = bra[1][1].qn_sectors[bra[1][1].legs[4][legind]]
+            Ii = eye(Dri,Zri,is_symmetric=bra[1][1].is_symmetric,backend=bra[1][1].backend)
+            I1 = einsum('ij,IJ->iIjJ',I1,Ii)
+            I1.merge_inds([0,1])
+            I1.merge_inds([1,2])
+    Dp = bra[1][1].shape[bra[1][1].legs[2][0]]
+    Zp = bra[1][1].qn_sectors[bra[1][1].legs[2][0]]
+    I2 = eye(Dp,Zp,is_symmetric=bra[1][1].is_symmetric,backend=bra[1][1].backend)
+    if len(bra[1][1].legs[2]) > 1:
+        for legind in range(1,len(bra[1][1].legs[2])):
+            Dpi = bra[1][1].shape[bra[1][1].legs[2][legind]]
+            Zpi = bra[1][1].qn_sectors[bra[1][1].legs[2][legind]]
+            Ii = eye(Dpi,Zpi,is_symmetric=bra[1][1].is_symmetric,backend=bra[1][1].backend)
+            I2 = einsum('ij,IJ->iIjJ',I2,Ii)
+            I2.merge_inds([0,1])
+            I2.merge_inds([1,2])
+    Nr[4] = einsum('flg,Pp->flgPp',right[3],I1)
+    Nr[4] = einsum('flgPp,Qq->QPfqlpg',Nr[4],I2)
+    Nr[4].merge_inds([0,1,2])
+    Nr[4].merge_inds([1,2])
+    Nr[4].merge_inds([2,3])
+    # last bmpo site --------------------------------
+    Nr[5] = einsum('mgb,tpm->pgtb',top[5],top[4])
+    Nr[5].merge_inds([0,1])
+    # Truncate bmpo --------------------------------
+    Nr = MPS(Nr)
+    if truncate:
+        mpiprint(5,'Truncating Boundary MPS')
+        if DEBUG:
+            mpiprint(6,'Computing initial bmpo norm')
+            norm0 = Nr.norm()
+        Nr = Nr.apply_svd(chi)
+        if DEBUG:
+            mpiprint(6,'Computing resulting bmpo norm')
+            norm1 = Nr.norm()
+            mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+    # Contract second layer --------------------------------------------------------------
+    Nr = Nr.tensors
+    # bottom bmpo site -------------------------------
+    Nr[0] = einsum('aqn,xuq->axun',Nr[0],bot[3])
+    Nr[0].merge_inds([2,3])
+    # next bmpo site --------------------------------
+    Du = ket[1][0].shape[ket[1][0].legs[1][0]]
+    Zu = ket[1][0].qn_sectors[ket[1][0].legs[1][0]]
+    I1 = eye(Du,Zu,is_symmetric=ket[1][0].is_symmetric,backend=ket[1][0].backend)
+    if len(ket[1][0].legs[1]) > 1:
+        for legind in range(1,len(ket[1][0].legs[1])):
+            Dui = ket[1][0].shape[ket[1][0].legs[1][legind]]
+            Zui = ket[1][0].qn_sectors[ket[1][0].legs[1][legind]]
+            Ii = eye(Dui,Zui,is_symmetric=ket[1][0].is_symmetric,backend=ket[1][0].backend)
+            I1 = einsum('ij,IJ->iIjJ',I1,Ii)
+            I1.merge_inds([0,1])
+            I1.merge_inds([1,2])
+    Nr[1] = einsum('nro,Uu->Unruo',Nr[1],I1)
+    Nr[1].merge_inds([0,1])
+    Nr[1].merge_inds([2,3])
+    # next bmpo site --------------------------------
+    Nr[2].unmerge_ind(1)
+    if thermal:
+        Nr[2].merge_inds([1,2])
+    Nr[2] = einsum('opjO,yupjv->uoyvO',Nr[2],ket[1][0])
+    Nr[2].merge_inds([0,1])
+    Nr[2].merge_inds([2,3])
+    # next bmpo site --------------------------------
+    Du = ket[1][1].shape[ket[1][1].legs[1][0]]
+    Zu = ket[1][1].qn_sectors[ket[1][1].legs[1][0]]
+    I1 = eye(Du,Zu,is_symmetric=ket[1][1].is_symmetric,backend=ket[1][1].backend)
+    if len(ket[1][1].legs[1]) > 1:
+        for legind in range(1,len(ket[1][1].legs[1])):
+            Dui = ket[1][1].shape[ket[1][1].legs[1][legind]]
+            Zui = ket[1][1].qn_sectors[ket[1][1].legs[1][legind]]
+            Ii = eye(Dui,Zui,is_symmetric=ket[1][1].is_symmetric,backend=ket[1][1].backend)
+            I1 = einsum('ij,IJ->iIjJ',I1,Ii)
+            I1.merge_inds([0,1])
+            I1.merge_inds([1,2])
+    Nr[3] = einsum('osp,Vv->Vosvp',Nr[3],I1)
+    Nr[3].merge_inds([0,1])
+    Nr[3].merge_inds([2,3])
+    # next bmpo site --------------------------------
+    Nr[4].unmerge_ind(1)
+    if thermal:
+        Nr[4].merge_inds([1,2])
+    Nr[4] = einsum('pqlP,zvqlw->vpzwP',Nr[4],ket[1][1])
+    Nr[4].merge_inds([0,1])
+    Nr[4].merge_inds([2,3])
+    # last bmpo site --------------------------------
+    Nr[5] = einsum('ptb,awt->wpab',Nr[5],top[3])
+    Nr[5].merge_inds([0,1])
+    # Truncate bmpo --------------------------------
+    Nr = MPS(Nr)
+    if truncate:
+        mpiprint(5,'Truncating Boundary MPS')
+        if DEBUG:
+            mpiprint(6,'Computing initial bmpo norm')
+            norm0 = Nr.norm()
+        Nr = Nr.apply_svd(chi)
+        if DEBUG:
+            mpiprint(6,'Computing resulting bmpo norm')
+            norm1 = Nr.norm()
+            mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+    # Return result
+    return Nr
+
+
 def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,hermitian=True,positive=True,chi=10):
     """
 
@@ -317,67 +648,134 @@ def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,hermitian=True,positive=True,ch
         top = fill_empty_top(peps,left,right)
         #top = [ones((1,1,1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype) for i in range(6)]
     # Contract environment around p and q tensors
-    # Contract right half
-    Nr = einsum('hca,cid->ahid',bot[5],right[0]).remove_empty_ind(0)
-    Nr = einsum('hid,dje->hije',Nr,right[1])
-    Nr = einsum('hije,ekf->hijkf',Nr,right[2])
-    Nr = einsum('hijkf,flg->hijklg',Nr,right[3])
-    Nr = einsum('hijklg,mgb->bhijklm',Nr,top[5]).remove_empty_ind(0)
-    Nr = einsum('hijklm,qnh->qnijklm',Nr,bot[4])
-    Nr = einsum('qnijklm,rnPio->qrPojklm',Nr,Hbra_red[1][0])
-    Nr = einsum('qrPojklm,soQkp->qrPjsQplm',Nr,Hbra_red[1][1])
-    Nr = einsum('qrPjsQplm,tpm->qrPjsQlt',Nr,top[4])
-    Nr = einsum('qrPjsQlt,xuq->xurPjsQlt',Nr,bot[3])
-    Nr = einsum('xurPjsQlt,yuPjv->xryvsQlt',Nr,Hbra_red[1][0])
-    Nr = einsum('xryvsQlt,zvQlw->xryszwt',Nr,Hbra_red[1][1])
-    Nr = einsum('xryszwt,awt->xrysza',Nr,top[3])
-    # Contract left half
-    Nl = einsum('upl,pfq->ulfq',bot[0],left[0]).remove_empty_ind(0)
-    Nl = einsum('lfq,qmr->lfmr',Nl,left[1])
-    Nl = einsum('lfmr,rgs->lfmgs',Nl,left[2])
-    Nl = einsum('lfmgs,snt->lfmgnt',Nl,left[3])
-    Nl = einsum('lfmgnt,vto->vlfmgno',Nl,top[0]).remove_empty_ind(0)
-    Nl = einsum('lfmgno,lie->eifmgno',Nl,bot[1])
-    Nl = einsum('eifmgno,miPyj->efPyjgno',Nl,Hbra_red[0][0])
-    Nl = einsum('efPyjgno,njQzk->efPygQzko',Nl,Hbra_red[0][1])
-    Nl = einsum('efPygQzko,okh->efPygQzh',Nl,top[1])
-    Nl = einsum('efPygQzh,ebx->xbfPygQzh',Nl,bot[2])
-    Nl = einsum('xbfPygQzh,fbPrc->xrcygQzh',Nl,Hbra_red[0][0])
-    Nl = einsum('xrcygQzh,gcQsd->xrysdzh',Nl,Hbra_red[0][1])
-    Nl = einsum('xrysdzh,hda->xrysza',Nl,top[2])
-    N = einsum('xrysza,xRYsza->rRyY',Nl,Nr)
+    if False:
+        # Slower contraction method
+        # Contract right half
+        Nr = einsum('hca,cid->ahid',bot[5],right[0]).remove_empty_ind(0)
+        Nr = einsum('hid,dje->hije',Nr,right[1])
+        Nr = einsum('hije,ekf->hijkf',Nr,right[2])
+        Nr = einsum('hijkf,flg->hijklg',Nr,right[3])
+        Nr = einsum('hijklg,mgb->bhijklm',Nr,top[5]).remove_empty_ind(0)
+        Nr = einsum('hijklm,qnh->qnijklm',Nr,bot[4])
+        Nr = einsum('qnijklm,rnPio->qrPojklm',Nr,Hbra_red[1][0])
+        Nr = einsum('qrPojklm,soQkp->qrPjsQplm',Nr,Hbra_red[1][1])
+        Nr = einsum('qrPjsQplm,tpm->qrPjsQlt',Nr,top[4])
+        Nr = einsum('qrPjsQlt,xuq->xurPjsQlt',Nr,bot[3])
+        Nr = einsum('xurPjsQlt,yuPjv->xryvsQlt',Nr,Hbra_red[1][0])
+        Nr = einsum('xryvsQlt,zvQlw->xryszwt',Nr,Hbra_red[1][1])
+        Nr = einsum('xryszwt,awt->xrysza',Nr,top[3])
+        # Contract left half
+        Nl = einsum('upl,pfq->ulfq',bot[0],left[0]).remove_empty_ind(0)
+        Nl = einsum('lfq,qmr->lfmr',Nl,left[1])
+        Nl = einsum('lfmr,rgs->lfmgs',Nl,left[2])
+        Nl = einsum('lfmgs,snt->lfmgnt',Nl,left[3])
+        Nl = einsum('lfmgnt,vto->vlfmgno',Nl,top[0]).remove_empty_ind(0)
+        Nl = einsum('lfmgno,lie->eifmgno',Nl,bot[1])
+        Nl = einsum('eifmgno,miPyj->efPyjgno',Nl,Hbra_red[0][0])
+        Nl = einsum('efPyjgno,njQzk->efPygQzko',Nl,Hbra_red[0][1])
+        Nl = einsum('efPygQzko,okh->efPygQzh',Nl,top[1])
+        Nl = einsum('efPygQzh,ebx->xbfPygQzh',Nl,bot[2])
+        Nl = einsum('xbfPygQzh,fbPrc->xrcygQzh',Nl,Hbra_red[0][0])
+        Nl = einsum('xrcygQzh,gcQsd->xrysdzh',Nl,Hbra_red[0][1])
+        Nl = einsum('xrysdzh,hda->xrysza',Nl,top[2])
+        # Combine left and right halves
+        N = einsum('xrysza,xRYsza->rRyY',Nl,Nr)
+    else:
+        # Faster Contraction Method
+        # Contract right half
+        Nr = make_right_env(Hbra_red,
+                            Hbra_red,
+                            left,
+                            right,
+                            top,
+                            bot,
+                            truncate=False,
+                            chi=chi)
+        # Contract left half
+        Nl = make_left_env(Hbra_red,
+                           Hbra_red,
+                           left,
+                           right,
+                           top,
+                           bot,
+                           truncate=False,
+                           chi=chi)
+        # Combine left and right halves
+        N = einsum('apb,ApB->aAbB',Nl[5],Nr[5]).remove_empty_ind(3).remove_empty_ind(2)
+        N = einsum('apb,bB->apB',Nl[4],N)
+        N = einsum('ApB,apB->aA',Nr[4],N)
+        N = einsum('apb,bB->apB',Nl[3],N)
+        N = einsum('ApB,apB->aA',Nr[3],N)
+        N = einsum('axb,bB->axB',Nl[2],N)
+        N = einsum('AXB,axB->aAxX',Nr[2],N)
+        N = einsum('ayb,bBxX->ayBxX',Nl[1],N)
+        N = einsum('AYB,ayBxX->aAxXyY',Nr[1],N)
+        N = einsum('apb,bBxXyY->apBxXyY',Nl[0],N)
+        N = einsum('ApB,apBxXyY->aAyYxX',Nr[0],N).remove_empty_ind(0).remove_empty_ind(0)
     # Make hermitian and positive (if desired)
     #N = make_N_positive(N,hermitian=hermitian,positive=positive)
     # Contract environment around p and q tensors
-    # Contract right half
-    Kr = einsum('hca,cid->ahid',bot[5],right[0]).remove_empty_ind(0)
-    Kr = einsum('hid,dje->hije',Kr,right[1])
-    Kr = einsum('hije,ekf->hijkf',Kr,right[2])
-    Kr = einsum('hijkf,flg->hijklg',Kr,right[3])
-    Kr = einsum('hijklg,mgb->bhijklm',Kr,top[5]).remove_empty_ind(0)
-    Kr = einsum('hijklm,qnh->qnijklm',Kr,bot[4])
-    Kr = einsum('qnijklm,rnPio->qrPojklm',Kr,Hbra_red[1][0])
-    Kr = einsum('qrPojklm,soQkp->qrPjsQplm',Kr,Hbra_red[1][1])
-    Kr = einsum('qrPjsQplm,tpm->qrPjsQlt',Kr,top[4])
-    Kr = einsum('qrPjsQlt,xuq->xurPjsQlt',Kr,bot[3])
-    Kr = einsum('xurPjsQlt,yuPjv->xryvsQlt',Kr,Hbra[1][0])
-    Kr = einsum('xryvsQlt,zvQlw->xryszwt',Kr,Hbra[1][1])
-    Kr = einsum('xryszwt,awt->xrysza',Kr,top[3])
-    # Contract left half
-    Kl = einsum('upl,pfq->ulfq',bot[0],left[0]).remove_empty_ind(0)
-    Kl = einsum('lfq,qmr->lfmr',Kl,left[1])
-    Kl = einsum('lfmr,rgs->lfmgs',Kl,left[2])
-    Kl = einsum('lfmgs,snt->lfmgnt',Kl,left[3])
-    Kl = einsum('lfmgnt,vto->vlfmgno',Kl,top[0]).remove_empty_ind(0)
-    Kl = einsum('lfmgno,lie->eifmgno',Kl,bot[1])
-    Kl = einsum('eifmgno,miPyj->efPyjgno',Kl,Hbra[0][0])
-    Kl = einsum('efPyjgno,njQzk->efPygQzko',Kl,Hbra[0][1])
-    Kl = einsum('efPygQzko,okh->efPygQzh',Kl,top[1])
-    Kl = einsum('efPygQzh,ebx->xbfPygQzh',Kl,bot[2])
-    Kl = einsum('xbfPygQzh,fbPrc->xrcygQzh',Kl,Hbra_red[0][0])
-    Kl = einsum('xrcygQzh,gcQsd->xrysdzh',Kl,Hbra_red[0][1])
-    Kl = einsum('xrysdzh,hda->xrysza',Kl,top[2])
-    K = einsum('xrysza,xRysza->rR',Kl,Kr)
+    if False:
+        # Contract right half
+        Kr = einsum('hca,cid->ahid',bot[5],right[0]).remove_empty_ind(0)
+        Kr = einsum('hid,dje->hije',Kr,right[1])
+        Kr = einsum('hije,ekf->hijkf',Kr,right[2])
+        Kr = einsum('hijkf,flg->hijklg',Kr,right[3])
+        Kr = einsum('hijklg,mgb->bhijklm',Kr,top[5]).remove_empty_ind(0)
+        Kr = einsum('hijklm,qnh->qnijklm',Kr,bot[4])
+        Kr = einsum('qnijklm,rnPio->qrPojklm',Kr,Hbra_red[1][0])
+        Kr = einsum('qrPojklm,soQkp->qrPjsQplm',Kr,Hbra_red[1][1])
+        Kr = einsum('qrPjsQplm,tpm->qrPjsQlt',Kr,top[4])
+        Kr = einsum('qrPjsQlt,xuq->xurPjsQlt',Kr,bot[3])
+        Kr = einsum('xurPjsQlt,yuPjv->xryvsQlt',Kr,Hbra[1][0])
+        Kr = einsum('xryvsQlt,zvQlw->xryszwt',Kr,Hbra[1][1])
+        Kr = einsum('xryszwt,awt->xrysza',Kr,top[3])
+        # Contract left half
+        Kl = einsum('upl,pfq->ulfq',bot[0],left[0]).remove_empty_ind(0)
+        Kl = einsum('lfq,qmr->lfmr',Kl,left[1])
+        Kl = einsum('lfmr,rgs->lfmgs',Kl,left[2])
+        Kl = einsum('lfmgs,snt->lfmgnt',Kl,left[3])
+        Kl = einsum('lfmgnt,vto->vlfmgno',Kl,top[0]).remove_empty_ind(0)
+        Kl = einsum('lfmgno,lie->eifmgno',Kl,bot[1])
+        Kl = einsum('eifmgno,miPyj->efPyjgno',Kl,Hbra[0][0])
+        Kl = einsum('efPyjgno,njQzk->efPygQzko',Kl,Hbra[0][1])
+        Kl = einsum('efPygQzko,okh->efPygQzh',Kl,top[1])
+        Kl = einsum('efPygQzh,ebx->xbfPygQzh',Kl,bot[2])
+        Kl = einsum('xbfPygQzh,fbPrc->xrcygQzh',Kl,Hbra_red[0][0])
+        Kl = einsum('xrcygQzh,gcQsd->xrysdzh',Kl,Hbra_red[0][1])
+        Kl = einsum('xrysdzh,hda->xrysza',Kl,top[2])
+        K = einsum('xrysza,xRysza->rR',Kl,Kr)
+    else:
+        # Contract right half
+        Kr = make_right_env(Hbra_red,
+                            Hbra,
+                            left,
+                            right,
+                            top,
+                            bot,
+                            truncate=False,
+                            chi=chi)
+        # Contract left half
+        Kl = make_left_env(Hbra_red,
+                           Hbra,
+                           left,
+                           right,
+                           top,
+                           bot,
+                           truncate=False,
+                           chi=chi)
+        # Combine left and right halves
+        K = einsum('apb,ApB->aAbB',Kl[5],Kr[5]).remove_empty_ind(3).remove_empty_ind(2)
+        K = einsum('apb,bB->apB',Kl[4],K)
+        K = einsum('ApB,apB->aA',Kr[4],K)
+        K = einsum('apb,bB->apB',Kl[3],K)
+        K = einsum('ApB,apB->aA',Kr[3],K)
+        K = einsum('apb,bB->apB',Kl[2],K)
+        K = einsum('ApB,apB->aA',Kr[2],K)
+        K = einsum('ayb,bB->ayB',Kl[1],K)
+        K = einsum('AYB,ayB->aAyY',Kr[1],K)
+        K = einsum('apb,bByY->apByY',Kl[0],K)
+        K = einsum('ApB,apByY->aAyY',Kr[0],K).remove_empty_ind(0).remove_empty_ind(0)
 
     # Return result
     return N,K
