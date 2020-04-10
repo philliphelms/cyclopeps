@@ -246,6 +246,18 @@ def su_init_als_guess_lb(bra,eH,mbd,add_noise=False):
     q = einsum('ldpru,LYdpru->LYl',Hbra_red[1][0],_H10)
     q.merge_inds([0,1])
     tmp = einsum('ldpru,lL->Ldpru',Hbra[1][0],q)
+
+    # Split singular values between the u/v and p/q tens --
+    # Split u and v equally
+    uv = einsum('ab,cb->ac',u,v)
+    U,S,V = uv.svd(1,truncate_mbd=mbd,return_ent=False,return_wgt=False)
+    u = einsum('ab,bc->ac',U,S.sqrt())
+    v = einsum('ab,bc->ca',S.sqrt(),V)
+    # Split p and q equally
+    pq = einsum('ab,cb->ac',p,q)
+    U,S,V = pq.svd(1,truncate_mbd=mbd,return_ent=False,return_wgt=False)
+    p = einsum('ab,bc->ac',U,S.sqrt())
+    q = einsum('ab,bc->ca',S.sqrt(),V)
     
     # Return Result!
     return u,v,p,q
