@@ -633,7 +633,7 @@ def optimize_q_lb(N,K,p,q):
     # Return result
     return q,cost
 
-def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=True,rand_init=False):
+def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=True,rand_init=False,stablesplit=True):
     """
     Do the alternating least squares procedure for hamiltonian acting on 
     left and bottom sites
@@ -690,6 +690,12 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
                     cost_prev = cost
                     cost_prev_in = cost
                 v,cost = optimize_v_lb(N,K,u,v)
+                # Split u and v to share singular values equally
+                if stablesplit:
+                    uv = einsum('ab,cb->ac',u,v)
+                    U,S,V = uv.svd(1,truncate_mbd=mbd,return_ent=False,return_wgt=False)
+                    u = einsum('ab,bc->ac',U,S.sqrt())
+                    v = einsum('ab,bc->ca',S.sqrt(),V)
                 # Check for convergence
                 if (abs(cost) < tol) or (abs(cost-cost_prev_in) < tol):
                     cost_prev_in = cost
@@ -707,6 +713,12 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
                 # Do optimization for p and q tensors
                 p,cost = optimize_p_lb(N,K,p,q)
                 q,cost = optimize_q_lb(N,K,p,q)
+                # Split p and q to share singular values equally
+                if stablesplit:
+                    pq = einsum('ab,cb->ac',p,q)
+                    U,S,V = pq.svd(1,truncate_mbd=mbd,return_ent=False,return_wgt=False)
+                    p = einsum('ab,bc->ac',U,S.sqrt())
+                    q = einsum('ab,bc->ca',S.sqrt(),V)
                 # Check for convergence
                 if (abs(cost) < tol) or (abs(cost-cost_prev_in) < tol):
                     cost_prev_in = cost
