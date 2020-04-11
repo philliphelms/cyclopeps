@@ -109,7 +109,33 @@ def su_init_als_guess_lb(bra,eH,mbd,add_noise=False):
     """
     Determine an initial guess for the ALS procedure
     using a simple splitting of tensors with svd
+
+    Args:
+        bra : list of two lists of length 2
+            The peps tensors in the unit cell with
+            peps[0][0] -> bottom left tensor
+            peps[0][1] -> top left tensor
+            peps[1][0] -> bottom right tensor
+            peps[1][1] -> top right tensor
+        eH : list of three tensors
+            The exponentiated MPO for the three sites 
+        mbd : int
+            The maximum bond dimension for the PEPS
+
+    Kwargs:
+        add_noise : bool
+            Whether to add noise into the initial guess
+            when created this way. Default is False
+
+    Returns:
+        bra : list of two lists of length 2
+            The time evolved tensors in the unit cell
+            with time evolution done via application 
+            of the exponentiated MPO followed by SVD 
+            with truncation of small singular values
+        
     """
+    mpiprint(2,"\t\tGenerating initial ALS Guess")
     lib = bra[0][0].backend
     # Check if dealing with a thermal state
     thermal = len(bra[0][0].legs[2]) == 2
@@ -264,7 +290,45 @@ def su_init_als_guess_lb(bra,eH,mbd,add_noise=False):
 
 def make_left_env(bra,ket,left,right,top,bot,truncate=False,chi=10):
     """
+    Create a boundary mps for the left environment around the 
+    p and q tensors
+
+    Args:
+        bra : list of two lists of length 2
+            The peps tensors in the bra's unit cell with
+            peps[0][0] -> bottom left tensor
+            peps[0][1] -> top left tensor
+            peps[1][0] -> bottom right tensor
+            peps[1][1] -> top right tensor
+        ket : list of two lists of length 2
+            The peps tensors in the ket's unit cell with
+            peps[0][0] -> bottom left tensor
+            peps[0][1] -> top left tensor
+            peps[1][0] -> bottom right tensor
+            peps[1][1] -> top right tensor
+        top : list of ndarrays
+            The top environment tensors
+        bot : list of ndarrays
+            The bottom environment tensors
+        left : list of ndarrays
+            The left environment tensors
+        right : list of ndarrays
+            The right environment tensors
+
+    Kwargs:
+        truncate : bool
+            Whether to truncate the environment tensors locally 
+            when doing the ALS procedure
+        chi : int
+            If trunc_env == True, then this is the value that the 
+            boundary MPS bond dimension will be reduced to
+
+    Returns:
+        Nl : MPS object
+            The MPS object representing the left boundary mpo
+            around the given unit cell
     """
+    mpiprint(2,"\t\t\tMaking Left Environment")
     # Determine if it is a thermal state
     thermal = len(bra[0][0].legs[2]) == 2
     # Contract first layer --------------------------------------------------------------
@@ -436,7 +500,45 @@ def make_left_env(bra,ket,left,right,top,bot,truncate=False,chi=10):
 
 def make_right_env(bra,ket,left,right,top,bot,truncate=False,chi=10):
     """
+    Create a boundary mps for the right environment around the 
+    p and q tensors
+
+    Args:
+        bra : list of two lists of length 2
+            The peps tensors in the bra's unit cell with
+            peps[0][0] -> bottom left tensor
+            peps[0][1] -> top left tensor
+            peps[1][0] -> bottom right tensor
+            peps[1][1] -> top right tensor
+        ket : list of two lists of length 2
+            The peps tensors in the ket's unit cell with
+            peps[0][0] -> bottom left tensor
+            peps[0][1] -> top left tensor
+            peps[1][0] -> bottom right tensor
+            peps[1][1] -> top right tensor
+        top : list of ndarrays
+            The top environment tensors
+        bot : list of ndarrays
+            The bottom environment tensors
+        left : list of ndarrays
+            The left environment tensors
+        right : list of ndarrays
+            The right environment tensors
+
+    Kwargs:
+        truncate : bool
+            Whether to truncate the environment tensors locally 
+            when doing the ALS procedure
+        chi : int
+            If trunc_env == True, then this is the value that the 
+            boundary MPS bond dimension will be reduced to
+
+    Returns:
+        Nr : MPS object
+            The MPS object representing the left boundary mpo
+            around the given unit cell
     """
+    mpiprint(2,"\t\t\tMaking Right Environment")
     # Determine if it is a thermal state
     thermal = len(bra[0][0].legs[2]) == 2
     # Contract first layer --------------------------------------------------------------
@@ -593,19 +695,56 @@ def make_right_env(bra,ket,left,right,top,bot,truncate=False,chi=10):
     return Nr
 
 
-def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,hermitian=True,positive=True,chi=10):
+def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,chi=10):
     """
+    Calculates the two environment tensors (here N and K) which 
+    are used in the alternating least squares procedure for determining
+    p and q
+
+    Args:
+        peps : list of two lists of length 2
+            The peps tensors in the unit cell with
+            peps[0][0] -> bottom left tensor
+            peps[0][1] -> top left tensor
+            peps[1][0] -> bottom right tensor
+            peps[1][1] -> top right tensor
+        eH : list of three tensors
+            The exponentiated MPO for the three sites 
+        top : list of ndarrays
+            The top environment tensors
+        bot : list of ndarrays
+            The bottom environment tensors
+        left : list of ndarrays
+            The left environment tensors
+        right : list of ndarrays
+            The right environment tensors
+        u : ndarray
+            The reducing tensor for the bottom leg of the top left tensor
+        v : ndarray
+            The reducing tensor for the top leg of the bottom left tensor
+
+    Kwargs:
+        chi : int
+            If trunc_env == True, then this is the value that the 
+            boundary MPS bond dimension will be reduced to
+        make_pos_herm : bool
+            If True (default) then the norm will be approximated by
+            as hermitian and positive
 
     returns:
         N: Tensor
+            The full environment tensor around u and v (or p and q)
             Currently stored with legs in order
             bra-left,bra-right,ket-left,ket-right
         K: Tensor
+            The environment tensor around only the ket's instance
+            of u and v (or p and q)
             Currently stored with legs in order
             bra-left,bra-right,ket-left,ket-right
             where the ket is the full evolved state
             and the bra is the truncated evolved state
     """
+    mpiprint(2,"\t\tEvolving State")
     # Check if dealing with a thermal state
     thermal = len(peps[0][0].legs[2]) == 2
     # Contract state with time evolution operator
@@ -643,11 +782,10 @@ def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,hermitian=True,positive=True,ch
     # Replace top and bottoms with ones if needed ----
     if bot is None:
         bot = fill_empty_bot(peps,left,right)
-        #bot = [ones((1,1,1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype) for i in range(6)]
     if top is None:
         top = fill_empty_top(peps,left,right)
-        #top = [ones((1,1,1),sym=None,backend=Hbra[0][0].backend,dtype=Hbra[0][0].dtype) for i in range(6)]
     # Contract environment around p and q tensors
+    mpiprint(2,"\t\tCalculating N")
     if False:
         # Slower contraction method
         # Contract right half
@@ -712,9 +850,8 @@ def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,hermitian=True,positive=True,ch
         N = einsum('AYB,ayBxX->aAxXyY',Nr[1],N)
         N = einsum('apb,bBxXyY->apBxXyY',Nl[0],N)
         N = einsum('ApB,apBxXyY->aAyYxX',Nr[0],N).remove_empty_ind(0).remove_empty_ind(0)
-    # Make hermitian and positive (if desired)
-    #N = make_N_positive(N,hermitian=hermitian,positive=positive)
     # Contract environment around p and q tensors
+    mpiprint(2,"\t\tCalculating K")
     if False:
         # Contract right half
         Kr = einsum('hca,cid->ahid',bot[5],right[0]).remove_empty_ind(0)
@@ -780,19 +917,57 @@ def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,hermitian=True,positive=True,ch
     # Return result
     return N,K
 
-def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,hermitian=True,positive=True,chi=10):
+def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,chi=10):
     """
+    Calculates the two environment tensors (here N and K) which 
+    are used in the alternating least squares procedure for determining
+    u and v
+
+    Args:
+        peps : list of two lists of length 2
+            The peps tensors in the unit cell with
+            peps[0][0] -> bottom left tensor
+            peps[0][1] -> top left tensor
+            peps[1][0] -> bottom right tensor
+            peps[1][1] -> top right tensor
+        eH : list of three tensors
+            The exponentiated MPO for the three sites 
+        top : list of ndarrays
+            The top environment tensors
+        bot : list of ndarrays
+            The bottom environment tensors
+        left : list of ndarrays
+            The left environment tensors
+        right : list of ndarrays
+            The right environment tensors
+        p : ndarray
+            The reducing tensor for the right leg of the bottom left tensor
+        q : ndarray 
+            The reducing tensor for the left leg of the bottom right tensor
+
+    Kwargs:
+        chi : int
+            If trunc_env == True, then this is the value that the 
+            boundary MPS bond dimension will be reduced to
+        make_pos_herm : bool
+            If True (default) then the norm will be approximated by
+            as hermitian and positive
 
     returns:
         N: Tensor
+            The full environment tensor around u and v (or p and q)
             Currently stored with legs in order
             bra-left,bra-right,ket-left,ket-right
         K: Tensor
+            The environment tensor around only the ket's instance
+            of u and v (or p and q)
             Currently stored with legs in order
             bra-left,bra-right,ket-left,ket-right
             where the ket is the full evolved state
             and the bra is the truncated evolved state
+
     """
+    mpiprint(2,"\t\tEvolving State")
     # Check if dealing with a thermal state
     thermal = len(peps[0][0].legs[2]) == 2
     # Contract state with time evolution operator
@@ -828,6 +1003,8 @@ def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,hermitian=True,positive=True,ch
     Hbra_red[0][1] = Hbra[0][1].copy()
     Hbra_red[1][1] = Hbra[1][1].copy()
     # Calculate M ------------------------------------
+    mpiprint(2,"\t\tCalculating N")
+    mpiprint(2,"\t\t\tBot Environment")
     Nbot = update_bot_env2(0,
                            Hbra_red,
                            Hbra_red,
@@ -838,6 +1015,7 @@ def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,hermitian=True,positive=True,ch
                            bot,
                            truncate=False,
                            chi=chi)
+    mpiprint(2,"\t\t\tTop Environment")
     Ntop = update_top_env2(1,
                            Hbra_red,
                            Hbra_red,
@@ -849,6 +1027,7 @@ def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,hermitian=True,positive=True,ch
                            truncate=False,
                            chi=chi)
     # Now contract the two bmps around u
+    mpiprint(2,"\t\t\tContracting MPS")
     N = einsum('apb,ApB->aAbB',Nbot[5],Ntop[5]).remove_empty_ind(3).remove_empty_ind(2)
     N = einsum('apb,bB->apB',Nbot[4],N)
     N = einsum('ApB,apB->aA',Ntop[4],N)
@@ -860,10 +1039,8 @@ def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,hermitian=True,positive=True,ch
     N = einsum('AYB,ayBxX->aAxXyY',Ntop[1],N)
     N = einsum('apb,bBxXyY->apBxXyY',Nbot[0],N)
     N = einsum('ApB,apBxXyY->aAxXyY',Ntop[0],N).remove_empty_ind(0).remove_empty_ind(0)
-    # Make hermitian and positive (if desired)
-    #print('Not making this positive...')
-    #N = make_N_positive(N,hermitian=hermitian,positive=positive)
     # Calculate K ------------------------------------
+    mpiprint(2,"\t\t\tBot Environment")
     Kbot = update_bot_env2(0,
                            Hbra_red,
                            Hbra,
@@ -874,6 +1051,7 @@ def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,hermitian=True,positive=True,ch
                            bot,
                            truncate=False,
                            chi=chi)
+    mpiprint(2,"\t\t\tTop Environment")
     Ktop = update_top_env2(1,
                            Hbra_red,
                            Hbra,
@@ -885,6 +1063,7 @@ def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,hermitian=True,positive=True,ch
                            truncate=False,
                            chi=chi)
     # Now contract the two bmps around u
+    mpiprint(2,"\t\t\tContracting MPS")
     K = einsum('apb,ApB->aAbB',Kbot[5],Ktop[5]).remove_empty_ind(3).remove_empty_ind(2)
     K = einsum('apb,bB->apB',Kbot[4],K)
     K = einsum('ApB,apB->aA',Ktop[4],K)
@@ -901,6 +1080,54 @@ def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,hermitian=True,positive=True,ch
     return N,K
 
 def calc_NK(peps,eH,top,bot,left,right,u,v,p,q,lb=True,pq=True,chi=10):
+    """
+    Calculates the two environment tensors (here N and K) which 
+    are used in the alternating least squares procedure
+
+    Args:
+        peps : list of two lists of length 2
+            The peps tensors in the unit cell with
+            peps[0][0] -> bottom left tensor
+            peps[0][1] -> top left tensor
+            peps[1][0] -> bottom right tensor
+            peps[1][1] -> top right tensor
+        eH : list of three tensors
+            The exponentiated MPO for the three sites 
+        top : list of ndarrays
+            The top environment tensors
+        bot : list of ndarrays
+            The bottom environment tensors
+        left : list of ndarrays
+            The left environment tensors
+        right : list of ndarrays
+            The right environment tensors
+        u : ndarray
+            The reducing tensor for the bottom leg of the top left tensor
+        v : ndarray
+            The reducing tensor for the top leg of the bottom left tensor
+        p : ndarray
+            The reducing tensor for the right leg of the bottom left tensor
+        q : ndarray 
+            The reducing tensor for the left leg of the bottom right tensor
+
+    Kwargs:
+        lb : bool
+            Whether the MPO is acting on the left bottom edges of the 
+            PEPS 2x2 unit
+        pq : bool
+            Whether the environments should be contracted around
+            p and q (True) or around u and v (False)
+        chi : int
+            If trunc_env == True, then this is the value that the 
+            boundary MPS bond dimension will be reduced to
+
+    Returns:
+        N : ndarray
+            The full environment tensor around u and v (or p and q)
+        K : ndarray
+            The environment tensor around only the ket's instance
+            of u and v (or p and q)
+    """
     if lb:
         if pq:
             return calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,chi=chi)
@@ -1050,6 +1277,42 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
       |    |--p----q---|    |
       +----+           +----+
 
+    Args:
+        peps : list of two lists of length 2
+            The peps tensors in the unit cell with
+            peps[0][0] -> bottom left tensor
+            peps[0][1] -> top left tensor
+            peps[1][0] -> bottom right tensor
+            peps[1][1] -> top right tensor
+        eH : list of three tensors
+            The exponentiated MPO for the three sites 
+        top : list of ndarrays
+            The top environment tensors
+        bot : list of ndarrays
+            The bottom environment tensors
+        left : list of ndarrays
+            The left environment tensors
+        right : list of ndarrays
+            The right environment tensors
+        mbd : int
+            The maximum bond dimension
+
+    Kwargs:
+        maxiter : int
+            The maximum number of ALS iterations to be performed
+        tol : float
+            The convergence tolerance for the ALS procedure
+        full_update : bool
+            Whether to actually do the full update (i.e. als) procedure
+            or just split the time evolved tensors via svd
+        rand_init : bool
+            Whether to use a random initial guess (default is false, 
+            meaning initial guess is determined via a simple update 
+            style svd procedure)
+
+    Returns:
+        peps : list of two lists of length 2
+            The resulting peps tensors in the unit cell
     """
     # Check if this is a thermal state -------------------------------------------------
     thermal = len(peps[0][0].legs[2]) == 2
@@ -1069,10 +1332,11 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
         u,v,p,q = su_init_als_guess_lb(peps,eH,mbd)
 
     # Determine initial cost function value -------------------------------------------
-    cost_prev = None#cost_func(peps,eH,top,bot,left,right,u,v,p,q,mbd)
+    cost_prev = None
     cost_prev_in = cost_prev
 
     # Begin ALS iterations ------------------------------------------------------------
+    mpiprint(2,'\t\tStarting ALS'+'-'*20)
     if full_update:
         for i in range(maxiter):
 
@@ -1083,11 +1347,13 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
             for j in range(maxiter):
                 # Do optimization for u and v tensors
                 u,cost = optimize_u_lb(N,K,u,v)
+                mpiprint(2,"\t\tAfter u {}".format(cost))
                 # Save iniital cost (in case this is the first cost calculation
                 if cost_prev is None:
                     cost_prev = cost
                     cost_prev_in = cost
                 v,cost = optimize_v_lb(N,K,u,v)
+                mpiprint(2,"\t\tAfter v {}".format(cost))
                 # Split u and v to share singular values equally
                 if stablesplit:
                     uv = einsum('ab,cb->ac',u,v)
@@ -1095,7 +1361,7 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
                     u = einsum('ab,bc->ac',U,S.sqrt())
                     v = einsum('ab,bc->ca',S.sqrt(),V)
                 # Check for convergence
-                if (abs(cost) < tol) or (abs(cost-cost_prev_in) < tol):
+                if (abs(cost) < tol) or (abs((cost-cost_prev_in)/cost_prev) < tol):
                     cost_prev_in = cost
                     break
                 elif j == maxiter-1:
@@ -1110,7 +1376,9 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
             for j in range(maxiter):
                 # Do optimization for p and q tensors
                 p,cost = optimize_p_lb(N,K,p,q)
+                mpiprint(2,"\t\tAfter p {}".format(cost))
                 q,cost = optimize_q_lb(N,K,p,q)
+                mpiprint(2,"\t\tAfter q {}".format(cost))
                 # Split p and q to share singular values equally
                 if stablesplit:
                     pq = einsum('ab,cb->ac',p,q)
@@ -1118,7 +1386,7 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
                     p = einsum('ab,bc->ac',U,S.sqrt())
                     q = einsum('ab,bc->ca',S.sqrt(),V)
                 # Check for convergence
-                if (abs(cost) < tol) or (abs(cost-cost_prev_in) < tol):
+                if (abs(cost) < tol) or (abs((cost-cost_prev_in)/cost_prev) < tol):
                     cost_prev_in = cost
                     break
                 elif j == maxiter-1:
@@ -1127,13 +1395,12 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
                     cost_prev_in = cost
 
             # Check for convergence between u/v and p/q results -----------------------
-            if (abs(cost) < tol) or (abs(cost-cost_prev) < tol):
+            if (abs(cost) < tol) or (abs((cost-cost_prev)/cost_prev) < tol):
                 break
             elif i == maxiter-1:
                 cost_prev = cost
             else:
                 cost_prev = cost
-    #print('\tEnding cost {} ({})'.format(cost,abs(cost-cost_prev)))
     
     # Absorb all bond reducers into the peps tensors ----------------------------------
     Hbra = [[None,None],[None,None]]
@@ -1219,6 +1486,34 @@ def fill_empty_bot(peps,left,right):
 def mirror_rt2bl(peps,top,bot,left,right):
     """
     Flip the right top tensors to become the bottom left tensors
+
+    Args:
+        peps : list of two lists of length 2
+            The peps tensors in the unit cell with
+            peps[0][0] -> bottom left tensor
+            peps[0][1] -> top left tensor
+            peps[1][0] -> bottom right tensor
+            peps[1][1] -> top right tensor
+        top : list of ndarrays
+            The top environment tensors
+        bot : list of ndarrays
+            The bottom environment tensors
+        left : list of ndarrays
+            The left environment tensors
+        right : list of ndarrays
+            The right environment tensors
+
+    Returns:
+        peps : list of two lists of length 2
+            The resulting flipped peps tensors in the unit cell
+        top : list of ndarrays
+            The resulting top environment for the flipped tensors
+        bot : list of ndarrays
+            The resulting bottom environment for the flipped tensors
+        left : list of ndarrays
+            The resulting left environment for the flipped tensors
+        right : list of ndarrays
+            The resulting right environment for the flipped tensors
     """
     # Replace top and bottoms with ones if needed ----
     if bot is None:
@@ -1276,6 +1571,18 @@ def mirror_bl2rt(peps):
     Flip the bottom left tensors to become the right top tensors
     NOTE - Only flips the peps, unlike rt2bl, which flips
     the peps and all environment tensors
+
+    Args:
+        peps : list of two lists of length 2
+            The peps tensors in the unit cell with
+            peps[0][0] -> bottom left tensor
+            peps[0][1] -> top left tensor
+            peps[1][0] -> bottom right tensor
+            peps[1][1] -> top right tensor
+
+    Returns:
+        peps : list of two lists of length 2
+            The resulting (copies of originals) peps tensors in the unit cell
     """
     old_peps = peps
     peps = [[None,None],[None,None]]
@@ -1289,6 +1596,39 @@ def do_als_rt(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
     """
     Do the alternating least squares procedure for hamiltonian acting on 
     left and bottom sites
+
+    Args:
+        peps : list of two lists of length 2
+            The peps tensors in the unit cell with
+            peps[0][0] -> bottom left tensor
+            peps[0][1] -> top left tensor
+            peps[1][0] -> bottom right tensor
+            peps[1][1] -> top right tensor
+        eH : list of three tensors
+            The exponentiated MPO for the three sites 
+        top : list of ndarrays
+            The top environment tensors
+        bot : list of ndarrays
+            The bottom environment tensors
+        left : list of ndarrays
+            The left environment tensors
+        right : list of ndarrays
+            The right environment tensors
+        mbd : int
+            The maximum bond dimension
+
+    Kwargs:
+        maxiter : int
+            The maximum number of ALS iterations to be performed
+        tol : float
+            The convergence tolerance for the ALS procedure
+        full_update : bool
+            Whether to actually do the full update (i.e. als) procedure
+            or just split the time evolved tensors via svd
+
+    Returns:
+        peps : list of two lists of length 2
+            The resulting peps tensors in the unit cell
     """
     # Flip the peps so we can use the lb als routines
     peps,top,bot,left,right = mirror_rt2bl(peps,top,bot,left,right)
@@ -1302,6 +1642,42 @@ def do_als_rt(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
 def do_als(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,lb=True,full_update=True):
     """
     Do the alternating least squares procedure
+
+    Args:
+        peps : list of two lists of length 2
+            The peps tensors in the unit cell with
+            peps[0][0] -> bottom left tensor
+            peps[0][1] -> top left tensor
+            peps[1][0] -> bottom right tensor
+            peps[1][1] -> top right tensor
+        eH : list of three tensors
+            The exponentiated MPO for the three sites 
+        top : list of ndarrays
+            The top environment tensors
+        bot : list of ndarrays
+            The bottom environment tensors
+        left : list of ndarrays
+            The left environment tensors
+        right : list of ndarrays
+            The right environment tensors
+        mbd : int
+            The maximum bond dimension
+
+    Kwargs:
+        maxiter : int
+            The maximum number of ALS iterations to be performed
+        tol : float
+            The convergence tolerance for the ALS procedure
+        lb : bool
+            Whether the MPO acts on the left and bottom edges (True)
+            or the right and top edges (False)
+        full_update : bool
+            Whether to actually do the full update (i.e. als) procedure
+            or just split the time evolved tensors via svd
+
+    Returns:
+        peps : list of two lists of length 2
+            The resulting peps tensors in the unit cell
     """
     if lb:
         return do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=maxiter,tol=tol,full_update=full_update)
@@ -1313,6 +1689,25 @@ def make_equal_distance_twotens(ten1,ten2,mbd,vertical=True):
     Multiply two nearest neighbor peps tensors
     together and resplit them so singular values are
     equally split between the two tensors
+
+    Args:
+        ten1 : ndarray
+            The left (or bottom) tensor
+        ten2 : ndarray
+            The right (or top) tensor
+        mbd : int
+            The maximum bond dimension
+
+    Kwargs:
+        vertical : bool
+            Whether this is a vertical tensor connection (top/bottom)
+            or a horizontal tensor connection (left/right)
+
+    Returns:
+        ten1 : ndarray
+            The resulting left (or bottom) tensor
+        ten2 : ndarray
+            The resulting right (or top) tensor
     """
     # Create copies of the tensors first
     ten1 = ten1.copy()
@@ -1350,8 +1745,30 @@ def make_equal_distance(peps,mbd,niter=1):
     """
     Multiply nearest neighbor peps tensors together and resplit them
     so that the singular values are equally split between the two tensors
+
+    Args:
+        peps : list of two lists of length 2
+            The peps tensors in the unit cell with
+            peps[0][0] -> bottom left tensor
+            peps[0][1] -> top left tensor
+            peps[1][0] -> bottom right tensor
+            peps[1][1] -> top right tensor
+        mbd : int
+            The maximum bond dimension
+
+    Kwargs:
+        niter : int
+            The number of times to go through the svd
+            procedure to split singular values (default is
+            1)
+
+    Returns:
+        peps : list of two lists of length 2
+            The resulting peps tensors in the unit cell with
+            singular values split equally among them.
     """
     # Possibly repeat a few times (if this improves things)
+    mpiprint(2,'\t\tMaking resulting tensors equal distance')
     for i in range(niter):
         # Make equal distance 00,01 --------------------------
         peps[0][0],peps[0][1] = make_equal_distance_twotens(peps[0][0],peps[0][1],mbd)
@@ -1366,6 +1783,45 @@ def make_equal_distance(peps,mbd,niter=1):
 
 def tebd_step_single_col(peps_col1,peps_col2,step_size,left_bmpo,right_bmpo,ham_col,mbd,als_iter=10,als_tol=1e-10,lb=True,full_update=True):
     """
+    Perform a single time evolution step for a single set of neighboring PEPS columns
+
+    Args:
+        peps_col1 : List of tensors
+            A list of peps tensors corresponding to the first (left) peps column
+        peps_col2 : List of tensors
+            A list of peps tensors corresponding to the second (right) peps column
+        step_size : float
+            The trotter step size, may be a list of
+            step sizes
+        left_bmpo : MPS Object
+            The boundary MPO for the left side of the peps
+        right_bmpo : MPS Object
+            The boundary MPO for the right side of the peps
+        ham_col : List
+            The suzuki-trotter decomposition of the
+            Hamiltonian terms for interactions between
+            the two columns
+        mbd : int
+            The maximum bond dimension of the PEPS
+
+    Kwargs:
+        als_iter : int
+            The maximum number of alternating least squares iterations
+        als_tol : float
+            The convergence tolerance for the alternating
+            least squares procedure
+        lb : bool
+            Whether this is for the Hamiltonian terms acting on the left
+            and right edges of the 2x2 PEPS unit (if True) or for the terms
+            acting on the right and top edges of the unit cell (if False)
+        full_update: bool
+            Whether to do full update (True) or simple update (False) procedure
+
+    Returns:
+        E : float
+            The summed energy evaluation for Hamiltonian terms on only these two columns
+        peps : list of two lists
+            A list of the two resulting peps column after the time evolution step
     """
     # Calculate top and bottom environments
     top_envs = calc_top_envs2([peps_col1,peps_col2],
@@ -1380,7 +1836,7 @@ def tebd_step_single_col(peps_col1,peps_col2,step_size,left_bmpo,right_bmpo,ham_
     # Loop through rows in the column
     E = peps_col1[0].backend.zeros(len(ham_col),dtype=peps_col1[0].dtype)
     for row in range(len(ham_col)):
-        #print('\tRow tebd col = {}'.format(row))
+        mpiprint(2,'\tRow tebd col = {}'.format(row))
         # Take exponential of the MPO
         if lb:
             eH = exp_mpo(ham_col[row][0],-step_size)
@@ -1428,6 +1884,7 @@ def tebd_step_single_col(peps_col1,peps_col2,step_size,left_bmpo,right_bmpo,ham_
         peps_col2[row+1] = res[1][1]
         
         # Evaluate energy and norm locally
+        mpiprint(2,'\t\tCalculating energy')
         E[row] = calc_local_nn_op(row,
                                   [peps_col1,peps_col2],
                                   ham_col,
@@ -1455,24 +1912,38 @@ def tebd_step_single_col(peps_col1,peps_col2,step_size,left_bmpo,right_bmpo,ham_
 
 def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=10,als_tol=1e-10,lb=True,full_update=True):
     """
+    Perform a single TEBD time step
+    
     Args:
-        peps:
-        ham:
-        step_size:
-        mbd:
+        peps : PEPS object
+            The PEPS object to be evolved.
+        ham : 3D array
+            The suzuki-trotter decomposition of the
+            Hamiltonian. An example of how this is constructed
+            for the ising transverse field model
+            is found in /mpo/j1j2.py
+        step_size : float
+            The trotter step size, may be a list of
+            step sizes
+        mbd : int
+            The maximum bond dimension of the PEPS
 
     Kwargs:
-        chi:
-        als_iter:
-        als_tol:
-        lb: bool
-            Time evolution on the left and bottom bonds of the 2x2 plaquette if true,
-            otherwise, time evolution on the top and right bonds. 
+        chi : int
+            The boundary mpo maximum bond dimension
+        als_iter : int
+            The maximum number of alternating least squares iterations
+        als_tol : float
+            The convergence tolerance for the alternating
+            least squares procedure
         full_update: bool
+            Whether to do full update (True) or simple update (False) procedure
 
     Returns:
-        E:
-        peps:
+        E : float
+            The energy of the final peps result
+        peps : PEPS object
+            The final PEPS as a PEPS object
     """
     # Figure out peps size
     (Nx,Ny) = peps.shape
@@ -1488,7 +1959,7 @@ def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=10,als_tol=1e-10,lb=True,
     # Loop through all columns
     E = peps.backend.zeros((len(ham)),dtype=peps[0][0].dtype)
     for col in range(Nx-1):
-        #print('column {}'.format(col))
+        mpiprint(2,'column {}'.format(col))
         # Take TEBD Step
         if col == 0:
             res = tebd_step_single_col(peps[col],
@@ -1542,6 +2013,43 @@ def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=10,als_tol=1e-10,lb=True,
 
 def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,als_iter=10,als_tol=1e-10,full_update=True):
     """
+    Run all of the tebd time steps
+    
+    Args:
+        peps : PEPS object
+            The PEPS object to be evolved.
+        ham : 3D array
+            The suzuki-trotter decomposition of the
+            Hamiltonian. An example of how this is constructed
+            for the ising transverse field model
+            is found in /mpo/j1j2.py
+        step_size : float
+            The trotter step size, may be a list of
+            step sizes
+        n_step : int
+            The number of steps to be taken for each
+            trotter step size. 
+        conv_tol : float
+            The convergence tolerance (for imaginary tebd ground state calcs)
+        mbd : int
+            The maximum bond dimension of the PEPS
+
+    Kwargs:
+        chi : int
+            The boundary mpo maximum bond dimension
+        als_iter : int
+            The maximum number of alternating least squares iterations
+        als_tol : float
+            The convergence tolerance for the alternating
+            least squares procedure
+        full_update: bool
+            Whether to do full update (True) or simple update (False) procedure
+
+    Returns:
+        E : float
+            The energy of the final peps result
+        peps : PEPS object
+            The final PEPS as a PEPS object
     """
     nSite = len(peps)*len(peps[0])
 
@@ -1596,7 +2104,7 @@ def run_tebd(Nx,Ny,d,ham,
              peps_fdir='./',
              full_update=True):
     """
-    Run the TEBD algorithm for a PEPS
+    Run the TEBD (Simple or Full) algorithm for a PEPS
 
     Args:
         Nx : int
@@ -1609,18 +2117,15 @@ def run_tebd(Nx,Ny,d,ham,
             The suzuki-trotter decomposition of the
             Hamiltonian. An example of how this is constructed
             for the ising transverse field model
-            is found in /mpo/itf.py
+            is found in /mpo/j1j2.py
 
     Kwargs:
         peps : PEPS object
             The initial guess for the PEPS. If this is not
-            provided, then a random peps will be initialized,
-            then a few iterations will be performed using
-            the simple update algorithm to arrive at a good
-            initial guess.
+            provided, then a random peps will be initialized.
             Note that the bond dimension D should be the same
             as the initial calculation bond dimension, since
-            no bond reduction or initial increase of bond dimension
+            no initial bond reduction or increase
             is currently implemented.
         backend : str
             The tensor backend to be used. 
@@ -1659,12 +2164,23 @@ def run_tebd(Nx,Ny,d,ham,
             len(D) == len(n_step) must both be True.
         conv_tol : float
             The convergence tolerance
+        als_iter : int
+            The maximum number of alternating least squares iterations
+        als_tol : float
+            The convergence tolerance for the alternating
+            least squares procedure
         peps_fname : str
             The name of the saved peps file
         peps_fdir : str
             The location where the peps will be saved
         full_update: bool
-            Whether to do full update or just simple update procedure
+            Whether to do full update (True) or simple update (False) procedure
+
+    Returns:
+        E : float
+            The energy of the resulting PEPS
+        peps : PEPS object
+            The time evolved PEPS object
     """
     t0 = time.time()
     mpiprint(0,'\n\nStarting TEBD Calculation')
