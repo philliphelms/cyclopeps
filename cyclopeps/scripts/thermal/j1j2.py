@@ -18,6 +18,8 @@ d = 2
 # TEBD Parameters
 step_size = [0.1,0.01][dtind]
 n_step     = int(10./step_size)
+truncate_loc = True
+local_chi = chi
 
 # Get mpo
 j2 = [0.1,0.5,1.0][j2ind]
@@ -31,10 +33,12 @@ Ef,_ = run_tebd(Nx,
                 thermal=True,
                 D=D,
                 chi=chi,
+                chiloc=local_chi,
                 backend=backend,
                 n_step=n_step,
-                als_iter=20,
-                als_tol=1e-8,
+                als_iter=10,
+                als_tol=1e-5,
+                truncate_loc=truncate_loc,
                 step_size=step_size)
 
 print('\n\nFinal  E = {}'.format(Ef))

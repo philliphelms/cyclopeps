@@ -2203,7 +2203,7 @@ def update_top_env2(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,trunca
             top_env = einsum('ukvnwtq,xtq->ukvnwx',tmp,right1)
     return top_env
 
-def calc_top_envs2(bra,left_bmpo,right_bmpo,ket=None,chi=10,contracted_env=False):
+def calc_top_envs2(bra,left_bmpo,right_bmpo,ket=None,chi=10,truncate=True,contracted_env=False):
     """
     """
     # Figure out height of peps column
@@ -2237,6 +2237,7 @@ def calc_top_envs2(bra,left_bmpo,right_bmpo,ket=None,chi=10,contracted_env=False
                                        right_bmpo[2*row+1],
                                        prev_env,
                                        chi=chi,
+                                       truncate=truncate,
                                        contracted_env=contracted_env)
     return top_env
 
@@ -2301,7 +2302,7 @@ def update_bot_env2(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,trunca
             bot_env = einsum('stlvrno,orx->stlvnx',tmp,right2)
     return bot_env
 
-def calc_bot_envs2(bra,left_bmpo,right_bmpo,ket=None,chi=10,contracted_env=False):
+def calc_bot_envs2(bra,left_bmpo,right_bmpo,ket=None,chi=10,truncate=True,contracted_env=False):
     """
     """
     # Figure out height of peps column
@@ -2335,6 +2336,7 @@ def calc_bot_envs2(bra,left_bmpo,right_bmpo,ket=None,chi=10,contracted_env=False
                                        right_bmpo[2*row+1],
                                        prev_env,
                                        chi=chi,
+                                       truncate=truncate,
                                        contracted_env=contracted_env)
     return bot_env
 

@@ -6,9 +6,8 @@ from cyclopeps.tools.ops_tools import *
 from cyclopeps.tools.gen_ten import GEN_TEN,rand
 from cyclopeps.algs.simple_update import run_tebd as su
 from numpy import float_,isfinite
-np.set_printoptions(linewidth=1000,precision=3)
 
-def cost_func(bra,eH,top,bot,left,right,u,v,p,q,chi):
+def cost_func(bra,eH,top,bot,left,right,u,v,p,q,truncate=False,chi=100):
     """
     Compute <psi_t|psi_t>-2*<psi_t|psi_p>
     which should be zero for a perfect fit
@@ -58,7 +57,7 @@ def cost_func(bra,eH,top,bot,left,right,u,v,p,q,chi):
                            right[0],
                            right[1],
                            bot,
-                           truncate=False,
+                           truncate=truncate,
                            chi=chi)
     tttop = update_top_env2(1,
                            Hbra_red,
@@ -68,7 +67,7 @@ def cost_func(bra,eH,top,bot,left,right,u,v,p,q,chi):
                            right[2],
                            right[3],
                            top,
-                           truncate=False,
+                           truncate=truncate,
                            chi=chi)
     tt = ttbot.contract(tttop)
     # Contracte <psi_t|psi_p>
@@ -80,7 +79,7 @@ def cost_func(bra,eH,top,bot,left,right,u,v,p,q,chi):
                            right[0],
                            right[1],
                            bot,
-                           truncate=False,
+                           truncate=truncate,
                            chi=chi)
     tptop = update_top_env2(1,
                            Hbra_red,
@@ -90,7 +89,7 @@ def cost_func(bra,eH,top,bot,left,right,u,v,p,q,chi):
                            right[2],
                            right[3],
                            top,
-                           truncate=False,
+                           truncate=truncate,
                            chi=chi)
     tp = tpbot.contract(tptop)
 
@@ -288,7 +287,7 @@ def su_init_als_guess_lb(bra,eH,mbd,add_noise=False):
     # Return Result!
     return u,v,p,q
 
-def make_left_env(bra,ket,left,right,top,bot,truncate=False,chi=10):
+def make_left_env(bra,ket,left,right,top,bot,truncate=False,chi=100):
     """
     Create a boundary mps for the left environment around the 
     p and q tensors
@@ -498,7 +497,7 @@ def make_left_env(bra,ket,left,right,top,bot,truncate=False,chi=10):
     # Return result
     return Nl
 
-def make_right_env(bra,ket,left,right,top,bot,truncate=False,chi=10):
+def make_right_env(bra,ket,left,right,top,bot,truncate=False,chi=100):
     """
     Create a boundary mps for the right environment around the 
     p and q tensors
@@ -695,7 +694,7 @@ def make_right_env(bra,ket,left,right,top,bot,truncate=False,chi=10):
     return Nr
 
 
-def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,chi=10):
+def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,truncate=False,chi=100):
     """
     Calculates the two environment tensors (here N and K) which 
     are used in the alternating least squares procedure for determining
@@ -724,6 +723,9 @@ def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,chi=10):
             The reducing tensor for the top leg of the bottom left tensor
 
     Kwargs:
+        truncate : bool
+            Whether to truncate the environment tensors locally 
+            when doing the ALS procedure
         chi : int
             If trunc_env == True, then this is the value that the 
             boundary MPS bond dimension will be reduced to
@@ -827,7 +829,7 @@ def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,chi=10):
                             right,
                             top,
                             bot,
-                            truncate=False,
+                            truncate=truncate,
                             chi=chi)
         # Contract left half
         Nl = make_left_env(Hbra_red,
@@ -836,7 +838,7 @@ def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,chi=10):
                            right,
                            top,
                            bot,
-                           truncate=False,
+                           truncate=truncate,
                            chi=chi)
         # Combine left and right halves
         N = einsum('apb,ApB->aAbB',Nl[5],Nr[5]).remove_empty_ind(3).remove_empty_ind(2)
@@ -890,7 +892,7 @@ def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,chi=10):
                             right,
                             top,
                             bot,
-                            truncate=False,
+                            truncate=truncate,
                             chi=chi)
         # Contract left half
         Kl = make_left_env(Hbra_red,
@@ -899,7 +901,7 @@ def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,chi=10):
                            right,
                            top,
                            bot,
-                           truncate=False,
+                           truncate=truncate,
                            chi=chi)
         # Combine left and right halves
         K = einsum('apb,ApB->aAbB',Kl[5],Kr[5]).remove_empty_ind(3).remove_empty_ind(2)
@@ -917,7 +919,7 @@ def calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,chi=10):
     # Return result
     return N,K
 
-def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,chi=10):
+def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,truncate=False,chi=100):
     """
     Calculates the two environment tensors (here N and K) which 
     are used in the alternating least squares procedure for determining
@@ -946,6 +948,9 @@ def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,chi=10):
             The reducing tensor for the left leg of the bottom right tensor
 
     Kwargs:
+        truncate : bool
+            Whether to truncate the environment tensors locally 
+            when doing the ALS procedure
         chi : int
             If trunc_env == True, then this is the value that the 
             boundary MPS bond dimension will be reduced to
@@ -1013,7 +1018,7 @@ def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,chi=10):
                            right[0],
                            right[1],
                            bot,
-                           truncate=False,
+                           truncate=truncate,
                            chi=chi)
     mpiprint(2,"\t\t\tTop Environment")
     Ntop = update_top_env2(1,
@@ -1024,7 +1029,7 @@ def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,chi=10):
                            right[2],
                            right[3],
                            top,
-                           truncate=False,
+                           truncate=truncate,
                            chi=chi)
     # Now contract the two bmps around u
     mpiprint(2,"\t\t\tContracting MPS")
@@ -1049,7 +1054,7 @@ def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,chi=10):
                            right[0],
                            right[1],
                            bot,
-                           truncate=False,
+                           truncate=truncate,
                            chi=chi)
     mpiprint(2,"\t\t\tTop Environment")
     Ktop = update_top_env2(1,
@@ -1060,7 +1065,7 @@ def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,chi=10):
                            right[2],
                            right[3],
                            top,
-                           truncate=False,
+                           truncate=truncate,
                            chi=chi)
     # Now contract the two bmps around u
     mpiprint(2,"\t\t\tContracting MPS")
@@ -1079,7 +1084,7 @@ def calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,chi=10):
     # Return results
     return N,K
 
-def calc_NK(peps,eH,top,bot,left,right,u,v,p,q,lb=True,pq=True,chi=10):
+def calc_NK(peps,eH,top,bot,left,right,u,v,p,q,lb=True,pq=True,truncate=False,chi=100):
     """
     Calculates the two environment tensors (here N and K) which 
     are used in the alternating least squares procedure
@@ -1117,6 +1122,9 @@ def calc_NK(peps,eH,top,bot,left,right,u,v,p,q,lb=True,pq=True,chi=10):
         pq : bool
             Whether the environments should be contracted around
             p and q (True) or around u and v (False)
+        truncate : bool
+            Whether to truncate the environment tensors locally 
+            when doing the ALS procedure
         chi : int
             If trunc_env == True, then this is the value that the 
             boundary MPS bond dimension will be reduced to
@@ -1130,9 +1138,9 @@ def calc_NK(peps,eH,top,bot,left,right,u,v,p,q,lb=True,pq=True,chi=10):
     """
     if lb:
         if pq:
-            return calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,chi=chi)
+            return calc_NK_lb_pq(peps,eH,top,bot,left,right,u,v,truncate=truncate,chi=chi)
         else:
-            return calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,chi=chi)
+            return calc_NK_lb_uv(peps,eH,top,bot,left,right,p,q,truncate=truncate,chi=chi)
     else:
         raise NotImplementedError()
 
@@ -1258,7 +1266,14 @@ def optimize_q_lb(N,K,p,q):
     # Return result
     return q,cost
 
-def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=True,rand_init=False,stablesplit=True):
+def do_als_lb(peps,eH,top,bot,left,right,mbd,
+              maxiter=10,
+              tol=1e-10,
+              full_update=True,
+              rand_init=False,
+              stablesplit=True,
+              truncate_loc=False,
+              chi=100):
     """
     Do the alternating least squares procedure for hamiltonian acting on 
     left and bottom sites
@@ -1309,6 +1324,17 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
             Whether to use a random initial guess (default is false, 
             meaning initial guess is determined via a simple update 
             style svd procedure)
+        stablesplit : bool
+            Whether to split the tensors after als procedure
+            to equally split singular values. Default is True, 
+            which adds minimal time and improves stability
+        truncate_loc : bool
+            Whether to truncate the environment tensors locally 
+            when doing the ALS procedure
+        chi : int
+            The maximum bond dimension of any boundary mps
+            If trunc_env == True, then this is the value that the 
+            boundary MPS bond dimension will be reduced to
 
     Returns:
         peps : list of two lists of length 2
@@ -1342,7 +1368,11 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
 
             # Do ALS for the u and v tensors -------------------------------------------
             # Contract environments around u and v tensors
-            N,K = calc_NK(peps,eH,top,bot,left,right,u,v,p,q,lb=True,pq=False,chi=mbd)
+            N,K = calc_NK(peps,eH,top,bot,left,right,u,v,p,q,
+                          lb=True,
+                          pq=False,
+                          chi=chi,
+                          truncate=truncate_loc)
             # Do alternating least squares until convergence
             for j in range(maxiter):
                 # Do optimization for u and v tensors
@@ -1371,7 +1401,11 @@ def do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
 
             # Do ALS for the p and q tensors ------------------------------------------
             # Contract environments around p and q tensors
-            N,K = calc_NK(peps,eH,top,bot,left,right,u,v,p,q,lb=True,pq=True,chi=mbd)
+            N,K = calc_NK(peps,eH,top,bot,left,right,u,v,p,q,
+                          lb=True,
+                          pq=True,
+                          chi=chi,
+                          truncate=truncate_loc)
             # Do alternating least squares until convergence
             for j in range(maxiter):
                 # Do optimization for p and q tensors
@@ -1592,7 +1626,14 @@ def mirror_bl2rt(peps):
     peps[1][1] = old_peps[0][0].copy().transpose([4,3,2,1,0])
     return peps
 
-def do_als_rt(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=True):
+def do_als_rt(peps,eH,top,bot,left,right,mbd,
+              maxiter=10,
+              tol=1e-10,
+              full_update=True,
+              rand_init=False,
+              stablesplit=True,
+              truncate_loc=False,
+              chi=100):
     """
     Do the alternating least squares procedure for hamiltonian acting on 
     left and bottom sites
@@ -1625,6 +1666,21 @@ def do_als_rt(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
         full_update : bool
             Whether to actually do the full update (i.e. als) procedure
             or just split the time evolved tensors via svd
+        rand_init : bool
+            Whether to use a random initial guess (default is false, 
+            meaning initial guess is determined via a simple update 
+            style svd procedure)
+        stablesplit : bool
+            Whether to split the tensors after als procedure
+            to equally split singular values. Default is True, 
+            which adds minimal time and improves stability
+        truncate_loc : bool
+            Whether to truncate the environment tensors locally 
+            when doing the ALS procedure
+        chi : int
+            The maximum bond dimension of any boundary mps
+            If trunc_env == True, then this is the value that the 
+            boundary MPS bond dimension will be reduced to
 
     Returns:
         peps : list of two lists of length 2
@@ -1633,13 +1689,28 @@ def do_als_rt(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,full_update=Tr
     # Flip the peps so we can use the lb als routines
     peps,top,bot,left,right = mirror_rt2bl(peps,top,bot,left,right)
     # Evolve peps now using the lb full update routines
-    peps = do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=maxiter,tol=tol,full_update=full_update)
+    peps = do_als_lb(peps,eH,top,bot,left,right,mbd,
+                     maxiter=maxiter,
+                     tol=tol,
+                     full_update=full_update,
+                     rand_init=rand_init,
+                     stablesplit=stablesplit,
+                     truncate_loc=truncate_loc,
+                     chi=chi)
     # Flip the peps back
     peps = mirror_bl2rt(peps)
     # Return result
     return peps
 
-def do_als(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,lb=True,full_update=True):
+def do_als(peps,eH,top,bot,left,right,mbd,
+           maxiter=10,
+           tol=1e-10,
+           lb=True,
+           full_update=True,
+           rand_init=False,
+           stablesplit=True,
+           truncate_loc=False,
+           chi=100):
     """
     Do the alternating least squares procedure
 
@@ -1674,15 +1745,46 @@ def do_als(peps,eH,top,bot,left,right,mbd,maxiter=10,tol=1e-10,lb=True,full_upda
         full_update : bool
             Whether to actually do the full update (i.e. als) procedure
             or just split the time evolved tensors via svd
+        rand_init : bool
+            Whether to use a random initial guess (default is false, 
+            meaning initial guess is determined via a simple update 
+            style svd procedure)
+        stablesplit : bool
+            Whether to split the tensors after als procedure
+            to equally split singular values. Default is True, 
+            which adds minimal time and improves stability
+        truncate_loc : bool
+            Whether to truncate the environment tensors locally 
+            when doing the ALS procedure
+        chi : int
+            The maximum bond dimension of any boundary mps
+            If trunc_env == True, then this is the value that the 
+            boundary MPS bond dimension will be reduced to
 
     Returns:
         peps : list of two lists of length 2
             The resulting peps tensors in the unit cell
     """
     if lb:
-        return do_als_lb(peps,eH,top,bot,left,right,mbd,maxiter=maxiter,tol=tol,full_update=full_update)
+        res = do_als_lb(peps,eH,top,bot,left,right,mbd,
+                        maxiter=maxiter,
+                        tol=tol,
+                        full_update=full_update,
+                        rand_init=rand_init,
+                        stablesplit=stablesplit,
+                        truncate_loc=truncate_loc,
+                        chi=chi)
+        return res
     else:
-        return do_als_rt(peps,eH,top,bot,left,right,mbd,maxiter=maxiter,tol=tol,full_update=full_update)
+        res = do_als_rt(peps,eH,top,bot,left,right,mbd,
+                        maxiter=maxiter,
+                        tol=tol,
+                        full_update=full_update,
+                        rand_init=rand_init,
+                        stablesplit=stablesplit,
+                        truncate_loc=truncate_loc,
+                        chi=chi)
+        return res
 
 def make_equal_distance_twotens(ten1,ten2,mbd,vertical=True):
     """
@@ -1781,7 +1883,12 @@ def make_equal_distance(peps,mbd,niter=1):
     # Return resulting tensors
     return peps
 
-def tebd_step_single_col(peps_col1,peps_col2,step_size,left_bmpo,right_bmpo,ham_col,mbd,als_iter=10,als_tol=1e-10,lb=True,full_update=True):
+def tebd_step_single_col(peps_col1,peps_col2,step_size,
+                         left_bmpo,right_bmpo,ham_col,mbd,
+                         chi=100,als_iter=10,als_tol=1e-10,
+                         lb=True,full_update=True,
+                         rand_als_init=False,stablesplit=True,
+                         truncate_loc=False,chiloc=100):
     """
     Perform a single time evolution step for a single set of neighboring PEPS columns
 
@@ -1816,6 +1923,26 @@ def tebd_step_single_col(peps_col1,peps_col2,step_size,left_bmpo,right_bmpo,ham_
             acting on the right and top edges of the unit cell (if False)
         full_update: bool
             Whether to do full update (True) or simple update (False) procedure
+        rand_als_init : bool
+            Whether to use a random initial guess when starting 
+            the als proecudure. (default is false, 
+            meaning initial guess is determined via a simple update 
+            style svd procedure)
+        stablesplit : bool
+            Whether to split the tensors after als procedure
+            to equally split singular values. Default is True, 
+            which adds minimal time and improves stability
+        truncate_loc : bool
+            Whether to truncate the environment tensors locally 
+            when doing the ALS procedure
+        chi : int
+            The maximum bond dimension fo the boundary mps for 
+            all left and right and top and bottom environments,
+            except within the 2x2 unit cell
+        chiloc : int
+            The maximum bond dimension of the boundary mps in the local environment.
+            If truncate_loc == True, then this is the value that the 
+            boundary MPS bond dimension will be reduced to
 
     Returns:
         E : float
@@ -1827,11 +1954,13 @@ def tebd_step_single_col(peps_col1,peps_col2,step_size,left_bmpo,right_bmpo,ham_
     top_envs = calc_top_envs2([peps_col1,peps_col2],
                               left_bmpo,
                               right_bmpo,
-                              chi=mbd)
+                              truncate=True,
+                              chi=chi)
     bot_envs = calc_bot_envs2([peps_col1,peps_col2],
                               left_bmpo,
                               right_bmpo,
-                              chi=mbd)
+                              truncate=True,
+                              chi=chi)
 
     # Loop through rows in the column
     E = peps_col1[0].backend.zeros(len(ham_col),dtype=peps_col1[0].dtype)
@@ -1872,7 +2001,11 @@ def tebd_step_single_col(peps_col1,peps_col2,step_size,left_bmpo,right_bmpo,ham_
                       maxiter=als_iter,
                       tol=als_tol,
                       lb=lb,
-                      full_update=full_update)
+                      full_update=full_update,
+                      rand_init=rand_als_init,
+                      stablesplit=stablesplit,
+                      truncate_loc=truncate_loc,
+                      chi=chiloc)
 
         # Combine and equally split the tensors (and scale to avoid precision errors)
         res = make_equal_distance(res,mbd)
@@ -1892,7 +2025,7 @@ def tebd_step_single_col(peps_col1,peps_col2,step_size,left_bmpo,right_bmpo,ham_
                                   right_bmpo,
                                   bot_envs,
                                   top_envs,
-                                  chi=mbd)
+                                  chi=chi)
 
         # Update top and bottom environments
         if row == 0: prev_env = None
@@ -1905,12 +2038,17 @@ def tebd_step_single_col(peps_col1,peps_col2,step_size,left_bmpo,right_bmpo,ham_
                                         right_bmpo[2*row],
                                         right_bmpo[2*row+1],
                                         prev_env,
-                                        chi=mbd)
+                                        truncate=True,
+                                        chi=chi)
 
     # Return the result
     return E.sum(),[peps_col1,peps_col2]
 
-def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=10,als_tol=1e-10,lb=True,full_update=True):
+def tebd_step(peps,ham,step_size,mbd,
+              chi=100,als_iter=10,als_tol=1e-10,
+              lb=True,full_update=True,
+              rand_als_init=False,stablesplit=True,
+              truncate_loc=False,chiloc=100):
     """
     Perform a single TEBD time step
     
@@ -1929,8 +2067,6 @@ def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=10,als_tol=1e-10,lb=True,
             The maximum bond dimension of the PEPS
 
     Kwargs:
-        chi : int
-            The boundary mpo maximum bond dimension
         als_iter : int
             The maximum number of alternating least squares iterations
         als_tol : float
@@ -1938,6 +2074,26 @@ def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=10,als_tol=1e-10,lb=True,
             least squares procedure
         full_update: bool
             Whether to do full update (True) or simple update (False) procedure
+        rand_als_init : bool
+            Whether to use a random initial guess when starting 
+            the als proecudure. (default is false, 
+            meaning initial guess is determined via a simple update 
+            style svd procedure)
+        stablesplit : bool
+            Whether to split the tensors after als procedure
+            to equally split singular values. Default is True, 
+            which adds minimal time and improves stability
+        truncate_loc : bool
+            Whether to truncate the environment tensors locally 
+            when doing the ALS procedure
+        chi : int
+            The maximum bond dimension fo the boundary mps for 
+            all left and right and top and bottom environments,
+            except within the 2x2 unit cell
+        chiloc : int
+            The maximum bond dimension of the boundary mps in the local environment.
+            If truncate_loc == True, then this is the value that the 
+            boundary MPS bond dimension will be reduced to
 
     Returns:
         E : float
@@ -1972,7 +2128,11 @@ def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=10,als_tol=1e-10,lb=True,
                                        als_iter=als_iter,
                                        als_tol=als_tol,
                                        lb=lb,
-                                       full_update=full_update)
+                                       full_update=full_update,
+                                       rand_als_init=rand_als_init,
+                                       stablesplit=stablesplit,
+                                       truncate_loc=truncate_loc,
+                                       chiloc=chiloc)
         elif col == Nx-2:
             res = tebd_step_single_col(peps[col],
                                        peps[col+1],
@@ -1984,7 +2144,11 @@ def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=10,als_tol=1e-10,lb=True,
                                        als_iter=als_iter,
                                        als_tol=als_tol,
                                        lb=lb,
-                                       full_update=full_update)
+                                       full_update=full_update,
+                                       rand_als_init=rand_als_init,
+                                       stablesplit=stablesplit,
+                                       truncate_loc=truncate_loc,
+                                       chiloc=chiloc)
         else:
             res = tebd_step_single_col(peps[col],
                                        peps[col+1],
@@ -1996,7 +2160,11 @@ def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=10,als_tol=1e-10,lb=True,
                                        als_iter=als_iter,
                                        als_tol=als_tol,
                                        lb=lb,
-                                       full_update=full_update)
+                                       full_update=full_update,
+                                       rand_als_init=rand_als_init,
+                                       stablesplit=stablesplit,
+                                       truncate_loc=truncate_loc,
+                                       chiloc=chiloc)
         E[col] = res[0]
         peps[col] = res[1][0]
         peps[col+1] = res[1][1]
@@ -2011,7 +2179,11 @@ def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=10,als_tol=1e-10,lb=True,
     E = peps.backend.sum(E)
     return E,peps
 
-def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,als_iter=10,als_tol=1e-10,full_update=True):
+def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,
+               chi=100,als_iter=10,als_tol=1e-10,
+               full_update=True,
+               rand_als_init=False,stablesplit=True,
+               truncate_loc=False,chiloc=100):
     """
     Run all of the tebd time steps
     
@@ -2044,6 +2216,26 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,als_iter=10,als_t
             least squares procedure
         full_update: bool
             Whether to do full update (True) or simple update (False) procedure
+        rand_als_init : bool
+            Whether to use a random initial guess when starting 
+            the als proecudure. (default is false, 
+            meaning initial guess is determined via a simple update 
+            style svd procedure)
+        stablesplit : bool
+            Whether to split the tensors after als procedure
+            to equally split singular values. Default is True, 
+            which adds minimal time and improves stability
+        truncate_loc : bool
+            Whether to truncate the environment tensors locally 
+            when doing the ALS procedure
+        chi : int
+            The maximum bond dimension fo the boundary mps for 
+            all left and right and top and bottom environments,
+            except within the 2x2 unit cell
+        chiloc : int
+            The maximum bond dimension of the boundary mps in the local environment.
+            If truncate_loc == True, then this is the value that the 
+            boundary MPS bond dimension will be reduced to
 
     Returns:
         E : float
@@ -2062,9 +2254,17 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,als_iter=10,als_t
     for iter_cnt in range(n_step):
 
         # Do TEBD Step
-        _,peps = tebd_step(peps,ham,step_size,mbd,chi=chi,als_iter=als_iter,als_tol=als_tol,lb=True,full_update=full_update)
+        _,peps = tebd_step(peps,ham,step_size,mbd,
+                           chi=chi,als_iter=als_iter,als_tol=als_tol,
+                           lb=True,full_update=full_update,
+                           rand_als_init=rand_als_init,stablesplit=stablesplit,
+                           truncate_loc=truncate_loc,chiloc=chiloc)
         peps.normalize()
-        _,peps = tebd_step(peps,ham,step_size,mbd,chi=chi,als_iter=als_iter,als_tol=als_tol,lb=False,full_update=full_update)
+        _,peps = tebd_step(peps,ham,step_size,mbd,
+                           chi=chi,als_iter=als_iter,als_tol=als_tol,
+                           lb=False,full_update=full_update,
+                           rand_als_init=rand_als_init,stablesplit=stablesplit,
+                           truncate_loc=truncate_loc,chiloc=chiloc)
         peps.normalize()
 
         # Save PEPS
@@ -2089,7 +2289,7 @@ def run_tebd(Nx,Ny,d,ham,
              backend='numpy',
              D=3,
              Zn=None,
-             chi=10,
+             chi=100,
              thermal=False,
              norm_tol=20,
              singleLayer=True,
@@ -2102,7 +2302,11 @@ def run_tebd(Nx,Ny,d,ham,
              als_tol=1e-8,
              peps_fname=None,
              peps_fdir='./',
-             full_update=True):
+             full_update=True,
+             rand_als_init=False,
+             stablesplit=True,
+             truncate_loc=False,
+             chiloc=100):
     """
     Run the TEBD (Simple or Full) algorithm for a PEPS
 
@@ -2175,6 +2379,26 @@ def run_tebd(Nx,Ny,d,ham,
             The location where the peps will be saved
         full_update: bool
             Whether to do full update (True) or simple update (False) procedure
+        rand_als_init : bool
+            Whether to use a random initial guess when starting 
+            the als proecudure. (default is false, 
+            meaning initial guess is determined via a simple update 
+            style svd procedure)
+        stablesplit : bool
+            Whether to split the tensors after als procedure
+            to equally split singular values. Default is True, 
+            which adds minimal time and improves stability
+        truncate_loc : bool
+            Whether to truncate the environment tensors locally 
+            when doing the ALS procedure
+        chi : int
+            The maximum bond dimension fo the boundary mps for 
+            all left and right and top and bottom environments,
+            except within the 2x2 unit cell
+        chiloc : int
+            The maximum bond dimension of the boundary mps in the local environment.
+            If truncate_loc == True, then this is the value that the 
+            boundary MPS bond dimension will be reduced to
 
     Returns:
         E : float
@@ -2254,7 +2478,11 @@ def run_tebd(Nx,Ny,d,ham,
                             chi = chi[Dind],
                             als_iter=als_iter,
                             als_tol=als_tol,
-                            full_update=full_update)
+                            full_update=full_update,
+                            rand_als_init=rand_als_init,
+                            stablesplit=stablesplit,
+                            truncate_loc=truncate_loc,
+                            chiloc=chiloc)
 
         # Increase MBD if needed
         if (len(D)-1 > Dind) and (D[Dind+1] > D[Dind]):
