@@ -1,7 +1,7 @@
 """
 A class to hold common basic operators
 """
-from symtensor.settings import load_lib
+from cyclopeps.tools.utils import load_lib
 from cyclopeps.tools.gen_ten import zeros
 
 class OPS:

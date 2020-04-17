@@ -8,9 +8,11 @@ Date: January 2020
 """
 from numpy import float_
 from cyclopeps.tools.utils import *
-import symtensor.sym as symlib
-from symtensor.tools.la import symqr, symsvd
-from symtensor.settings import load_lib
+try:
+    import symtensor.sym as symlib
+    from symtensor.tools.la import symqr, symsvd
+except:
+    symlib,symqr,symsvd = None,None,None
 import copy
 import itertools
 import sys
@@ -536,6 +538,7 @@ class GEN_TEN:
             if sym is None:
                 self.ten = self.lib.zeros(shape,dtype=dtype)
             else:
+                if symlib is None: raise ImportError("Symtensor module not found")
                 self.ten = symlib.zeros(shape,sym=sym,backend=backend,dtype=dtype)
         else:
             self.ten = ten
@@ -562,6 +565,7 @@ class GEN_TEN:
         if self.sym is None:
             return self.backend
         else:
+            if symlib is None: raise ImportError("Symtensor module not found")
             return symlib
 
     @property
@@ -705,6 +709,7 @@ class GEN_TEN:
                 sym[0] = sym[0][:self.legs[ind][0]]+sym[0][self.legs[ind][-1]+1:]
                 sym[1] = sym[1][:self.legs[ind][0]]+sym[1][self.legs[ind][-1]+1:]
                 # Create the correct symtensor
+                if symlib is None: raise ImportError("Symtensor module not found")
                 newten = symlib.SYMtensor(newten,sym=[(self.sym[0]+'.')[:-1],self.sym[1],self.sym[2],self.sym[3]],backend=self.backend)
             else:
                 newten = self.ten.array.copy()
@@ -720,6 +725,7 @@ class GEN_TEN:
                 sym[0] = sym[0][:self.legs[ind][0]]+sym[0][self.legs[ind][-1]+1:]
                 sym[1] = sym[1][:self.legs[ind][0]]+sym[1][self.legs[ind][-1]+1:]
                 # Create the correct symtensor
+                if symlib is None: raise ImportError("Symtensor module not found")
                 newten = symlib.SYMtensor(newten,sym=[(self.sym[0]+'.')[:-1],self.sym[1],self.sym[2],self.sym[3]],backend=self.backend)
         # Update legs
         newlegs = []

@@ -81,3 +81,21 @@ def copyfile(old_fname,new_fname):
             _copyfile(old_fname,new_fname)
         except:
             _copyfile(old_fname+'.npy',new_fname+'.npy')
+
+def load_lib(libname):
+    if isinstance(libname,str):
+        if libname == 'numpy':
+            try:
+                import symtensor.backend.numpy_funclib as lib
+            except:
+                import cyclopeps.tools.numpy_funclib as lib
+        elif libname == 'ctf':
+            try:
+                import symtensor.backend.ctf_funclib as lib
+            except:
+                import cyclopeps.tools.ctf_funclib as lib
+        else:
+            raise ValueError("Library %s not recognized" %libname)
+        return lib
+    else:
+        return libname
