@@ -7,7 +7,8 @@ Date: June 2019
 """
 
 from cyclopeps.tools.params import *
-#from psutil import virtual_memory as vmem
+try:
+    from psutil import virtual_memory as vmem
 from shutil import copyfile as _copyfile
 import os
 import time
