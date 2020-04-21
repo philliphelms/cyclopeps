@@ -1,10 +1,13 @@
 import os, sys
-from mpi4py import MPI
-
-# MPI Global Variables
-COMM = MPI.COMM_WORLD
-RANK = COMM.Get_rank()
-SIZE = COMM.size
+try:
+    from mpi4py import MPI
+    # MPI Global Variables
+    COMM = MPI.COMM_WORLD
+    COMM.Get_rank()
+    COMM.size
+except:
+    RANK = 0
+    SIZE = 1
 
 # Temporary directories for calculation
 TMPDIR = os.environ.get('TMPDIR','.')
@@ -26,6 +29,9 @@ ARNOLDI_TOL = 1e-8
 ARNOLDI_MAX_ITER = 100
 
 # Memory Global Variables
-import psutil
-_,av,_,_,_,_,_,_,_,_,_ = psutil.virtual_memory()
-MAX_MEMORY = av
+try:
+    import psutil
+    _,av,_,_,_,_,_,_,_,_,_ = psutil.virtual_memory()
+    MAX_MEMORY = av
+except:
+    pass

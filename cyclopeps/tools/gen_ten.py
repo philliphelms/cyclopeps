@@ -447,7 +447,7 @@ def einsum(subscripts,opA,opB):
         else:
             # Constant returned (don't need to put into gen_ten)
             sym = None
-            #return res
+            return res
     else:
         sym = None
     # Find resulting legs
@@ -890,6 +890,9 @@ class GEN_TEN:
     def abs(self):
         return self._as_new_tensor(abs(self.ten))
 
+    def __abs__(self):
+        return self._as_new_tensor(self.abs())
+
     def sum(self):
         if self.sym is None:
             res = self.backend.einsum('abcdefghijklmnopqrstuvwxyz'[:len(self.ten.shape)]+'->',self.ten)
@@ -912,6 +915,7 @@ class GEN_TEN:
     def to_val(self):
         """
         Returns a single valued tensor's value
+        or the sum of a larger tensor
         """
         if self.sym is not None:
             tmp = self.ten.array
@@ -948,6 +952,12 @@ class GEN_TEN:
         return newten
 
     def __add__(self,x):
+        if isinstance(x,GEN_TEN):
+            return self._as_new_tensor(self.ten+x.ten)
+        else:
+            return self._as_new_tensor(self.ten+x)
+
+    def __radd__(self,x):
         if isinstance(x,GEN_TEN):
             return self._as_new_tensor(self.ten+x.ten)
         else:
