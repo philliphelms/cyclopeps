@@ -3,8 +3,8 @@ try:
     from mpi4py import MPI
     # MPI Global Variables
     COMM = MPI.COMM_WORLD
-    COMM.Get_rank()
-    COMM.size
+    RANK = COMM.Get_rank()
+    SIZE = COMM.size
 except:
     RANK = 0
     SIZE = 1
