@@ -7,7 +7,7 @@ Date: June 2019
 """
 
 from cyclopeps.tools.params import *
-from psutil import virtual_memory as vmem
+#from psutil import virtual_memory as vmem
 from shutil import copyfile as _copyfile
 import os
 import time
@@ -58,9 +58,12 @@ def memprint(priority,msg):
     avoiding repeated printing of statements.
     """
     if (RANK == 0) and (priority <= VERBOSE_MEM):
-        tot_mem = bytes2human(vmem()[0])
-        av_mem = bytes2human(vmem()[3])
-        print('  '*priority+msg+': '+av_mem+' / '+tot_mem)
+        try:
+            tot_mem = bytes2human(vmem()[0])
+            av_mem = bytes2human(vmem()[3])
+            print('  '*priority+msg+': '+av_mem+' / '+tot_mem)
+        except: 
+            pass
 
 def mkdir(path):
     """

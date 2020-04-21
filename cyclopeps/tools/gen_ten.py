@@ -940,18 +940,11 @@ class GEN_TEN:
     def __neg__(self,x):
         return self._as_new_tensor(-self.ten)
 
-    def __div__(self,x):
+    def __truediv__(self,x):
         return self._as_new_tensor((1./x)*self.ten)
-    
-    def __rdiv__(self,x):
-        newten = self._as_new_tensor(self.ten)
-        if isinstance(x,float):
-            # Divide tensor elements
-            if newten.sym is None:
-                newten.ten = 1./newten.ten
-            else:
-                newten.ten.array = 1./newten.ten.array
-        return newten
+
+    def __floordiv__(self,x):
+        raise NotImplementedError('Floordiv not defined for gen_ten arrays')
 
     def __add__(self,x):
         if isinstance(x,GEN_TEN):
