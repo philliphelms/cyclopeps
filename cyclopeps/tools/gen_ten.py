@@ -8,9 +8,11 @@ Date: January 2020
 """
 from numpy import float_
 from cyclopeps.tools.utils import *
-import symtensor.sym as symlib
-from symtensor.tools.la import symqr, symsvd
-from symtensor.settings import load_lib
+try:
+    import symtensor.sym as symlib
+    from symtensor.tools.la import symqr, symsvd
+except:
+    symlib,symqr,symsvd = None,None,None
 import copy
 import itertools
 import sys
@@ -447,7 +449,7 @@ def einsum(subscripts,opA,opB):
         else:
             # Constant returned (don't need to put into gen_ten)
             sym = None
-            return res
+            #return res
     else:
         sym = None
     # Find resulting legs
@@ -536,6 +538,7 @@ class GEN_TEN:
             if sym is None:
                 self.ten = self.lib.zeros(shape,dtype=dtype)
             else:
+                if symlib is None: raise ImportError("Symtensor module not found")
                 self.ten = symlib.zeros(shape,sym=sym,backend=backend,dtype=dtype)
         else:
             self.ten = ten
@@ -562,6 +565,7 @@ class GEN_TEN:
         if self.sym is None:
             return self.backend
         else:
+            if symlib is None: raise ImportError("Symtensor module not found")
             return symlib
 
     @property
@@ -705,6 +709,7 @@ class GEN_TEN:
                 sym[0] = sym[0][:self.legs[ind][0]]+sym[0][self.legs[ind][-1]+1:]
                 sym[1] = sym[1][:self.legs[ind][0]]+sym[1][self.legs[ind][-1]+1:]
                 # Create the correct symtensor
+                if symlib is None: raise ImportError("Symtensor module not found")
                 newten = symlib.SYMtensor(newten,sym=[(self.sym[0]+'.')[:-1],self.sym[1],self.sym[2],self.sym[3]],backend=self.backend)
             else:
                 newten = self.ten.array.copy()
@@ -720,6 +725,7 @@ class GEN_TEN:
                 sym[0] = sym[0][:self.legs[ind][0]]+sym[0][self.legs[ind][-1]+1:]
                 sym[1] = sym[1][:self.legs[ind][0]]+sym[1][self.legs[ind][-1]+1:]
                 # Create the correct symtensor
+                if symlib is None: raise ImportError("Symtensor module not found")
                 newten = symlib.SYMtensor(newten,sym=[(self.sym[0]+'.')[:-1],self.sym[1],self.sym[2],self.sym[3]],backend=self.backend)
         # Update legs
         newlegs = []
@@ -890,9 +896,6 @@ class GEN_TEN:
     def abs(self):
         return self._as_new_tensor(abs(self.ten))
 
-    def __abs__(self):
-        return self._as_new_tensor(self.abs())
-
     def sum(self):
         if self.sym is None:
             res = self.backend.einsum('abcdefghijklmnopqrstuvwxyz'[:len(self.ten.shape)]+'->',self.ten)
@@ -915,7 +918,6 @@ class GEN_TEN:
     def to_val(self):
         """
         Returns a single valued tensor's value
-        or the sum of a larger tensor
         """
         if self.sym is not None:
             tmp = self.ten.array
@@ -938,26 +940,13 @@ class GEN_TEN:
     def __neg__(self,x):
         return self._as_new_tensor(-self.ten)
 
-    def __div__(self,x):
+    def __truediv__(self,x):
         return self._as_new_tensor((1./x)*self.ten)
-    
-    def __rdiv__(self,x):
-        newten = self._as_new_tensor(self.ten)
-        if isinstance(x,float):
-            # Divide tensor elements
-            if newten.sym is None:
-                newten.ten = 1./newten.ten
-            else:
-                newten.ten.array = 1./newten.ten.array
-        return newten
+
+    def __floordiv__(self,x):
+        raise NotImplementedError('Floordiv not defined for gen_ten arrays')
 
     def __add__(self,x):
-        if isinstance(x,GEN_TEN):
-            return self._as_new_tensor(self.ten+x.ten)
-        else:
-            return self._as_new_tensor(self.ten+x)
-
-    def __radd__(self,x):
         if isinstance(x,GEN_TEN):
             return self._as_new_tensor(self.ten+x.ten)
         else:
@@ -986,28 +975,24 @@ class GEN_TEN:
                 newten.ten.array[i] = self.backend.diag(1./self.backend.diag(newten.ten.array[i]))
         return newten
 
-    def square_inv(self,split=None):
+    def square_inv(self):
         """
         Take the inverse of a 'square' tensor, used in ALS for PEPS Full Update
         """
         newten = self._as_new_tensor(self.ten)
-
         if newten.sym is None:
-            if split is None:
-                split = len(self.legs)/2
-            matsz = 1
-            for i in range(split):
-                matsz *= np.prod([self.shape[i] for i in self.legs[i]])
-            mat = self.backend.reshape(self.ten.copy(),(matsz,-1))
-            _mat = self.backend.pinv(mat+1e-16)
-            newten.ten = self.backend.reshape(_mat,newten.shape)
+            assert(len(self.ten.shape) == 4)
+            (n1,n2,n3,n4) = self.ten.shape
+            mat = self.backend.reshape(self.ten,(n1*n2,n3*n4))
+            inv = self.backend.inv(mat)
+            newten.ten = self.backend.reshape(inv,(n1,n2,n3,n4))
         else:
             # Do the inversion with the full tensor
             mat = self.ten.make_sparse()
             (N1,N2,N3,N4,n1,n2,n3,n4) = mat.shape
             mat = mat.transpose([0,4,1,5,2,6,3,7])
             mat = mat.reshape((N1*n1*N2*n2,N3*n3*N4*n4))
-            inv = self.backend.pinv(mat)
+            inv = self.backend.inv(mat)
             inv = inv.reshape((N1,n1,N2,n2,N3,n3,N4,n4))
             inv = inv.transpose([0,2,4,6,1,3,5,7])
             # Convert back into sparse tensor
@@ -1015,13 +1000,3 @@ class GEN_TEN:
             inv = self.backend.einsum('ABCDabcd,ABCD->ABCabcd',inv,delta)
             newten.ten.array = inv
         return newten
-
-    #def ten_inv(self,split):
-    #    """
-    #    Take the pseudoinverse of a tensor, first reshaping it into a 
-    #    matrix, then reshaping the result back into a tensor
-    #    """
-    #    if self.sym is None:
-    #
-    #     else:
-    #        raise NotImplementedError()
