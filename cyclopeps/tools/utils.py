@@ -9,6 +9,8 @@ Date: June 2019
 from cyclopeps.tools.params import *
 try:
     from psutil import virtual_memory as vmem
+except:
+    pass
 from shutil import copyfile as _copyfile
 import os
 import time

@@ -1,5 +1,5 @@
 """
-Operators for the quantum J1J2 Heisenberg Model
+Operators for the quantum J1J2 XY Model
 
 Currently, operators with next nearest 
 neighbors are stored with four MPOs for every
@@ -212,45 +212,40 @@ def mpo(ops,j1,j2,bx,bz,backend,
     Sm = ops.Sm.ten
     I  = ops.I.ten
     # First (top left) site -------------------------
-    op1 = zeros((2,2,5),sym=None,backend=backend)
-    op1[:,:,1] = j1*Sz
-    op1[:,:,2] = j1/2.*Sp
-    op1[:,:,3] = j1/2.*Sm
-    op1[:,:,4] = I
+    op1 = zeros((2,2,4),sym=None,backend=backend)
+    op1[:,:,1] = j1/2.*Sp
+    op1[:,:,2] = j1/2.*Sm
+    op1[:,:,3] = I
     # Add field:
     if left_field:
         op1[:,:,0] = bx*Sx + bz*Sz
     # Central (bottom left) site --------------------
-    op2 = zeros((5,2,2,5),sym=None,backend=backend)
+    op2 = zeros((4,2,2,4),sym=None,backend=backend)
     # Left column
     op2[0,:,:,0] = I
     if interaction01:
-        op2[1,:,:,0] = Sz
-        op2[2,:,:,0] = Sm
-        op2[3,:,:,0] = Sp
+        op2[1,:,:,0] = Sm
+        op2[2,:,:,0] = Sp
     # Fill center
     if interaction02:
         op2[1,:,:,1] = j2/j1*I
         op2[2,:,:,2] = j2/j1*I
-        op2[3,:,:,3] = j2/j1*I
     # Bottom row
     if interaction12:
-        op2[4,:,:,1] = j1*Sz
-        op2[4,:,:,2] = j1/2.*Sp
-        op2[4,:,:,3] = j1/2.*Sm
-    op2[4,:,:,4] = I
+        op2[3,:,:,1] = j1/2.*Sp
+        op2[3,:,:,2] = j1/2.*Sm
+    op2[3,:,:,3] = I
     # Add field:
     if center_field:
-        op2[4,:,:,0] = bx*Sx + bz*Sz
+        op2[3,:,:,0] = bx*Sx + bz*Sz
     # Third (bottom right) site -------------------
-    op3 = zeros((5,2,2),sym=None,backend=backend)
+    op3 = zeros((4,2,2),sym=None,backend=backend)
     op3[0,:,:] = I
-    op3[1,:,:] = Sz
-    op3[2,:,:] = Sm
-    op3[3,:,:] = Sp
+    op3[1,:,:] = Sm
+    op3[2,:,:] = Sp
     # Add field:
     if right_field:
-        op3[4,:,:] = bx*Sx + bz*Sz
+        op3[3,:,:] = bx*Sx + bz*Sz
     # Put into a list -----------------------------
     mpo = [op1,op2,op3]
     return mpo

@@ -3027,7 +3027,7 @@ def calc_local_nn_op(row,bra,ops_col,left_bmpo,right_bmpo,bot_envs,top_envs,ket=
             The operator value for the given 2x2 plaquette
     """
 
-    # Copy bra if needed
+    # Copy bra if needed ----------------------------------
     copy_ket = False
     if ket is None: copy_ket = True
     elif hasattr(ket,'__len__'):
@@ -3041,96 +3041,95 @@ def calc_local_nn_op(row,bra,ops_col,left_bmpo,right_bmpo,bot_envs,top_envs,ket=
                 # TODO - Conjugate this ket col?
             ket[i] = ketcol
 
-    E = 0.
+    # Extract needed tensors -------------------------------
+    # Upper and lower environments =====
     if row == 0:
         if len(bra[0]) == 2:
             # Only two sites in column, use identity at both ends
-            E += calc_local_nn_op_lb(ops_col[row][0],
-                                     [[bra[0][row],bra[0][row+1]],[bra[1][row],bra[1][row+1]]],
-                                     [[ket[0][row],ket[0][row+1]],[ket[1][row],ket[1][row+1]]],
-                                     None, # top_envs[row+2]
-                                     None, # bot_envs[row-1]
-                                     left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                     right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                     normalize=normalize,
-                                     chi=chi,
-                                     contracted_env=contracted_env)
-            E += calc_local_nn_op_ru(ops_col[row][1],
-                                     [[bra[0][row],bra[0][row+1]],[bra[1][row],bra[1][row+1]]],
-                                     [[ket[0][row],ket[0][row+1]],[ket[1][row],ket[1][row+1]]],
-                                     None, # top_envs[row+2]
-                                     None, # bot_envs[row-1]
-                                     left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                     right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                     normalize=normalize,
-                                     chi=chi,
-                                     contracted_env=contracted_env)
+            top,bot = None,None
         else:
-            E += calc_local_nn_op_lb(ops_col[row][0],
-                                     [[bra[0][row],bra[0][row+1]],[bra[1][row],bra[1][row+1]]],
-                                     [[ket[0][row],ket[0][row+1]],[ket[1][row],ket[1][row+1]]],
-                                     top_envs[row+2],
-                                     None, # bot_envs[row-1]
-                                     left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                     right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                     normalize=normalize,
-                                     chi=chi,
-                                     contracted_env=contracted_env)
-            E += calc_local_nn_op_ru(ops_col[row][1],
-                                     [[bra[0][row],bra[0][row+1]],[bra[1][row],bra[1][row+1]]],
-                                     [[ket[0][row],ket[0][row+1]],[ket[1][row],ket[1][row+1]]],
-                                     top_envs[row+2],
-                                     None, # bot_envs[row-1]
-                                     left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                     right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                     normalize=normalize,
-                                     chi=chi,
-                                     contracted_env=contracted_env)
+            # At bottom unit cell, use identity on bottom
+            top=top_envs[row+2]
+            bot=None
     elif row == len(bra[0])-2:
-        # Identity needed on top
-        E += calc_local_nn_op_lb(ops_col[row][0],
-                                 [[bra[0][row],bra[0][row+1]],[bra[1][row],bra[1][row+1]]],
-                                 [[ket[0][row],ket[0][row+1]],[ket[1][row],ket[1][row+1]]],
-                                 None, # top_envs[row+2]
-                                 bot_envs[row-1],
-                                 left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                 right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                 normalize=normalize,
-                                 chi=chi,
-                                 contracted_env=contracted_env)
-        E += calc_local_nn_op_ru(ops_col[row][1],
-                                 [[bra[0][row],bra[0][row+1]],[bra[1][row],bra[1][row+1]]],
-                                 [[ket[0][row],ket[0][row+1]],[ket[1][row],ket[1][row+1]]],
-                                 None, # top_envs[row+2]
-                                 bot_envs[row-1],
-                                 left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                 right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                 normalize=normalize,
-                                 chi=chi,
-                                 contracted_env=contracted_env)
+        # At top unit cell, use identity on top
+        top = None
+        bot = bot_envs[row-1]
     else:
-        # Get the local environment tensor (no identity needed)
-        E += calc_local_nn_op_lb(ops_col[row][0],
-                                 [[bra[0][row],bra[0][row+1]],[bra[1][row],bra[1][row+1]]],
-                                 [[ket[0][row],ket[0][row+1]],[ket[1][row],ket[1][row+1]]],
-                                 top_envs[row+2],
-                                 bot_envs[row-1],
-                                 left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                 right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                 normalize=normalize,
-                                 chi=chi,
-                                 contracted_env=contracted_env)
-        E += calc_local_nn_op_ru(ops_col[row][1],
-                                 [[bra[0][row],bra[0][row+1]],[bra[1][row],bra[1][row+1]]],
-                                 [[ket[0][row],ket[0][row+1]],[ket[1][row],ket[1][row+1]]],
-                                 top_envs[row+2],
-                                 bot_envs[row-1],
-                                 left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                 right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
-                                 normalize=normalize,
-                                 chi=chi,
-                                 contracted_env=contracted_env)
-    # Return resulting energy
+        # In the bulk, no identity needed
+        top = top_envs[row+2]
+        bot = bot_envs[row-1]
+    # PEPS tensors =====================
+    cell_bra = [[bra[0][row],bra[0][row+1]],
+                [bra[1][row],bra[1][row+1]]]    
+    cell_ket = [[ket[0][row],ket[0][row+1]],
+                [ket[1][row],ket[1][row+1]]]
+    cell_lbmpo = left_bmpo[row*2,row*2+1,row*2+2,row*2+3]
+    cell_rbmpo = right_bmpo[row*2,row*2+1,row*2+2,row*2+3]
+    # Flip tensors where needed ========
+    # Flip bra and ket tensors
+    flip_bra = [[bra[1][row].copy().transpose([3,1,2,0,4]),bra[1][row+1].copy().transpose([3,1,2,0,4])],
+                [bra[0][row].copy().transpose([3,1,2,0,4]),bra[0][row+1].copy().transpose([3,1,2,0,4])]]
+    flip_ket = [[ket[1][row].copy().transpose([3,1,2,0,4]),ket[1][row+1].copy().transpose([3,1,2,0,4])],
+                [ket[0][row].copy().transpose([3,1,2,0,4]),ket[0][row+1].copy().transpose([3,1,2,0,4])]]
+    # Flip (contracted) top/bot environments
+    # Always contract bot/top env to make transpose easier
+    if not contracted_env:
+        if top is not None:
+            flip_top = einsum('ijk,klm->ijlm',top[0],top[1]).remove_empty_ind(0)
+            flip_top = einsum('jlm,mno->jlno',flip_top,top[2])
+            flip_top = einsum('jlno,opq->jlnpq',flip_top,top[3])
+            flip_top = einsum('jlnpq,qrs->jlnprs',flip_top,top[4])
+            flip_top = einsum('jlnprs,stu->jlnprtu',flip_top,top[5]).remove_empty_ind(6)
+        if bot is not None:
+            flip_bot = einsum('ijk,klm->ijlm',bot[0],bot[1]).remove_empty_ind(0)
+            flip_bot = einsum('jlm,mno->jlno',flip_bot,bot[2])
+            flip_bot = einsum('jlno,opq->jlnpq',flip_bot,bot[3])
+            flip_bot = einsum('jlnpq,qrs->jlnprs',flip_bot,bot[4])
+            flip_bot = einsum('jlnprs,stu->jlnprtu',flip_bot,bot[5]).remove_empty_ind(6)
+    if top is not None:
+        flip_top = flip_top.transpose([5,3,4,1,2,0])
+    else: flip_top = None
+    if bot is not None:
+        flip_bot = flip_bot.transpose([5,3,4,1,2,0])
+    else: flip_bot = None
+    
+    # Calculation energy contribution from first MPO -------
+    E = calc_local_nn_op_lb(ops_col[row][0],
+                            cell_bra,
+                            cell_ket,
+                            top,
+                            bot,
+                            cell_lbmpo,
+                            cell_rbmpo,
+                            normalize=normalize,
+                            chi=chi,
+                            contracted_env=contracted_env)
+    # Calculate energy contribution from third MPO  ---------
+    # (must flip horizontally so we can use the lb procedure
+    E += calc_local_nn_op_lb(ops_col[row][1],
+                             flip_bra,
+                             flip_ket,
+                             flip_top,
+                             flip_bot,
+                             cell_rbmpo,
+                             cell_lbmpo,
+                             normalize=normalize,
+                             chi=chi,
+                             contracted_env=True)
+    # Calculate energy contribution from third MPO -----------
+    E += calc_local_nn_op_ru(ops_col[row][2],
+                             cell_bra,
+                             cell_ket,
+                             top,
+                             bot,
+                             cell_lbmpo,
+                             cell_rbmpo,
+                             normalize=normalize,
+                             chi=chi,
+                             contracted_env=contracted_env)
+
+    # Return resulting energy --------------------------------
     return E
 
 def calc_single_column_nn_op(peps,left_bmpo,right_bmpo,ops_col,normalize=True,ket=None,chi=10,contracted_env=False):

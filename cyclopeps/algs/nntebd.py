@@ -1884,7 +1884,7 @@ def make_equal_distance(peps,mbd,niter=1):
     return peps
 
 def tebd_step_single_col(peps_col1,peps_col2,step_size,
-                         left_bmpo,right_bmpo,ham_col,mbd,
+                         left_bmpo,right_bmpo,ham_col,mbd,hamind,
                          chi=100,als_iter=10,als_tol=1e-10,
                          lb=True,full_update=True,
                          rand_als_init=False,stablesplit=True,
@@ -1910,6 +1910,10 @@ def tebd_step_single_col(peps_col1,peps_col2,step_size,
             the two columns
         mbd : int
             The maximum bond dimension of the PEPS
+        hamind : int
+            The index to specify which of the
+            three hamiltonians (that are in a list for application
+            to this unit cell) will be applied.
 
     Kwargs:
         als_iter : int
@@ -1967,10 +1971,7 @@ def tebd_step_single_col(peps_col1,peps_col2,step_size,
     for row in range(len(ham_col)):
         mpiprint(2,'\tRow tebd col = {}'.format(row))
         # Take exponential of the MPO
-        if lb:
-            eH = exp_mpo(ham_col[row][0],-step_size)
-        else:
-            eH = exp_mpo(ham_col[row][1],-step_size)
+        eH = exp_mpo(ham_col[row][hamind],-step_size)
 
         # Determine which top and bot envs to use
         if row == 0:
@@ -2044,7 +2045,7 @@ def tebd_step_single_col(peps_col1,peps_col2,step_size,
     # Return the result
     return E.sum(),[peps_col1,peps_col2]
 
-def tebd_step(peps,ham,step_size,mbd,
+def tebd_step(peps,ham,step_size,mbd,hamind,
               chi=100,als_iter=10,als_tol=1e-10,
               lb=True,full_update=True,
               rand_als_init=False,stablesplit=True,
@@ -2065,6 +2066,10 @@ def tebd_step(peps,ham,step_size,mbd,
             step sizes
         mbd : int
             The maximum bond dimension of the PEPS
+        hamind : int
+            The index to specify which of the
+            three hamiltonians (that are in a list for application
+            to this unit cell) will be applied.
 
     Kwargs:
         als_iter : int
@@ -2125,6 +2130,7 @@ def tebd_step(peps,ham,step_size,mbd,
                                        right_bmpo[col+1],
                                        ham[col],
                                        mbd,
+                                       hamind,
                                        als_iter=als_iter,
                                        als_tol=als_tol,
                                        lb=lb,
@@ -2141,6 +2147,7 @@ def tebd_step(peps,ham,step_size,mbd,
                                        ident_bmpo,
                                        ham[col],
                                        mbd,
+                                       hamind,
                                        als_iter=als_iter,
                                        als_tol=als_tol,
                                        lb=lb,
@@ -2157,6 +2164,7 @@ def tebd_step(peps,ham,step_size,mbd,
                                        right_bmpo[col+1],
                                        ham[col],
                                        mbd,
+                                       hamind,
                                        als_iter=als_iter,
                                        als_tol=als_tol,
                                        lb=lb,
@@ -2253,14 +2261,57 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,
     # Do a single tebd step
     for iter_cnt in range(n_step):
 
-        # Do TEBD Step
-        _,peps = tebd_step(peps,ham,step_size,mbd,
+        # Do TEBD Step with first MPO
+        #     __             __
+        #    |1 |           |  |
+        #    |o_|           |__|
+        #     |               
+        #     |               
+        #     |               
+        #     |               
+        #     |_             __
+        #    ||2|           |3 |
+        #    |o--------------o_|
+        hamind = 0
+        _,peps = tebd_step(peps,ham,step_size,mbd,hamind,
                            chi=chi,als_iter=als_iter,als_tol=als_tol,
                            lb=True,full_update=full_update,
                            rand_als_init=rand_als_init,stablesplit=stablesplit,
                            truncate_loc=truncate_loc,chiloc=chiloc)
         peps.normalize()
-        _,peps = tebd_step(peps,ham,step_size,mbd,
+        # Do TEBD Step with Second MPO
+        #     __             __
+        #    |  |           | 1|
+        #    |__|           |o_|
+        #                    |
+        #                    |
+        #                    |
+        #                    |
+        #     __             |_
+        #    | 3|           ||2|
+        #    |_o-------------o_|
+        peps.flip()
+        hamind = 1
+        _,peps = tebd_step(peps,ham,step_size,mbd,hamind,
+                           chi=chi,als_iter=als_iter,als_tol=als_tol,
+                           lb=True,full_update=full_update,
+                           rand_als_init=rand_als_init,stablesplit=stablesplit,
+                           truncate_loc=truncate_loc,chiloc=chiloc)
+        peps.flip()
+        peps.normalize()
+        # Do TEBD Step with Third MPO
+        #     __             __
+        #    |  o-------------o|
+        #    |1_|           |2||
+        #                     |
+        #                     |
+        #                     |
+        #                     |
+        #     __             _|
+        #    |  |           | o|
+        #    |__|           |3_|
+        hamind = 2
+        _,peps = tebd_step(peps,ham,step_size,mbd,hamind,
                            chi=chi,als_iter=als_iter,als_tol=als_tol,
                            lb=False,full_update=full_update,
                            rand_als_init=rand_als_init,stablesplit=stablesplit,

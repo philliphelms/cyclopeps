@@ -1,6 +1,6 @@
 from cyclopeps.tools.utils import *
 from cyclopeps.tools.peps_tools import PEPS
-from cyclopeps.ops.j1j2 import return_op
+from cyclopeps.ops.j1j2xy import return_op
 from cyclopeps.algs.nntebd import run_tebd
 from sys import argv
 import numpy as np
@@ -12,6 +12,7 @@ D  = int(argv[3])
 chi= int(argv[4])
 dtind = int(argv[5])
 j2ind = int(argv[6])
+fieldind = int(argv[7])
 backend = 'numpy'
 d = 2
 
@@ -23,7 +24,8 @@ local_chi = chi
 
 # Get mpo
 j2 = [0.,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0][j2ind]
-ham = return_op(Nx,Ny,j1=1.,j2=j2,sym=None,backend=backend)
+field = [0.,0.2][fieldind]
+ham = return_op(Nx,Ny,j1=1.,j2=j2,bx=field,bz=field,sym=None,backend=backend)
 
 # Run SU/FU
 Ef,_ = run_tebd(Nx,
