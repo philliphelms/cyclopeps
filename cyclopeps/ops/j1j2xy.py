@@ -188,6 +188,8 @@ def return_op(Nx,Ny,j1=1.,j2=0.,bx=0.,bz=0.,sym=None,backend='numpy'):
             #    |__|           |3_|
             cell_mpos.append(mpo(ops,j1,j2,bx,bz,backend,
                                  interaction02=True,
+                                 interaction01=(y==Ny-2),
+                                 interaction12=(x==Nx-2),
                                  center_field = ((y==Ny-2) and (x==Nx-2))))
             
             # Add mpos on the 2x2 square into the column's interactions

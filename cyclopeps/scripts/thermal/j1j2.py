@@ -19,7 +19,7 @@ peps_fname = '{}x{}_D{}_chi{}_dt{}_j2{}'.format(Nx,Ny,D,chi,dtind,j2ind)
 
 # TEBD Parameters
 step_size = [0.1,0.01][dtind]
-n_step     = int(10./step_size)
+n_step     = int(5./step_size)
 truncate_loc = True
 local_chi = chi
 

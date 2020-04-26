@@ -21,7 +21,7 @@ dofu = True
 d = 2
 
 # TEBD Parameters
-step_size = 0.001
+step_size = 0.1
 n_step = int(10./step_size)
 
 # Get mpo

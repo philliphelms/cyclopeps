@@ -3130,9 +3130,10 @@ def calc_local_nn_op(row,bra,ops_col,left_bmpo,right_bmpo,bot_envs,top_envs,ket=
                              normalize=normalize,
                              chi=chi,
                              contracted_env=contracted_env)
-
+    
     # Return resulting energy --------------------------------
-    return E1+E2+E3
+    E = E1+E2+E3
+    return E
 
 def calc_single_column_nn_op(peps,left_bmpo,right_bmpo,ops_col,normalize=True,ket=None,chi=10,contracted_env=False):
     """
