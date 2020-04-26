@@ -22,20 +22,6 @@ conv_tol   = 1e-10
 # Get mpo
 ham = return_op(Nx,Ny,sym=None,backend=backend)
 
-# Run SU
-#Es,_ = run_tebd(Nx,
-#                Ny,
-#                d,
-#                ham,
-#                D=D,
-#                chi=chi,
-#                backend=backend,
-#                n_step=n_step,
-#                step_size=step_sizes,
-#                conv_tol=conv_tol,
-#                full_update=False)
-#print('\n\nFinal  E = {}'.format(Es))
-
 # Run SU/FU
 Ef,_ = run_tebd(Nx,
                 Ny,

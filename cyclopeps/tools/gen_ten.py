@@ -935,7 +935,7 @@ class GEN_TEN:
     def __rmul__(self,x):
         return self*x
 
-    def __neg__(self,x):
+    def __neg__(self):
         return self._as_new_tensor(-self.ten)
 
     def __div__(self,x):

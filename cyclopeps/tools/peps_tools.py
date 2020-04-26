@@ -3095,7 +3095,7 @@ def calc_local_nn_op(row,bra,ops_col,left_bmpo,right_bmpo,bot_envs,top_envs,ket=
     else: flip_bot = None
     
     # Calculation energy contribution from first MPO -------
-    E = calc_local_nn_op_lb(ops_col[row][0],
+    E1 = calc_local_nn_op_lb(ops_col[row][0],
                             cell_bra,
                             cell_ket,
                             top,
@@ -3107,7 +3107,7 @@ def calc_local_nn_op(row,bra,ops_col,left_bmpo,right_bmpo,bot_envs,top_envs,ket=
                             contracted_env=contracted_env)
     # Calculate energy contribution from third MPO  ---------
     # (must flip horizontally so we can use the lb procedure
-    E += calc_local_nn_op_lb(ops_col[row][1],
+    E2 = calc_local_nn_op_lb(ops_col[row][1],
                              flip_bra,
                              flip_ket,
                              flip_top,
@@ -3118,7 +3118,7 @@ def calc_local_nn_op(row,bra,ops_col,left_bmpo,right_bmpo,bot_envs,top_envs,ket=
                              chi=chi,
                              contracted_env=True)
     # Calculate energy contribution from third MPO -----------
-    E += calc_local_nn_op_ru(ops_col[row][2],
+    E3 = calc_local_nn_op_ru(ops_col[row][2],
                              cell_bra,
                              cell_ket,
                              top,
@@ -3128,8 +3128,9 @@ def calc_local_nn_op(row,bra,ops_col,left_bmpo,right_bmpo,bot_envs,top_envs,ket=
                              normalize=normalize,
                              chi=chi,
                              contracted_env=contracted_env)
-
+    
     # Return resulting energy --------------------------------
+    E = E1+E2+E3
     return E
 
 def calc_single_column_nn_op(peps,left_bmpo,right_bmpo,ops_col,normalize=True,ket=None,chi=10,contracted_env=False):
