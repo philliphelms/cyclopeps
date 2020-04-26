@@ -14,6 +14,8 @@ dtind = int(argv[5])
 j2ind = int(argv[6])
 backend = 'numpy'
 d = 2
+peps_fdir = '/central/groups/changroup/members/phelms/fu_sweep/'
+peps_fname = '{}x{}_D{}_chi{}_dt{}_j2{}'.format(Nx,Ny,D,chi,dtind,j2ind)
 
 # TEBD Parameters
 step_size = [0.1,0.01][dtind]
@@ -39,6 +41,8 @@ Ef,_ = run_tebd(Nx,
                 als_iter=10,
                 als_tol=1e-5,
                 truncate_loc=truncate_loc,
-                step_size=step_size)
+                step_size=step_size,
+                peps_fdir=peps_fdir,
+                peps_fname=peps_fname)
 
 print('\n\nFinal  E = {}'.format(Ef))

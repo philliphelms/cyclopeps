@@ -2319,7 +2319,7 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,
         peps.normalize()
 
         # Save PEPS
-        #peps.save()
+        peps.save()
         
         # Compute Resulting Energy
         E = peps.calc_op(ham,chi=chi,nn=True)

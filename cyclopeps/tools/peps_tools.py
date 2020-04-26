@@ -2884,6 +2884,8 @@ def calc_local_nn_op_lb(mpo,bra,ket,top,bot,left,right,normalize=True,contracted
             norm = einsum('lkbKBr,lkbKBr->',Nbot,Ntop)
         else:
             norm = Nbot.contract(Ntop)
+        if not isinstance(E,float): E = E.to_val()
+        if not isinstance(norm,float): norm = norm.to_val()
         E /= norm
     # Return result
     return E
@@ -3095,7 +3097,7 @@ def calc_local_nn_op(row,bra,ops_col,left_bmpo,right_bmpo,bot_envs,top_envs,ket=
     else: flip_bot = None
     
     # Calculation energy contribution from first MPO -------
-    E = calc_local_nn_op_lb(ops_col[row][0],
+    E1 = calc_local_nn_op_lb(ops_col[row][0],
                             cell_bra,
                             cell_ket,
                             top,
@@ -3107,7 +3109,7 @@ def calc_local_nn_op(row,bra,ops_col,left_bmpo,right_bmpo,bot_envs,top_envs,ket=
                             contracted_env=contracted_env)
     # Calculate energy contribution from third MPO  ---------
     # (must flip horizontally so we can use the lb procedure
-    E += calc_local_nn_op_lb(ops_col[row][1],
+    E2 = calc_local_nn_op_lb(ops_col[row][1],
                              flip_bra,
                              flip_ket,
                              flip_top,
@@ -3118,7 +3120,7 @@ def calc_local_nn_op(row,bra,ops_col,left_bmpo,right_bmpo,bot_envs,top_envs,ket=
                              chi=chi,
                              contracted_env=True)
     # Calculate energy contribution from third MPO -----------
-    E += calc_local_nn_op_ru(ops_col[row][2],
+    E3 = calc_local_nn_op_ru(ops_col[row][2],
                              cell_bra,
                              cell_ket,
                              top,
@@ -3130,7 +3132,7 @@ def calc_local_nn_op(row,bra,ops_col,left_bmpo,right_bmpo,bot_envs,top_envs,ket=
                              contracted_env=contracted_env)
 
     # Return resulting energy --------------------------------
-    return E
+    return E1+E2+E3
 
 def calc_single_column_nn_op(peps,left_bmpo,right_bmpo,ops_col,normalize=True,ket=None,chi=10,contracted_env=False):
     """
@@ -4189,34 +4191,52 @@ class PEPS:
         """
         Save the PEPS tensors
         """
-        # Create file
-        f = open_file(self.fdir+self.fname,'w')
-        # Add PEPS Info
-        create_dataset(f,'Nx',self.Nx)
-        create_dataset(f,'Ny',self.Ny)
-        create_dataset(f,'shape',self.shape)
-        create_dataset(f,'d',self.d)
-        create_dataset(f,'D',self.D)
-        create_dataset(f,'chi',self.chi)
-        create_dataset(f,'norm_tol',self.norm_tol)
-        create_dataset(f,'canonical',self.canonical)
-        create_dataset(f,'singleLayer',self.singleLayer)
-        create_dataset(f,'max_norm_iter',self.max_norm_iter)
-        create_dataset(f,'norm_BS_upper',self.norm_BS_upper)
-        create_dataset(f,'norm_BS_lower',self.norm_BS_lower)
-        create_dataset(f,'norm_BS_print',self.norm_BS_print)
-        #create_dataset(f,'dtype',self.dtype) # NOTE - Not able to save dtype...
-        create_dataset(f,'fname',self.fname)
-        create_dataset(f,'fdir',self.fdir)
-        # Add PEPS Tensors
-        for i in range(len(self.tensors)):
-            for j in range(len(self.tensors[i])):
-                create_dataset(f,'tensor_{}_{}'.format(i,j),self.tensors[i][j])
-        # Add Lambda Tensors (if Canonical)
-        if self.ltensors is not None:
-            for ind in range(len(self.ltensors)):
-                for x in range(len(self.ltensors[ind])):
-                    for y in range(len(self.ltensors[ind][x])):
-                        create_dataset(f,'ltensor_{}_{}_{}'.format(ind,x,y),self.ltensors[ind][x][y])
-        # Close file
-        close_file(f)
+        if self.Zn is None:
+            # Create dict to hold everything being saved
+            #save_dict = dict()
+            ## Add PEPS Tensors
+            #for i in range(len(self.tensors)):
+            #    for j in range(len(self.tensors[i])):
+            #        save_dict['tensor_{}_{}'.format(i,j)] = self.tensors[i][j].ten
+            ## Add Lambda Tensors (if Canonical)
+            #if self.ltensors is not None:
+            #    for ind in range(len(self.ltensors)):
+            #        for x in range(len(self.ltensors[ind])):
+            #            for y in range(len(self.ltensors[ind][x])):
+            #                save_dict['ltensor_{}_{}_{}'.format(ind,x,y)] = self.ltensors[ind][x][y].ten
+            #
+            #np.savez(self.fdir+self.fname,**save_dict)
+            # Create file
+            f = open_file(self.fdir+self.fname,'w')
+            # Add PEPS Info
+            create_dataset(f,'Nx',self.Nx)
+            create_dataset(f,'Ny',self.Ny)
+            create_dataset(f,'shape',self.shape)
+            create_dataset(f,'d',self.d)
+            create_dataset(f,'D',self.D)
+            create_dataset(f,'chi',self.chi)
+            create_dataset(f,'Zn',False if self.Zn is None else self.Zn)
+            create_dataset(f,'thermal',self.thermal)
+            create_dataset(f,'dZn',False if self.dZn is None else self.dZn)
+            create_dataset(f,'canonical',self.canonical)
+            create_dataset(f,'singleLayer',self.singleLayer)
+            create_dataset(f,'norm_tol',self.norm_tol)
+            create_dataset(f,'max_norm_iter',self.max_norm_iter)
+            create_dataset(f,'norm_bs_upper',self.norm_bs_upper)
+            create_dataset(f,'norm_bs_lower',self.norm_bs_lower)
+            create_dataset(f,'fname',self.fname)
+            create_dataset(f,'fdir',self.fdir)
+            # Add PEPS Tensors
+            for i in range(len(self.tensors)):
+                for j in range(len(self.tensors[i])):
+                    create_dataset(f,'tensor_{}_{}'.format(i,j),self.tensors[i][j].ten)
+                    #create_dataset(f,'tensorlegs_{}_{}'.format(i,j),self.tensors[i][j].legs)
+            # Add Lambda Tensors (if Canonical)
+            if self.ltensors is not None:
+                for ind in range(len(self.ltensors)):
+                    for x in range(len(self.ltensors[ind])):
+                        for y in range(len(self.ltensors[ind][x])):
+                            create_dataset(f,'ltensor_{}_{}_{}'.format(ind,x,y),self.ltensors[ind][x][y].ten)
+                            #create_dataset(f,'ltensorlegs_{}_{}_{}'.format(ind,x,y),self.ltensors[ind][x][y].legs)
+            # Close file
+            close_file(f)

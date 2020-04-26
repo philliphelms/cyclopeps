@@ -952,6 +952,12 @@ class GEN_TEN:
         else:
             return self._as_new_tensor(self.ten+x)
 
+    def __radd__(self,x):
+        if isinstance(x,GEN_TEN):
+            return self._as_new_tensor(self.ten+x.ten)
+        else:
+            return self._as_new_tensor(self.ten+x)
+
     def __sub__(self,x):
         if isinstance(x,GEN_TEN):
             return self._as_new_tensor(self.ten-x.ten)
