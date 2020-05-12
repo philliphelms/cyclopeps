@@ -44,6 +44,7 @@ def calc_entanglement(S,backend=np):
     # Ensure correct normalization
     norm_fact = backend.dot(S,S.conj())**(1./2.)
     S /= norm_fact
+    S += 1e-100
 
     # Calc Entanglement Spectrum
     EEspec = -S*S.conj()*backend.log2(S*S.conj())
