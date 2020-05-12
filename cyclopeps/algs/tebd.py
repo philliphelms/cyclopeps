@@ -151,14 +151,59 @@ def optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
     # Return Results
     return phys_t_new
 
-def noiseless_als(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
+def split_sites(comb,mbd):
+    """
+    Given two combined (reduced) sites,
+    split them back into two separated
+    tensor sites via svd
+    """
+    # Do the SVD Decomposition
+    site1,sings,site2 = comb.svd(2,
+                                 truncate_mbd=mbd,
+                                 return_ent=False,
+                                 return_wgt=False)
+
+    # Do some renormalization
+    sings /= einsum('ij,jk->ik',sings,sings).sqrt().to_val()
+
+    # Absorb singular values into sites
+    site1 = einsum('ijk,kl->ijl',site1,sings.sqrt())
+    site2 = einsum('ij,jkl->ikl',sings.sqrt(),site2)
+
+    # Return the result
+    return site1,site2
+
+def simple_update_init_guess(phys_b,phys_t,eH,mbd):
+    """
+    Create an initial guess for the ALS procedure
+    via a simple update style update
+    """
+    # Apply time evolution gate
+    tmp = einsum('DPA,AQU->DPQU',phys_b,phys_t)
+    if len(tmp.legs[1]) == 2:
+        # Thermal State time evolution
+        tmp.unmerge_ind(2)
+        tmp.unmerge_ind(1)
+        tmp = einsum('DPxQyU,PQpq->DpxqyU',tmp,eH)
+        tmp.merge_inds([1,2])
+        tmp.merge_inds([2,3])
+    else:
+        # Regular state time evolution
+        tmp = einsum('DPQU,PQpq->DpqU',tmp,eH)
+
+    # Split via SVD
+    phys_b,phys_t = split_sites(tmp,mbd)
+
+    # Return Results
+    return phys_b,phys_t
+
+def noiseless_als(phys_b,phys_t,N,eH,mbd,als_iter=100,als_tol=1e-10):
     """
     Do the Alternating least squares procedure, using the current
     physical index-holding tensors as the initial guess
     """
     # Create initial guesses for resulting tensors
-    phys_b_new = phys_b.copy()
-    phys_t_new = phys_t.copy()
+    phys_b_new,phys_t_new = simple_update_init_guess(phys_b,phys_t,eH,mbd)
 
     # Initialize cost function
     cost_prev = cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
@@ -189,12 +234,15 @@ def noisy_als(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
     physical index-holding tensors (with some noise) as the initial guess
     """
     # Create initial guesses for resulting tensors
-    noise_b = phys_b.copy()
-    noise_t = phys_t.copy()
+    phys_b_new,phys_t_new = simple_update_init_guess(phys_b,phys_t,eH,mbd)
+
+    # Add a bit of noise
+    noise_b = phys_b_new.copy()
+    noise_t = phys_t_new.copy()
     noise_b.randomize()
     noise_t.randomize()
-    phys_b_new = phys_b.copy() + 1e-5*noise_b
-    phys_t_new = phys_t.copy() + 1e-5*noise_t
+    phys_b_new += 1e-5*noise_b
+    phys_t_new += 1e-5*noise_t
 
     # Initialize cost function
     cost_prev = cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
@@ -219,19 +267,19 @@ def noisy_als(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
     # Return result
     return phys_b_new,phys_t_new
 
-def alternating_least_squares(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
+def alternating_least_squares(phys_b,phys_t,N,eH,mbd,als_iter=100,als_tol=1e-10):
     """
     Do alternating least squares to determine best tensors
     to represent time evolved tensors at smaller bond dimensions
     """
     try:
-        return noiseless_als(phys_b,phys_t,N,eH,als_iter=als_iter,als_tol=als_tol)
+        return noiseless_als(phys_b,phys_t,N,eH,mbd,als_iter=als_iter,als_tol=als_tol)
     except:
         # If als fails, then there are likely many zeros, so we expect
         # the time evolved tensors to be low rank, meaning doing a simple
         # update style evolution will provide a better initial guess
         phys_b,phys_t = svd_evolve(phys_b,phys_t,eH)
-        return noiseless_als(phys_b,phys_t,N,eH,als_iter=als_iter,als_tol=als_tol)
+        return noiseless_als(phys_b,phys_t,N,eH,mbd,als_iter=als_iter,als_tol=als_tol)
 
 def make_equal_distance(peps1,peps2,mbd):
     """
@@ -284,7 +332,7 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,mbd,als_ite
         eH = exp_gate(ham[row],-step_size)
 
         # Do alternating least squares to find new peps tensors
-        phys_b,phys_t = alternating_least_squares(phys_b,phys_t,N,eH,als_iter=als_iter,als_tol=als_tol)
+        phys_b,phys_t = alternating_least_squares(phys_b,phys_t,N,eH,mbd,als_iter=als_iter,als_tol=als_tol)
 
         # Calculate Energy & Norm
         E[row],norm = calc_local_op(phys_b,phys_t,N,ham[row],return_norm=True)
@@ -323,7 +371,6 @@ def tebd_step_col(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10):
 
     # Compute the boundary MPOs
     right_bmpo = calc_right_bound_mpo(peps, 0,chi=chi,return_all=True)
-    #left_bmpo  = calc_left_bound_mpo (peps,Nx,chi=chi,return_all=True)
     left_bmpo  = [None]*(Nx-1)
     ident_bmpo = identity_mps(len(right_bmpo[0]),
                               dtype=peps[0][0].dtype,
@@ -614,12 +661,6 @@ def run_tebd(Nx,Ny,d,ham,
                             chi = chi[Dind],
                             als_iter=als_iter,
                             als_tol=als_tol)
-
-        # Increase MBD if needed
-        if (len(D)-1 > Dind) and (D[Dind+1] > D[Dind]):
-            peps.increase_mbd(D[Dind+1],chi=chi[Dind+1])
-            peps.normalize()
-
 
     # Print out results
     mpiprint(0,'\n\n'+'#'*50)

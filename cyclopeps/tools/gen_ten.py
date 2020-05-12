@@ -42,11 +42,11 @@ def calc_entanglement(S,backend=np):
     # Create a copy of S
     S = S.copy()
     # Ensure correct normalization
-    norm_fact = backend.dot(S,S.conj())**(1./2.)
+    norm_fact = backend.dot(S,S.conj())**(1./2.)+1e-100
     S /= norm_fact
-    S += 1e-100
 
     # Calc Entanglement Spectrum
+    S += 1e-100
     EEspec = -S*S.conj()*backend.log2(S*S.conj())
 
     # Sum to get Entanglement Entropy

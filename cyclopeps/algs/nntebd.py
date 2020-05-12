@@ -2554,12 +2554,6 @@ def run_tebd(Nx,Ny,d,ham,
                             truncate_loc=truncate_loc,
                             chiloc=chiloc)
 
-        # Increase MBD if needed
-        if (len(D)-1 > Dind) and (D[Dind+1] > D[Dind]):
-            peps.increase_mbd(D[Dind+1],chi=chi[Dind+1])
-            peps.normalize()
-
-
     # Print out results
     mpiprint(0,'\n\n'+'#'*50)
     mpiprint(0,'FU TEBD Complete')
