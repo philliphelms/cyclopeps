@@ -16,7 +16,6 @@ Date: July 2019
 
 from cyclopeps.tools.gen_ten import rand,einsum,eye,ones,svd_ten,zeros
 #from cyclopeps.tools.params import *
-from symtensor.settings import load_lib
 from cyclopeps.tools.utils import *
 from cyclopeps.tools.mps_tools import MPS,identity_mps
 from numpy import float_

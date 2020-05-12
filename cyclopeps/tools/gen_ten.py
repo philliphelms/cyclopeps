@@ -940,7 +940,7 @@ class GEN_TEN:
     def __neg__(self):
         return self._as_new_tensor(-self.ten)
 
-    def __div__(self,x):
+    def __truediv__(self,x):
         return self._as_new_tensor((1./x)*self.ten)
 
     def __truediv__(self,x):
