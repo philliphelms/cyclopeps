@@ -14,6 +14,8 @@ except:
 from shutil import copyfile as _copyfile
 import os
 import time
+import h5py
+import sys
 
 def bytes2human(n):
     symbols = ('K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y')
@@ -43,6 +45,7 @@ def mpiprint(priority,msg):
             print('  '*priority+msg)
         except:
             print(msg)
+    sys.stdout.flush()
 
 def timeprint(priority,msg):
     """ 
@@ -105,3 +108,15 @@ def load_lib(libname):
         return lib
     else:
         return libname
+
+def open_file(fname,rw):
+    return h5py.File(fname,rw)
+
+def create_dataset(f,data_label,data):
+    f.create_dataset(data_label,data=data)
+
+def get_dataset(f,data_label):
+    return f[data_label][:]
+
+def close_file(f):
+    f.close()

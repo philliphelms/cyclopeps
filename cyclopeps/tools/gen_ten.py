@@ -937,8 +937,11 @@ class GEN_TEN:
     def __rmul__(self,x):
         return self*x
 
-    def __neg__(self,x):
+    def __neg__(self):
         return self._as_new_tensor(-self.ten)
+
+    def __truediv__(self,x):
+        return self._as_new_tensor((1./x)*self.ten)
 
     def __truediv__(self,x):
         return self._as_new_tensor((1./x)*self.ten)
@@ -946,7 +949,22 @@ class GEN_TEN:
     def __floordiv__(self,x):
         raise NotImplementedError('Floordiv not defined for gen_ten arrays')
 
+    def __rdiv__(self,x):
+        return self._as_new_tensor((1./x)*self.ten)
+
+    def __rtruediv__(self,x):
+        return self._as_new_tensor((1./x)*self.ten)
+
+    def __rfloordiv__(self,x):
+        raise NotImplementedError('Floordiv not defined for gen_ten arrays')
+
     def __add__(self,x):
+        if isinstance(x,GEN_TEN):
+            return self._as_new_tensor(self.ten+x.ten)
+        else:
+            return self._as_new_tensor(self.ten+x)
+
+    def __radd__(self,x):
         if isinstance(x,GEN_TEN):
             return self._as_new_tensor(self.ten+x.ten)
         else:
