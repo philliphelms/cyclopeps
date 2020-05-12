@@ -5,6 +5,7 @@ from cyclopeps.tools.peps_tools import *
 from cyclopeps.tools.ops_tools import *
 from cyclopeps.algs.simple_update import run_tebd as su
 from numpy import float_,isfinite
+import numpy as np
 
 def cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,U):
     """
@@ -117,7 +118,7 @@ def svd_evolve(phys_b,phys_t,eH):
 
     return U,V
 
-def optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
+def optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH,use_inv=False):
     """
     Note:
         implemented according to Section II.B of
@@ -142,6 +143,7 @@ def optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
         tmp = einsum('PQad,PQpq->pqad',tmp,eH)
     S   = einsum('pqad,dpu->uqa',tmp,phys_b_new)
 
+    # Solve least squares problem
     # Take inverse of R
     R_ = R.square_inv()
 
@@ -197,7 +199,7 @@ def simple_update_init_guess(phys_b,phys_t,eH,mbd):
     # Return Results
     return phys_b,phys_t
 
-def noiseless_als(phys_b,phys_t,N,eH,mbd,als_iter=100,als_tol=1e-10):
+def noiseless_als(phys_b,phys_t,N,eH,mbd,als_iter=100,als_tol=1e-10,stablesplit=True):
     """
     Do the Alternating least squares procedure, using the current
     physical index-holding tensors as the initial guess
@@ -216,11 +218,14 @@ def noiseless_als(phys_b,phys_t,N,eH,mbd,als_iter=100,als_tol=1e-10):
         # Optimize Top Site
         phys_t_new = optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
 
+        # Split singular values to stabilize
+        if stablesplit:
+            comb = einsum('DPA,AQU->DPQU',phys_b_new,phys_t_new)
+            phys_b_new,phys_t_new = split_sites(comb,mbd)
+
         # Check for convergence
         cost = cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
-        #print('Cost = {}'.format(cost))
         if (abs(cost) < als_tol) or (abs((cost-cost_prev)/cost) < als_tol):
-        #if (abs(cost) > abs(cost_prev)) or (abs(cost) < als_tol) or (abs((cost-cost_prev)/cost) < als_tol):
             break
         else:
             cost_prev = cost
@@ -228,7 +233,7 @@ def noiseless_als(phys_b,phys_t,N,eH,mbd,als_iter=100,als_tol=1e-10):
     # Return result
     return phys_b_new,phys_t_new
 
-def noisy_als(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
+def noisy_als(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10,stablesplit=True):
     """
     Do the Alternating least squares procedure, using the current
     physical index-holding tensors (with some noise) as the initial guess
@@ -255,11 +260,14 @@ def noisy_als(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10):
         # Optimize Top Site
         phys_t_new = optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
 
+        # Split singular values to stabilize
+        if stablesplit:
+            comb = einsum('DPA,AQU->DPQU',phys_b_new,phys_t_new)
+            phys_b_new,phys_t_new = split_sites(comb,mbd)
+
         # Check for convergence
         cost = cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
-        #print('Cost = {}'.format(cost))
         if (abs(cost) < als_tol) or (abs((cost-cost_prev)/cost) < als_tol):
-        #if (abs(cost) > abs(cost_prev)) or (abs(cost) < als_tol) or (abs((cost-cost_prev)/cost) < als_tol):
             break
         else:
             cost_prev = cost
