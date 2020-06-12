@@ -4240,3 +4240,31 @@ class PEPS:
                             #create_dataset(f,'ltensorlegs_{}_{}_{}'.format(ind,x,y),self.ltensors[ind][x][y].legs)
             # Close file
             close_file(f)
+        else:
+            raise NotImplementedError()
+
+    def load_tensors(self,fname):
+        if self.Zn is None:
+            # Open File
+            f = open_file(fname,'r')
+            # Check to make sure this peps and the one we are loading agree
+            assert(self.Nx == get_dataset(f,'Nx'))
+            assert(self.Ny == get_dataset(f,'Ny'))
+            assert(self.d == get_dataset(f,'d'))
+            assert(self.D == get_dataset(f,'D'))
+            assert(self.thermal == get_dataset(f,'thermal'))
+            assert(self.canonical == get_dataset(f,'canonical'))
+            # Get PEPS Tensors
+            for i in range(len(self.tensors)):
+                for j in range(len(self.tensors[i])):
+                    self.tensors[i][j].ten = get_dataset(f,'tensor_{}_{}'.format(i,j))
+            # Get Lambda Tensors (if Canonical
+            if self.ltensors is not None:
+                for ind in range(len(self.ltensors)):
+                    for x in range(len(self.ltensors[ind])):
+                        for y in range(len(self.ltensors[ind][x])):
+                            self.ltensors[ind][x][y].ten = get_dataset(f,'ltensor_{}_{}_{}'.format(ind,x,y))
+            # Close File
+            close_file(f)
+        else:
+            raise NotImplementedError()
