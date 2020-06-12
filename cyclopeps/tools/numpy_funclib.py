@@ -19,7 +19,6 @@ def inv(mat):
     try:
         return np.linalg.inv(mat)
     except:
-        print('\n\nUsing pinv\n\n')
         return np.linalg.pinv(mat)
 #inv = np.linalg.pinv
 def pinv(mat):

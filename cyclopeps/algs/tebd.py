@@ -316,8 +316,10 @@ def make_equal_distance(peps1,peps2,mbd):
     peps2 = einsum('DPa,LaRU->LDPRU',phys_t,vt)
 
     # Try to shrink norm by multiplying peps1 and peps2 by constants
+    #print('Before: {} {} {} {}'.format(peps1.ten[0,0,0,0,0],peps1.ten[0,0,1,0,0],peps2.ten[0,0,0,0,0],peps2.ten[0,0,1,0,0]))
     peps1 /= peps1.abs().max()
     peps2 /= peps2.abs().max()
+    #print('After :{} {} {} {}'.format(peps1.ten[0,0,0,0,0],peps1.ten[0,0,1,0,0],peps2.ten[0,0,0,0,0],peps2.ten[0,0,1,0,0]))
 
     # Return results
     return peps1,peps2
@@ -367,6 +369,7 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,mbd,als_ite
         norm_fact = bot_envs[row].abs().max()
         bot_envs[row] /= norm_fact
         peps_col[row] /= norm_fact**(1./2.)
+        peps_col[row+1] /= norm_fact**(1./2.)
 
     # Return the result
     return E,peps_col
@@ -463,7 +466,7 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,als_iter=100,als_
         peps.normalize()
 
         # Save PEPS
-        #peps.save()
+        peps.save()
         
         # Compute Resulting Energy
         E = peps.calc_op(ham,chi=chi)

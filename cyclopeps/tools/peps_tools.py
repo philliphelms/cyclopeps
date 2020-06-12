@@ -35,7 +35,7 @@ def copy_tensor_list(ten_list):
         ten_list_cp[i] = ten_list[i].copy()
     return ten_list_cp
 
-def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
+def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True,allow_normalize=False):
     """
     Create the initial boundary mpo for a peps
 
@@ -132,10 +132,12 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True):
             mpiprint(6,'Computing resulting bmpo norm')
             norm1 = bound_mps.norm()
             mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+    if allow_normalize:
+        bound_mps[0] /= bound_mps[0].abs().max()**(1./2.)
 
     return bound_mps
 
-def left_bmpo_sl_add_ket(ket,bound_mpo,Ny,chi=4,truncate=True):
+def left_bmpo_sl_add_ket(ket,bound_mpo,Ny,chi=4,truncate=True,allow_normalize=False):
     """
     Add the ket layer to the boundary mpo
     """
@@ -202,10 +204,12 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,Ny,chi=4,truncate=True):
             mpiprint(6,'Computing resulting bmpo norm')
             norm1 = bound_mps.norm()
             mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+    if allow_normalize:
+        bound_mps[0] /= bound_mps[0].abs().max()**(1./2.)
 
     return bound_mps
 
-def left_bmpo_sl_add_bra(bra,bound_mpo,Ny,chi=4,truncate=True):
+def left_bmpo_sl_add_bra(bra,bound_mpo,Ny,chi=4,truncate=True,allow_normalize=False):
     """
     Add the bra layer to the boundary mpo
     """
@@ -278,10 +282,12 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,Ny,chi=4,truncate=True):
             mpiprint(6,'Computing resulting bmpo norm')
             norm1 = bound_mps.norm()
             mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+    if allow_normalize:
+        bound_mps[0] /= bound_mps[0].abs().max()**(1./2.)
 
     return bound_mps
 
-def left_bmpo_sl(bra, bound_mpo, chi=4,truncate=True,ket=None):
+def left_bmpo_sl(bra, bound_mpo, chi=4,truncate=True,ket=None,allow_normalize=False):
     """
     Add two layers to the single layer boundary mpo environment
 
@@ -316,14 +322,14 @@ def left_bmpo_sl(bra, bound_mpo, chi=4,truncate=True,ket=None):
         ket = copy_tensor_list(bra)
 
     # First Layer (ket) #####################################
-    bound_mpo = left_bmpo_sl_add_ket(ket,bound_mpo,Ny,chi=chi,truncate=truncate)
+    bound_mpo = left_bmpo_sl_add_ket(ket,bound_mpo,Ny,chi=chi,truncate=truncate,allow_normalize=allow_normalize)
     # Second Layer (bra) ####################################
-    bound_mpo = left_bmpo_sl_add_bra(bra,bound_mpo,Ny,chi=chi,truncate=truncate)
+    bound_mpo = left_bmpo_sl_add_bra(bra,bound_mpo,Ny,chi=chi,truncate=truncate,allow_normalize=allow_normalize)
 
     # Return result
     return bound_mpo
 
-def left_update_sl(peps_col, bound_mpo, chi=4,truncate=True,ket=None):
+def left_update_sl(peps_col, bound_mpo, chi=4,truncate=True,ket=None,allow_normalize=False):
     """
     Update the boundary mpo, from the left, moving right, using single layer
 
@@ -348,18 +354,18 @@ def left_update_sl(peps_col, bound_mpo, chi=4,truncate=True,ket=None):
     """
     # Check if we are at left edge
     if bound_mpo is None:
-        bound_mpo = init_left_bmpo_sl(peps_col,chi=chi,truncate=truncate,ket=ket)
+        bound_mpo = init_left_bmpo_sl(peps_col,chi=chi,truncate=truncate,ket=ket,allow_normalize=allow_normalize)
     # Otherwise update is generic
     else:
         # Start from bottom of the column
-        bound_mpo = left_bmpo_sl(peps_col,bound_mpo,chi=chi,truncate=truncate,ket=ket)
+        bound_mpo = left_bmpo_sl(peps_col,bound_mpo,chi=chi,truncate=truncate,ket=ket,allow_normalize=allow_normalize)
     return bound_mpo
 
 def left_update(peps_col,bound_mpo,chi=4,ket=None):
     mpiprint(0,'Only single layer environment implemented')
     raise NotImplemented
 
-def update_left_bound_mpo(peps_col, bound_mpo, chi=4, singleLayer=True,truncate=True,ket_col=None):
+def update_left_bound_mpo(peps_col, bound_mpo, chi=4, singleLayer=True,truncate=True,ket_col=None,allow_normalize=False):
     """
     Update the boundary mpo, from the left, moving right
 
@@ -386,11 +392,11 @@ def update_left_bound_mpo(peps_col, bound_mpo, chi=4, singleLayer=True,truncate=
             An updated boundary mpo
     """
     if singleLayer:
-        return left_update_sl(peps_col,bound_mpo,chi=chi,truncate=truncate,ket=ket_col)
+        return left_update_sl(peps_col,bound_mpo,chi=chi,truncate=truncate,ket=ket_col,allow_normalize=allow_normalize)
     else:
         return left_update(peps_col,bound_mpo,chi=chi,truncate=truncate,ket=ket_col)
 
-def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None):
+def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None,allow_normalize=False):
     """
     Calculate the left boundary MPO
 
@@ -434,9 +440,9 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all
             ket_col = ket[colind][:]
         else: ket_col = None
         if colind == 0:
-            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], None, chi=chi, singleLayer=singleLayer,truncate=truncate,ket_col=ket_col)
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], None, chi=chi, singleLayer=singleLayer,truncate=truncate,ket_col=ket_col,allow_normalize=allow_normalize)
         else:
-            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], bound_mpo[colind-1], chi=chi, singleLayer=singleLayer,truncate=truncate,ket_col=ket_col)
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], bound_mpo[colind-1], chi=chi, singleLayer=singleLayer,truncate=truncate,ket_col=ket_col,allow_normalize=allow_normalize)
 
     # Return result
     if return_all:
@@ -444,7 +450,7 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all
     else:
         return bound_mpo[-1]
 
-def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None):
+def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None,allow_normalize=False):
     """
     Calculate the right boundary MPO
 
@@ -495,9 +501,9 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
             ket_col = ket[colind][:]
         else: ket_col = None
         if colind == 0:
-            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], None, chi=chi, singleLayer=singleLayer, truncate=truncate, ket_col=ket_col)
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], None, chi=chi, singleLayer=singleLayer, truncate=truncate, ket_col=ket_col,allow_normalize=allow_normalize)
         else:
-            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], bound_mpo[colind-1], chi=chi, singleLayer=singleLayer, truncate=truncate, ket_col=ket_col)
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], bound_mpo[colind-1], chi=chi, singleLayer=singleLayer, truncate=truncate, ket_col=ket_col,allow_normalize=allow_normalize)
 
     # Unflip the peps
     peps = flip_peps(peps)
@@ -1096,7 +1102,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
 
     return z, peps_try
 
-def calc_peps_norm(_peps,chi=4,singleLayer=True,ket=None):
+def calc_peps_norm(_peps,chi=4,singleLayer=True,ket=None,allow_normalize=False):
     """
     Calculate the norm of the PEPS
 
@@ -1132,10 +1138,10 @@ def calc_peps_norm(_peps,chi=4,singleLayer=True,ket=None):
     Ny = len(peps[0])
 
     # Get the boundary MPO from the left (for the furthest right column)
-    left_bound_mpo  = calc_left_bound_mpo(peps,Nx,chi=chi,singleLayer=singleLayer,ket=ket)
+    left_bound_mpo  = calc_left_bound_mpo(peps,Nx,chi=chi,singleLayer=singleLayer,ket=ket,allow_normalize=allow_normalize)
 
     # Get the boundary MPO from the right (for the furthest right column)
-    right_bound_mpo = calc_right_bound_mpo(peps,Nx-2,chi=chi,singleLayer=singleLayer,ket=ket)
+    right_bound_mpo = calc_right_bound_mpo(peps,Nx-2,chi=chi,singleLayer=singleLayer,ket=ket,allow_normalize=allow_normalize)
 
     # Contract the two MPOs
     norm = left_bound_mpo.contract(right_bound_mpo)
@@ -3213,7 +3219,7 @@ def calc_single_column_op(peps_col,left_bmpo,right_bmpo,ops_col,normalize=True,k
         E[row] = calc_local_op(phys_b,phys_t,N,ops_col[row],normalize=normalize,phys_b_ket=phys_bk,phys_t_ket=phys_tk)
     return E
 
-def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
+def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None,allow_normalize=False):
     """
     Calculate contribution to operator from interactions within all columns,
     ignoring interactions between columns
@@ -3244,8 +3250,8 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
     Ny = len(peps[0])
 
     # Compute the boundary MPOs
-    right_bmpo = calc_right_bound_mpo(peps, 0,chi=chi,return_all=True,ket=ket)
-    left_bmpo  = calc_left_bound_mpo (peps,Nx,chi=chi,return_all=True,ket=ket)
+    right_bmpo = calc_right_bound_mpo(peps, 0,chi=chi,return_all=True,ket=ket,allow_normalize=allow_normalize)
+    left_bmpo  = calc_left_bound_mpo (peps,Nx,chi=chi,return_all=True,ket=ket,allow_normalize=allow_normalize)
     ident_bmpo = identity_mps(len(right_bmpo[0]),
                               dtype=peps[0][0].dtype,
                               sym=(peps[0][0].sym is not None),
@@ -3271,7 +3277,7 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
     else:
         return E
 
-def calc_peps_nn_op(peps,ops,chi=10,normalize=True,ket=None,contracted_env=False):
+def calc_peps_nn_op(peps,ops,chi=10,normalize=True,ket=None,contracted_env=False,allow_normalize=False):
     """
     Calculate the expectation value for a given next nearest (nn) neighbor operator
 
@@ -3313,8 +3319,8 @@ def calc_peps_nn_op(peps,ops,chi=10,normalize=True,ket=None,contracted_env=False
     Ny = len(peps[0])
 
     # Compute the boundary MPOs
-    right_bmpo = calc_right_bound_mpo(peps, 0,chi=chi,return_all=True,ket=ket)
-    left_bmpo  = calc_left_bound_mpo (peps,Nx,chi=chi,return_all=True,ket=ket)
+    right_bmpo = calc_right_bound_mpo(peps, 0,chi=chi,return_all=True,ket=ket,allow_normalize=allow_normalize)
+    left_bmpo  = calc_left_bound_mpo (peps,Nx,chi=chi,return_all=True,ket=ket,allow_normalize=allow_normalize)
     ident_bmpo = identity_mps(len(right_bmpo[0]),
                               dtype=peps[0][0].dtype,
                               sym=(peps[0][0].sym is not None),
@@ -3859,7 +3865,7 @@ class PEPS:
         if normalize:
             self.normalize()
 
-    def calc_bmpo_left(self,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None):
+    def calc_bmpo_left(self,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None,allow_normalize=False):
         """
         Calculate the left boundary MPO
 
@@ -3893,9 +3899,9 @@ class PEPS:
             chi = self.chi
         if singleLayer is None:
             singleLayer = self.singleLayer
-        return calc_left_bound_mpo(self,col,chi=chi,singleLayer=singleLayer,truncate=truncate,return_all=return_all,ket=ket)
+        return calc_left_bound_mpo(self,col,chi=chi,singleLayer=singleLayer,truncate=truncate,return_all=return_all,ket=ket,allow_normalize=allow_normalize)
 
-    def calc_bmpo_right(self,col,chi=None,singleLayer=None,truncate=True,return_all=False,ket=None):
+    def calc_bmpo_right(self,col,chi=None,singleLayer=None,truncate=True,return_all=False,ket=None,allow_normalize=False):
         """
         Calculate the right boundary MPO
 
@@ -3930,7 +3936,7 @@ class PEPS:
             chi = self.chi
         if singleLayer is None:
             singleLayer = self.singleLayer
-        return calc_right_bound_mpo(self,col,chi=chi,singleLayer=singleLayer,truncate=truncate,return_all=return_all,ket=ket)
+        return calc_right_bound_mpo(self,col,chi=chi,singleLayer=singleLayer,truncate=truncate,return_all=return_all,ket=ket,allow_normalize=allow_normalize)
 
     def calc_norm(self,chi=None,singleLayer=None,ket=None):
         """

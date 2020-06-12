@@ -1006,7 +1006,7 @@ class GEN_TEN:
             assert(len(self.ten.shape) == 4)
             (n1,n2,n3,n4) = self.ten.shape
             mat = self.backend.reshape(self.ten,(n1*n2,n3*n4))
-            inv = self.backend.inv(mat)
+            inv = self.backend.pinv(mat)
             newten.ten = self.backend.reshape(inv,(n1,n2,n3,n4))
         else:
             # Do the inversion with the full tensor
@@ -1014,7 +1014,7 @@ class GEN_TEN:
             (N1,N2,N3,N4,n1,n2,n3,n4) = mat.shape
             mat = mat.transpose([0,4,1,5,2,6,3,7])
             mat = mat.reshape((N1*n1*N2*n2,N3*n3*N4*n4))
-            inv = self.backend.inv(mat)
+            inv = self.backend.pinv(mat)
             inv = inv.reshape((N1,n1,N2,n2,N3,n3,N4,n4))
             inv = inv.transpose([0,2,4,6,1,3,5,7])
             # Convert back into sparse tensor
