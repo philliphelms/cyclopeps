@@ -435,6 +435,7 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all
     # Loop through the columns, creating a boundary mpo for each
     bound_mpo = [None]*(col-1)
     for colind in range(col-1):
+        #print('Left BMPO {}'.format(colind))
         mpiprint(4,'Updating left boundary mpo')
         if ket is not None:
             ket_col = ket[colind][:]
@@ -496,6 +497,7 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
     # Loop through the columns, creating a boundary mpo for each
     bound_mpo = [None]*(col-1)
     for colind in range(col-1):
+        #print('Boundary MPO {}'.format(colind))
         mpiprint(4,'Updating boundary mpo')
         if ket is not None:
             ket_col = ket[colind][:]
@@ -1043,17 +1045,11 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
             sfac = z**pwr
             peps_try = multiply_peps_elements(peps.copy(),sfac)
             z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer)
+            if abs(z-1.) < 1e-6: 
+                return z, peps_try
         else:
-            try:
-                sfac = 1e-3
-                peps_try = multiply_peps_elements(peps.copy(),sfac)
-                z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer)
-            except:
-                sfac = 1e3
-                peps_try = multiply_peps_elements(peps.copy(),sfac)
-                z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer)
-        if abs(z-1.) < 1e-6: 
-            return z, peps_try
+            z = None
+            peps_try = peps.copy()
 
     # get initial scale factor
     scale = (up+down)/2.0
@@ -1067,13 +1063,15 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
             istep += 1
             z = None
             z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer)
-        except:
-            print('Failed to calculate peps norm')
+            z = abs(z)
+            #print('Succesffuly calculated peps norm: {}'.format(z))
+        except Exception as e:
+            #print('Failed to calculate peps norm: {}'.format(e))
             pass
         mpiprint(2, 'step={}, (down,up)=({},{}), scale={}, norm={}'.format(
                                                         istep,down,up,scale,z))
         # if an exception is thrown in calc_peps_norm because scale is too large
-        if z == None:
+        if (z == None) or (not np.isfinite(z)):
             up = scale
             scale = scale / 2.0
         # adjust scale to make z into target region
@@ -3214,6 +3212,7 @@ def calc_single_column_op(peps_col,left_bmpo,right_bmpo,ops_col,normalize=True,k
     # Calculate Energy
     E = peps_col[0].backend.zeros(len(ops_col))
     for row in range(len(ops_col)):
+        #print('\t\trow{}'.format(row))
         res = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=False,positive=False,ket_col=ket_col)
         _,phys_b,phys_t,_,_,phys_bk,phys_tk,_,N = res
         E[row] = calc_local_op(phys_b,phys_t,N,ops_col[row],normalize=normalize,phys_b_ket=phys_bk,phys_t_ket=phys_tk)
@@ -3260,6 +3259,7 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None,a
     # Loop through all columns
     E = peps.backend.zeros((len(ops),len(ops[0])),dtype=peps[0][0].dtype)
     for col in range(Nx):
+        #print('\tcol = {}'.format(col))
         if ket is None:
             ket_col = None
         else: ket_col = ket[col]
@@ -3422,12 +3422,14 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
         ket = ket.copy()
 
     # Calculate contribution from interactions between columns
+    #print('Column Ops')
     col_energy = calc_all_column_op(peps,ops[0],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
 
     # Calculate contribution from interactions between rows
     peps.rotate(clockwise=True)
     if ket is not None: 
         ket.rotate(clockwise=True)
+    #print('Row Ops')
     row_energy = calc_all_column_op(peps,ops[1],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
     peps.rotate(clockwise=False)
     if ket is not None: 
@@ -4213,39 +4215,45 @@ class PEPS:
             #
             #np.savez(self.fdir+self.fname,**save_dict)
             # Create file
-            f = open_file(self.fdir+self.fname,'w')
-            # Add PEPS Info
-            create_dataset(f,'Nx',self.Nx)
-            create_dataset(f,'Ny',self.Ny)
-            create_dataset(f,'shape',self.shape)
-            create_dataset(f,'d',self.d)
-            create_dataset(f,'D',self.D)
-            create_dataset(f,'chi',self.chi)
-            create_dataset(f,'Zn',False if self.Zn is None else self.Zn)
-            create_dataset(f,'thermal',self.thermal)
-            create_dataset(f,'dZn',False if self.dZn is None else self.dZn)
-            create_dataset(f,'canonical',self.canonical)
-            create_dataset(f,'singleLayer',self.singleLayer)
-            create_dataset(f,'norm_tol',self.norm_tol)
-            create_dataset(f,'max_norm_iter',self.max_norm_iter)
-            create_dataset(f,'norm_bs_upper',self.norm_bs_upper)
-            create_dataset(f,'norm_bs_lower',self.norm_bs_lower)
-            create_dataset(f,'fname',self.fname)
-            create_dataset(f,'fdir',self.fdir)
-            # Add PEPS Tensors
-            for i in range(len(self.tensors)):
-                for j in range(len(self.tensors[i])):
-                    create_dataset(f,'tensor_{}_{}'.format(i,j),self.tensors[i][j].ten)
-                    #create_dataset(f,'tensorlegs_{}_{}'.format(i,j),self.tensors[i][j].legs)
-            # Add Lambda Tensors (if Canonical)
-            if self.ltensors is not None:
-                for ind in range(len(self.ltensors)):
-                    for x in range(len(self.ltensors[ind])):
-                        for y in range(len(self.ltensors[ind][x])):
-                            create_dataset(f,'ltensor_{}_{}_{}'.format(ind,x,y),self.ltensors[ind][x][y].ten)
-                            #create_dataset(f,'ltensorlegs_{}_{}_{}'.format(ind,x,y),self.ltensors[ind][x][y].legs)
-            # Close file
-            close_file(f)
+            for i in range(5):
+                try:
+                    f = open_file(self.fdir+self.fname,'w')
+                    # Add PEPS Info
+                    create_dataset(f,'Nx',self.Nx)
+                    create_dataset(f,'Ny',self.Ny)
+                    create_dataset(f,'shape',self.shape)
+                    create_dataset(f,'d',self.d)
+                    create_dataset(f,'D',self.D)
+                    create_dataset(f,'chi',self.chi)
+                    create_dataset(f,'Zn',False if self.Zn is None else self.Zn)
+                    create_dataset(f,'thermal',self.thermal)
+                    create_dataset(f,'dZn',False if self.dZn is None else self.dZn)
+                    create_dataset(f,'canonical',self.canonical)
+                    create_dataset(f,'singleLayer',self.singleLayer)
+                    create_dataset(f,'norm_tol',self.norm_tol)
+                    create_dataset(f,'max_norm_iter',self.max_norm_iter)
+                    create_dataset(f,'norm_bs_upper',self.norm_bs_upper)
+                    create_dataset(f,'norm_bs_lower',self.norm_bs_lower)
+                    create_dataset(f,'fname',self.fname)
+                    create_dataset(f,'fdir',self.fdir)
+                    # Add PEPS Tensors
+                    for i in range(len(self.tensors)):
+                        for j in range(len(self.tensors[i])):
+                            create_dataset(f,'tensor_{}_{}'.format(i,j),self.tensors[i][j].ten)
+                            #create_dataset(f,'tensorlegs_{}_{}'.format(i,j),self.tensors[i][j].legs)
+                    # Add Lambda Tensors (if Canonical)
+                    if self.ltensors is not None:
+                        for ind in range(len(self.ltensors)):
+                            for x in range(len(self.ltensors[ind])):
+                                for y in range(len(self.ltensors[ind][x])):
+                                    create_dataset(f,'ltensor_{}_{}_{}'.format(ind,x,y),self.ltensors[ind][x][y].ten)
+                                    #create_dataset(f,'ltensorlegs_{}_{}_{}'.format(ind,x,y),self.ltensors[ind][x][y].legs)
+                    # Close file
+                    close_file(f)
+                    break
+                except:
+                    #print('Saving PEPS Failed... Attempt ({}/5)'.format(i))
+                    pass
         else:
             raise NotImplementedError()
 
@@ -4256,10 +4264,6 @@ class PEPS:
             # Check to make sure this peps and the one we are loading agree
             assert(self.Nx == get_dataset(f,'Nx'))
             assert(self.Ny == get_dataset(f,'Ny'))
-            assert(self.d == get_dataset(f,'d'))
-            assert(self.D == get_dataset(f,'D'))
-            assert(self.thermal == get_dataset(f,'thermal'))
-            assert(self.canonical == get_dataset(f,'canonical'))
             # Get PEPS Tensors
             for i in range(len(self.tensors)):
                 for j in range(len(self.tensors[i])):

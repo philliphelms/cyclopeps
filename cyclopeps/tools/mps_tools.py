@@ -606,7 +606,28 @@ def make_mps_right(mps,truncate_mbd=1e100):
     # Return results
     return mps
 
-def mps_apply_svd(mps,chi):
+def redistribute_mps_vals(mps):
+    """
+    The gauge being held on a single bond can 
+    make the absolute values of entries on that tensor
+    large. If this is true, then after applying the svd,
+    those large values will be redistributed between 
+    all tensors. 
+
+    Args: 
+        mps : MPS object
+            The MPS which will have its tensor maximum values
+            redistributed, the gauge should be on the first
+            tensor site (could be done by using make_mps_right(mps))
+    """
+    maxval = mps[0].abs().max()
+    normval = maxval**(1./(float(len(mps))-1.))
+    mps[0].ten /= maxval
+    for i in range(1,len(mps)):
+        mps[i] *= normval
+    return mps
+
+def mps_apply_svd(mps,chi,redistribute=True):
     """
     Shrink the maximum bond dimension of an mps
 
@@ -616,6 +637,14 @@ def mps_apply_svd(mps,chi):
         chi : int
             The new maximum bond dimension
 
+    Kwargs:
+        redistribute : bool
+            The gauge being held on a single bond can 
+            make the absolute values of entries on that tensor
+            large. If this is true, then after applying the svd,
+            those large values will be redistributed between 
+            all tensors. 
+
     Returns:
         mps : List of mps tensors
             The mps with a maximum bond dimension of \chi
@@ -624,6 +653,8 @@ def mps_apply_svd(mps,chi):
     mps = make_mps_left(mps)
     mpiprint(8,'Truncating as moving to right')
     mps = make_mps_right(mps,truncate_mbd=chi)
+    if redistribute:
+        mps = redistribute_mps_vals(mps)
     return mps
 
 def identity_mps(N,dtype=float_,sym=False,backend='numpy',alternating=True):
@@ -709,20 +740,26 @@ class MPS:
                 mps_tmp[site] *= -1.
         return mps_tmp
 
-    def apply_svd(self,chi):
+    def apply_svd(self,chi,redistribute=True):
         """
         Shrink the maximum bond dimension of an mps
 
         Args:
             self : MPS Object
                 The mps which will be used
-
-        Kwargs:
             chi : int
                 The new maximum bond dimension
+
+        Kwargs:
+            redistribute : bool
+                The gauge being held on a single bond can 
+                make the absolute values of entries on that tensor
+                large. If this is true, then after applying the svd,
+                those large values will be redistributed between 
+                all tensors. 
         """
         res = self.copy()
-        res = mps_apply_svd(res,chi)
+        res = mps_apply_svd(res,chi,redistribute=redistribute)
         return MPS(res)
 
     def make_left_canonical(self,chi=1e100):

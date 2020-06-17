@@ -10,6 +10,7 @@
 *.out
 *.csv
 /cyclopeps/scripts/jobs
+/cyclopeps/saved_peps
 
 .vscode
 

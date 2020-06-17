@@ -12,7 +12,11 @@ ones = np.ones
 rint = np.rint
 random = np.random.random
 norm = np.linalg.norm
-svd = np.linalg.svd
+def svd(mat):
+    try:
+        return np.linalg.svd(mat)
+    except:
+        return sla.svd(mat,lapack_driver='gesvd')
 qr = np.linalg.qr
 eigh = np.linalg.eigh
 def inv(mat):

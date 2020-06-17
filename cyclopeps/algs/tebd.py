@@ -431,7 +431,7 @@ def tebd_step_col(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10):
     # Return result
     return E,peps
 
-def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10):
+def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10,print_prepend=''):
     """
     """
     # Columns ----------------------------------
@@ -441,26 +441,26 @@ def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10):
     Erow,peps = tebd_step_col(peps,ham[1],step_size,mbd,chi=chi,als_iter=als_iter,als_tol=als_tol)
     peps.rotate(clockwise=False)
     # Return results ---------------------------
-    mpiprint(5,'Column energies =\n{}'.format(Ecol))
-    mpiprint(5,'Row energies =\n{}'.format(Erow))
+    mpiprint(5,print_prepend+'Column energies =\n{}'.format(Ecol))
+    mpiprint(5,print_prepend+'Row energies =\n{}'.format(Erow))
     E = peps.backend.sum(Ecol)+peps.backend.sum(Erow)
     return E,peps
 
-def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,als_iter=100,als_tol=1e-10):
+def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,als_iter=100,als_tol=1e-10,print_prepend=''):
     """
     """
     nSite = len(peps)*len(peps[0])
 
     # Compute Initial Energy
-    mpiprint(3,'Calculation Initial Energy/site')
+    mpiprint(3,print_prepend+'Calculation Initial Energy/site')
     Eprev = peps.calc_op(ham,chi=chi)
-    mpiprint(0,'Initial Energy/site = {}'.format(Eprev/nSite))
+    mpiprint(0,print_prepend+'Initial Energy/site = {}'.format(Eprev/nSite))
 
     # Do a single tebd step
     for iter_cnt in range(n_step):
 
         # Do TEBD Step
-        _,peps = tebd_step(peps,ham,step_size,mbd,chi=chi,als_iter=als_iter,als_tol=als_tol)
+        _,peps = tebd_step(peps,ham,step_size,mbd,chi=chi,als_iter=als_iter,als_tol=als_tol,print_prepend=print_prepend)
 
         # Normalize just in case
         peps.normalize()
@@ -472,7 +472,7 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,als_iter=100,als_
         E = peps.calc_op(ham,chi=chi)
 
         # Check for convergence
-        mpiprint(0,'Energy/site = {}'.format(E/nSite))
+        mpiprint(0,print_prepend+'Energy/site = {}'.format(E/nSite))
         if abs((E-Eprev)/E) < conv_tol:
             mpiprint(3,'Converged E = {} to an accuracy of ~{}'.format(E,abs(E-Eprev)))
             converged = True
@@ -503,7 +503,8 @@ def run_tebd(Nx,Ny,d,ham,
              als_iter=5,
              als_tol=1e-10,
              peps_fname=None,
-             peps_fdir='./'):
+             peps_fdir='./',
+             print_prepend=''):
     """
     Run the TEBD algorithm for a PEPS
 
@@ -583,10 +584,13 @@ def run_tebd(Nx,Ny,d,ham,
             The name of the saved peps file
         peps_fdir : str
             The location where the peps will be saved
+        print_prepend : str
+            What to add to the beginning of all printed results, 
+            default is nothing
     """
     t0 = time.time()
-    mpiprint(0,'\n\nStarting TEBD Calculation')
-    mpiprint(0,'#'*50)
+    mpiprint(0,'\n\n'+print_prepend+'Starting TEBD Calculation')
+    mpiprint(0,print_prepend+'#'*50)
 
     # Ensure the optimization parameters, namely the
     # bond dimension, trotter step size, and number
@@ -656,11 +660,14 @@ def run_tebd(Nx,Ny,d,ham,
     # Absorb lambda tensors if canonical
     if peps.ltensors is not None:
         peps.absorb_lambdas()
+    
+    # Make sure the peps is normalized
+    peps.normalize()
 
     # Loop over all (bond dims/step sizes/number of steps)
     for Dind in range(len(D)):
 
-        mpiprint(0,'\nFU Calculation for (D,chi,dt) = ({},{},{})'.format(D[Dind],chi[Dind],step_size[Dind]))
+        mpiprint(0,'\n'+print_prepend+'FU Calculation for (D,chi,dt) = ({},{},{})'.format(D[Dind],chi[Dind],step_size[Dind]))
 
         # Do a tebd evolution for given step size
         E,peps = tebd_steps(peps,
@@ -671,13 +678,14 @@ def run_tebd(Nx,Ny,d,ham,
                             D[Dind],
                             chi = chi[Dind],
                             als_iter=als_iter,
-                            als_tol=als_tol)
+                            als_tol=als_tol,
+                            print_prepend=print_prepend)
 
     # Print out results
-    mpiprint(0,'\n\n'+'#'*50)
-    mpiprint(0,'FU TEBD Complete')
-    mpiprint(0,'-------------')
-    mpiprint(0,'Total time = {} s'.format(time.time()-t0))
-    mpiprint(0,'Per Site Energy = {}'.format(E/(Nx*Ny)))
+    mpiprint(0,'\n\n'+print_prepend+'#'*50)
+    mpiprint(0,print_prepend+'FU TEBD Complete')
+    mpiprint(0,print_prepend+'-------------')
+    mpiprint(0,print_prepend+'Total time = {} s'.format(time.time()-t0))
+    mpiprint(0,print_prepend+'Per Site Energy = {}'.format(E/(Nx*Ny)))
 
     return E,peps
