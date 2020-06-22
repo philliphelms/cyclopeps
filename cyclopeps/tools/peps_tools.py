@@ -435,7 +435,6 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all
     # Loop through the columns, creating a boundary mpo for each
     bound_mpo = [None]*(col-1)
     for colind in range(col-1):
-        #print('Left BMPO {}'.format(colind))
         mpiprint(4,'Updating left boundary mpo')
         if ket is not None:
             ket_col = ket[colind][:]
@@ -497,7 +496,6 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
     # Loop through the columns, creating a boundary mpo for each
     bound_mpo = [None]*(col-1)
     for colind in range(col-1):
-        #print('Boundary MPO {}'.format(colind))
         mpiprint(4,'Updating boundary mpo')
         if ket is not None:
             ket_col = ket[colind][:]
@@ -971,7 +969,6 @@ def multiply_peps_elements(peps,const):
     Returns:
         peps : a PEPS object, or list of lists, depending on input
     """
-
     Nx = len(peps)
     Ny = len(peps[0])
     for xind in range(Nx):
@@ -980,7 +977,7 @@ def multiply_peps_elements(peps,const):
     return peps
 
 def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
-                    down=0.0,singleLayer=True):
+                    down=0.0,singleLayer=True,ket=None,pf=False):
     """
     Normalize the full PEPS by doing a binary search on the
     interval [down, up] for the factor which, when multiplying
@@ -1015,6 +1012,14 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
         single_layer : bool
             Indicates whether to use a single layer environment
             (currently it is the only option...)
+        ket : peps object
+            If you would like the ket to be 'normalized', such that 
+            when contracted with another peps, the contraction is equal
+            to one. Only the peps (not ket) will be altered to attempt
+            the normalization
+        pf: bool
+            If True, then we will normalize as though this is a partition
+            function instead of a contraction between to peps
 
     Returns:
         norm : float
@@ -1030,21 +1035,21 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
     Ny = peps.Ny
     be = peps[0][0].backend
 
-    pwr = -1.0 / (2*Nx*Ny) # NOTE: if trying to use this procedure to
-                           # normalize a partition function, remove
-                           # the factor of 2 in this denominator
+    
+    if pf: pwr = -1./(Nx*Ny)
+    else: pwr = -1./(2*Nx*Ny)
     mpiprint(4, '\n[binarySearch] shape=({},{}), chi={}'.format(Nx,Ny,chi))
 
     # Check if state is already easily normalized
     try:
-        z = calc_peps_norm(peps,chi=chi,singleLayer=singleLayer)
+        z = calc_peps_norm(peps,chi=chi,singleLayer=singleLayer,ket=ket)
     except:
         z = None
     if not (z < 10.**(-1*norm_tol) or z > 10.**(norm_tol)) or (z is None):
         if z is not None:
             sfac = z**pwr
             peps_try = multiply_peps_elements(peps.copy(),sfac)
-            z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer)
+            z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer,ket=ket)
             if abs(z-1.) < 1e-6: 
                 return z, peps_try
         else:
@@ -1059,10 +1064,11 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
 
     istep = 0
     while True:
+        #print('up: {}, down: {}, norm: {}'.format(up,down,z))
         try:
             istep += 1
             z = None
-            z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer)
+            z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer,ket=ket)
             z = abs(z)
             #print('Succesffuly calculated peps norm: {}'.format(z))
         except Exception as e:
@@ -1073,7 +1079,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
         # if an exception is thrown in calc_peps_norm because scale is too large
         if (z == None) or (not np.isfinite(z)):
             up = scale
-            scale = scale / 2.0
+            scale = (up+down)/2.
         # adjust scale to make z into target region
         else:
             if abs(z-1.0) < 1e-6:
@@ -3212,7 +3218,6 @@ def calc_single_column_op(peps_col,left_bmpo,right_bmpo,ops_col,normalize=True,k
     # Calculate Energy
     E = peps_col[0].backend.zeros(len(ops_col))
     for row in range(len(ops_col)):
-        #print('\t\trow{}'.format(row))
         res = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=False,positive=False,ket_col=ket_col)
         _,phys_b,phys_t,_,_,phys_bk,phys_tk,_,N = res
         E[row] = calc_local_op(phys_b,phys_t,N,ops_col[row],normalize=normalize,phys_b_ket=phys_bk,phys_t_ket=phys_tk)
@@ -3259,7 +3264,6 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None,a
     # Loop through all columns
     E = peps.backend.zeros((len(ops),len(ops[0])),dtype=peps[0][0].dtype)
     for col in range(Nx):
-        #print('\tcol = {}'.format(col))
         if ket is None:
             ket_col = None
         else: ket_col = ket[col]
@@ -3409,6 +3413,8 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
         val : float
             The resulting observable's expectation value
     """
+    # "normalize" with respect to the contraction between the two peps
+    peps.normalize(ket=ket,pf=True)
     # Absorb Lambda tensors if needed
     if peps.ltensors is not None:
         peps = peps.copy()
@@ -3422,14 +3428,12 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
         ket = ket.copy()
 
     # Calculate contribution from interactions between columns
-    #print('Column Ops')
     col_energy = calc_all_column_op(peps,ops[0],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
 
     # Calculate contribution from interactions between rows
     peps.rotate(clockwise=True)
     if ket is not None: 
         ket.rotate(clockwise=True)
-    #print('Row Ops')
     row_energy = calc_all_column_op(peps,ops[1],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
     peps.rotate(clockwise=False)
     if ket is not None: 
@@ -3965,7 +3969,7 @@ class PEPS:
         return calc_peps_norm(self,chi=chi,singleLayer=singleLayer,ket=ket)
 
     def normalize(self,max_iter=None,norm_tol=None,chi=None,up=None,down=None,
-                    singleLayer=None):
+                    singleLayer=None,ket=None,pf=False):
         """
         Normalize the full PEPS
 
@@ -3997,6 +4001,14 @@ class PEPS:
             single_layer : bool
                 Indicates whether to use a single layer environment
                 (currently it is the only option...)
+            ket : peps object
+                If you would like the ket to be 'normalized', such that 
+                when contracted with another peps, the contraction is equal
+                to one. Only the peps (not ket) will be altered to attempt
+                the normalization
+            pf: bool
+                If True, then we will normalize as though this is a partition
+                function instead of a contraction between to peps
 
         Returns:
             norm : float
@@ -4017,7 +4029,9 @@ class PEPS:
                                       chi = chi,
                                       up = up,
                                       down = down,
-                                      singleLayer=singleLayer)
+                                      singleLayer=singleLayer,
+                                      ket=ket,
+                                      pf=pf)
         # Copy the resulting tensors
         self.tensors = copy_peps_tensors(normpeps)
         if self.ltensors is not None:

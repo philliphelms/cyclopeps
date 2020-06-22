@@ -622,6 +622,7 @@ def redistribute_mps_vals(mps):
     """
     maxval = mps[0].abs().max()
     normval = maxval**(1./(float(len(mps))-1.))
+    #print('maxval = {}, normval = {}'.format(maxval,normval))
     mps[0].ten /= maxval
     for i in range(1,len(mps)):
         mps[i] *= normval
