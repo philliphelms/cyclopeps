@@ -167,7 +167,7 @@ def move_gauge_left_qr(ten1,ten2):
     mpiprint(0,'QR to the left not implemented yet')
     raise NotImplemented
 
-def move_gauge_right_svd(ten1,ten2,truncate_mbd=1e100):
+def move_gauge_right_svd(ten1,ten2,truncate_mbd=1e100,split_s=False):
     """
     Move the gauge via svd from ten1 to ten2
 
@@ -201,11 +201,16 @@ def move_gauge_right_svd(ten1,ten2,truncate_mbd=1e100):
 
     # Perform the svd on the tensor
     U,S,V,EE,EEs,wgt = ten1.svd(2,truncate_mbd=truncate_mbd)
-    ten1 = U
 
     # Multiply remainder into neighboring site
-    gauge = einsum('ab,bc->ac',S,V)
-    ten2 = einsum('ab,bpc->apc',gauge,ten2)
+    if split_s:
+        ten1 = einsum('abc,cd->abd',U,S.sqrt())
+        gauge = einsum('ab,bc->ac',S.sqrt(),V)
+        ten2 = einsum('ab,bpc->apc',gauge,ten2)
+    else:
+        ten1 = U
+        gauge = einsum('ab,bc->ac',S,V)
+        ten2 = einsum('ab,bpc->apc',gauge,ten2)
 
     if DEBUG:
         res1 = einsum('abc,cde->abde',ten1,ten2).make_sparse()
@@ -214,7 +219,7 @@ def move_gauge_right_svd(ten1,ten2,truncate_mbd=1e100):
     # Return results
     return ten1,ten2,EE,EEs,wgt
 
-def move_gauge_left_svd(ten1,ten2,truncate_mbd=1e100):
+def move_gauge_left_svd(ten1,ten2,truncate_mbd=1e100,split_s=False):
     """
     Move the gauge via svd from ten2 to ten1
 
@@ -248,11 +253,16 @@ def move_gauge_left_svd(ten1,ten2,truncate_mbd=1e100):
 
     # Perform the svd on the tensor
     U,S,V,EE,EEs,wgt = ten2.svd(1,truncate_mbd=truncate_mbd)
-    ten2 = V
 
     # Multiply remainder into neighboring site
-    gauge = einsum('ab,bc->ac',U,S)
-    ten1 = einsum('apb,bc->apc',ten1,gauge)
+    if split_s:
+        ten2 = einsum('ca,apb->cpb',S.sqrt(),V)
+        gauge = einsum('ab,bc->ac',U,S.sqrt())
+        ten1 = einsum('apb,bc->apc',ten1,gauge)
+    else:
+        ten2 = V
+        gauge = einsum('ab,bc->ac',U,S)
+        ten1 = einsum('apb,bc->apc',ten1,gauge)
 
     if DEBUG:
         res1 = einsum('abc,cde->abde',ten1,ten2).make_sparse()
@@ -261,7 +271,7 @@ def move_gauge_left_svd(ten1,ten2,truncate_mbd=1e100):
     # Return results
     return ten1,ten2,EE,EEs,wgt
 
-def move_gauge_right_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wgt=True):
+def move_gauge_right_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wgt=True,split_s=False):
     """
     Move the gauge via either svd or qr from ten1 to ten2
 
@@ -307,12 +317,12 @@ def move_gauge_right_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wg
     mpiprint(9,'Moving loaded tensors gauge right')
     
     # Do either svd or qr decomposition
-    if truncate_mbd > ten1.shape[2]:
+    if (truncate_mbd > ten1.shape[2]) and (not split_s):
         ten1,ten2 = move_gauge_right_qr(ten1,ten2)
         EE,EEs,wgt = None,None,None
         #ten1,ten2,EE,EEs,wgt = move_gauge_right_svd(ten1,ten2)
     else:
-        ten1,ten2,EE,EEs,wgt = move_gauge_right_svd(ten1,ten2,truncate_mbd=truncate_mbd)
+        ten1,ten2,EE,EEs,wgt = move_gauge_right_svd(ten1,ten2,truncate_mbd=truncate_mbd,split_s=split_s)
 
     # Return Results
     if return_wgt and return_ent:
@@ -324,7 +334,7 @@ def move_gauge_right_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wg
     else:
         return ten1,ten2
 
-def move_gauge_left_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wgt=True):
+def move_gauge_left_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wgt=True,split_s=False):
     """
     Move the gauge via svd from ten2 to ten1
 
@@ -369,7 +379,7 @@ def move_gauge_left_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wgt
         ten1,ten2,_,_,_ = move_gauge_left_svd(ten1,ten2)
         EE,EEs,wgt = None,None,None
     else:
-        ten1,ten2,EE,EEs,wgt = move_gauge_left_svd(ten1,ten2,truncate_mbd=truncate_mbd)
+        ten1,ten2,EE,EEs,wgt = move_gauge_left_svd(ten1,ten2,truncate_mbd=truncate_mbd,split_s=split_s)
 
     # Return Results
     if return_wgt and return_ent:
@@ -381,7 +391,7 @@ def move_gauge_left_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wgt
     else:
         return ten1,ten2
 
-def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True):
+def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True,split_s=False):
     """
     Move the gauge via svd from ten1 to ten2
 
@@ -436,7 +446,8 @@ def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True
     ten1,ten2,EE,EEs,wgt = move_gauge_right_tens(ten1,ten2,
                                                 truncate_mbd=truncate_mbd,
                                                 return_ent=True,
-                                                return_wgt=True)
+                                                return_wgt=True,
+                                                split_s=split_s)
 
     # Put back into the mps
     mps[site] = ten1
@@ -465,7 +476,7 @@ def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True
     else:
         return mps
 
-def move_gauge_left(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True):
+def move_gauge_left(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True,split_s=False):
     """
     Move the gauge via svd from ten2 to ten1
 
@@ -519,7 +530,8 @@ def move_gauge_left(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True)
     ten1,ten2,EE,EEs,wgt = move_gauge_left_tens(ten1,ten2,
                                                 truncate_mbd=truncate_mbd,
                                                 return_ent=True,
-                                                return_wgt=True)
+                                                return_wgt=True,
+                                                split_s=split_s)
 
     # Put back into the mps
     mps[site-1] = ten1
@@ -548,7 +560,7 @@ def move_gauge_left(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True)
     else:
         return mps
 
-def make_mps_left(mps,truncate_mbd=1e100):
+def make_mps_left(mps,truncate_mbd=1e100,split_s=False):
     """
     Put an mps into left canonical form
 
@@ -572,12 +584,13 @@ def make_mps_left(mps,truncate_mbd=1e100):
         mps = move_gauge_right(mps,site,
                                truncate_mbd=truncate_mbd,
                                return_ent=False,
-                               return_wgt=False)
+                               return_wgt=False,
+                               split_s=split_s)
 
     # Return results
     return mps
 
-def make_mps_right(mps,truncate_mbd=1e100):
+def make_mps_right(mps,truncate_mbd=1e100,split_s=False):
     """
     Put an mps into right canonical form
 
@@ -601,7 +614,8 @@ def make_mps_right(mps,truncate_mbd=1e100):
         mps = move_gauge_left(mps,site,
                               truncate_mbd=truncate_mbd,
                               return_ent=False,
-                              return_wgt=False)
+                              return_wgt=False,
+                              split_s=split_s)
 
     # Return results
     return mps
@@ -622,13 +636,13 @@ def redistribute_mps_vals(mps):
     """
     maxval = mps[0].abs().max()
     normval = maxval**(1./(float(len(mps))-1.))
-    #print('maxval = {}, normval = {}'.format(maxval,normval))
+    #print('\tmaxval = {}, normval = {}'.format(maxval,normval))
     mps[0].ten /= maxval
     for i in range(1,len(mps)):
         mps[i] *= normval
     return mps
 
-def mps_apply_svd(mps,chi,redistribute=True):
+def mps_apply_svd(mps,chi,redistribute=True,split_s=True):
     """
     Shrink the maximum bond dimension of an mps
 
@@ -651,9 +665,9 @@ def mps_apply_svd(mps,chi,redistribute=True):
             The mps with a maximum bond dimension of \chi
     """
     mpiprint(8,'Moving gauge to left, prep for truncation')
-    mps = make_mps_left(mps)
+    mps = make_mps_left(mps,split_s=split_s)
     mpiprint(8,'Truncating as moving to right')
-    mps = make_mps_right(mps,truncate_mbd=chi)
+    mps = make_mps_right(mps,truncate_mbd=chi,split_s=split_s)
     if redistribute:
         mps = redistribute_mps_vals(mps)
     return mps
@@ -741,7 +755,7 @@ class MPS:
                 mps_tmp[site] *= -1.
         return mps_tmp
 
-    def apply_svd(self,chi,redistribute=True):
+    def apply_svd(self,chi,redistribute=True,split_s=True):
         """
         Shrink the maximum bond dimension of an mps
 
@@ -760,10 +774,10 @@ class MPS:
                 all tensors. 
         """
         res = self.copy()
-        res = mps_apply_svd(res,chi,redistribute=redistribute)
+        res = mps_apply_svd(res,chi,redistribute=redistribute,split_s=split_s)
         return MPS(res)
 
-    def make_left_canonical(self,chi=1e100):
+    def make_left_canonical(self,chi=1e100,split_s=False):
         """
         Make the MPS Left canonical (and possibly truncate bond dim)
 
@@ -776,10 +790,10 @@ class MPS:
                 The new maximum bond dimension
         """
         res = self.copy()
-        res = make_mps_left(res.tensors,truncate_mbd=chi)
+        res = make_mps_left(res.tensors,truncate_mbd=chi,split_s=split_s)
         return MPS(res)
 
-    def make_right_canonical(self,chi=1e100):
+    def make_right_canonical(self,chi=1e100,split_s=False):
         """
         Make the MPS Right canonical (and possibly truncate bond dim)
 
@@ -792,10 +806,10 @@ class MPS:
                 The new maximum bond dimension
         """
         res = self.copy()
-        res = make_mps_right(res.tensors,truncate_mbd=chi)
+        res = make_mps_right(res.tensors,truncate_mbd=chi,split_s=split_s)
         return MPS(res)
 
-    def move_gauge_right(self,site,truncate_mbd=1e100):
+    def move_gauge_right(self,site,truncate_mbd=1e100,split_s=False):
         """
         Do a tensor decomposition on site to move the gauge to site+1
 
@@ -813,10 +827,11 @@ class MPS:
         res = move_gauge_right(res.tensors,site,
                                truncate_mbd=truncate_mbd,
                                return_ent=False,
-                               return_wgt=False)
+                               return_wgt=False,
+                               split_s=split_s)
         return MPS(res)
 
-    def move_gauge_left(self,site,truncate_mbd=1e100):
+    def move_gauge_left(self,site,truncate_mbd=1e100,split_s=False):
         """
         Do a tensor decomposition on site to move the gauge to site-1
 
@@ -834,7 +849,8 @@ class MPS:
         res = move_gauge_left(res.tensors,site,
                                truncate_mbd=truncate_mbd,
                                return_ent=False,
-                               return_wgt=False)
+                               return_wgt=False,
+                               split_s=split_s)
         return MPS(res)
 
     def input_mps_list(self,new):

@@ -2210,7 +2210,8 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,
                chi=100,als_iter=10,als_tol=1e-10,
                full_update=True,
                rand_als_init=False,stablesplit=True,
-               truncate_loc=False,chiloc=100):
+               truncate_loc=False,chiloc=100,
+               save_all_steps=False):
     """
     Run all of the tebd time steps
     
@@ -2338,7 +2339,11 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,
         peps.normalize()
 
         # Save PEPS
-        peps.save()
+        print(peps.fname)
+        if save_all_steps:
+            peps.save(fname=peps.fname+'_iter{}'.format(iter_cnt))
+        else:
+            peps.save()
         
         # Compute Resulting Energy
         E = peps.calc_op(ham,chi=chi,nn=True)
@@ -2376,7 +2381,8 @@ def run_tebd(Nx,Ny,d,ham,
              rand_als_init=False,
              stablesplit=True,
              truncate_loc=False,
-             chiloc=100):
+             chiloc=100,
+             save_all_steps=False):
     """
     Run the TEBD (Simple or Full) algorithm for a PEPS
 
@@ -2552,7 +2558,8 @@ def run_tebd(Nx,Ny,d,ham,
                             rand_als_init=rand_als_init,
                             stablesplit=stablesplit,
                             truncate_loc=truncate_loc,
-                            chiloc=chiloc)
+                            chiloc=chiloc,
+                            save_all_steps=save_all_steps)
 
     # Print out results
     mpiprint(0,'\n\n'+'#'*50)

@@ -969,6 +969,8 @@ def multiply_peps_elements(peps,const):
     Returns:
         peps : a PEPS object, or list of lists, depending on input
     """
+    if not np.isfinite(const):
+        raise ValueError('Multiplying PEPS by {} is not valid'.format(const))
     Nx = len(peps)
     Ny = len(peps[0])
     for xind in range(Nx):
@@ -976,7 +978,7 @@ def multiply_peps_elements(peps,const):
             peps[xind][yind] *= const
     return peps
 
-def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
+def normalize_peps(peps,max_iter=100,norm_tol=1e-2,exact_norm_tol=3,chi=10,up=5.0,
                     down=0.0,singleLayer=True,ket=None,pf=False):
     """
     Normalize the full PEPS by doing a binary search on the
@@ -992,11 +994,14 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
         max_iter : int
             The maximum number of iterations of the normalization
             procedure. Default is 20.
-        norm_tol : int
+        exact_norm_tol : float
             We require the measured norm to be within the bounds
             10^(-norm_tol) < norm < 10^(norm_tol) before we do
             exact arithmetic to get the norm very close to 1. Default
-            is 20.
+            is 1.
+        norm_tol : int
+            How close the norm must be to 1. to consider the norm 
+            to be sufficiently well converged
         chi : int
             Boundary MPO maximum bond dimension
         up : float
@@ -1029,82 +1034,273 @@ def normalize_peps(peps,max_iter=100,norm_tol=20,chi=4,up=100.0,
             The normalized version of the PEPS, given as a PEPS object
 
     """
-
     # Figure out peps size
     Nx = peps.Nx
     Ny = peps.Ny
     be = peps[0][0].backend
 
-    
+    # Power changes if partition function or norm
     if pf: pwr = -1./(Nx*Ny)
     else: pwr = -1./(2*Nx*Ny)
-    mpiprint(4, '\n[binarySearch] shape=({},{}), chi={}'.format(Nx,Ny,chi))
+
+    # Make sure PEPS entries are not really huge or miniscule
+    maxval = peps.max_entry()
+    if (maxval > 10**4) or (maxval < 10**-4):
+        peps = multiply_peps_elements(peps.copy(),2/maxval)
+    if ket is not None:
+        maxval = peps.max_entry()
+        if (maxval > 10**-4) or (maxval < 10**-4):
+            peps = multiply_peps_elements(peps.copy(),2/maxval)
 
     # Check if state is already easily normalized
     try:
         z = calc_peps_norm(peps,chi=chi,singleLayer=singleLayer,ket=ket)
     except:
         z = None
-    if not (z < 10.**(-1*norm_tol) or z > 10.**(norm_tol)) or (z is None):
+    if (z is None) or (not (z < 10.**(-1*norm_tol) or z > 10.**(norm_tol))):
         if z is not None:
             sfac = z**pwr
             peps_try = multiply_peps_elements(peps.copy(),sfac)
             z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer,ket=ket)
-            if abs(z-1.) < 1e-6: 
+            if abs(z-1.) < norm_tol: 
                 return z, peps_try
         else:
             z = None
             peps_try = peps.copy()
 
-    # get initial scale factor
-    scale = (up+down)/2.0
+    # Begin search --------
+    niter  = 0
+    scale = (up+down)/2.
+    z     = None
+    converged = False
 
-    # begin search
-    peps_try = multiply_peps_elements(peps.copy(),scale)
+    while not converged:
 
-    istep = 0
-    while True:
-        #print('up: {}, down: {}, norm: {}'.format(up,down,z))
+        # Update Iteration count
+        niter += 1
+
+        # Calculate norm
+        peps_try = multiply_peps_elements(peps.copy(),scale)
+        zprev = z
+        z = None
         try:
-            istep += 1
-            z = None
             z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer,ket=ket)
+            #print('scale: {}, up: {}, down: {}, norm: {}'.format(scale,up,down,z))
             z = abs(z)
-            #print('Succesffuly calculated peps norm: {}'.format(z))
         except Exception as e:
-            #print('Failed to calculate peps norm: {}'.format(e))
             pass
-        mpiprint(2, 'step={}, (down,up)=({},{}), scale={}, norm={}'.format(
-                                                        istep,down,up,scale,z))
-        # if an exception is thrown in calc_peps_norm because scale is too large
+
+        # Determine next scale (for infinite or failed norm result)
         if (z == None) or (not np.isfinite(z)):
-            up = scale
-            scale = (up+down)/2.
-        # adjust scale to make z into target region
+
+            # Replace None with nan (so can be compared using '<')
+            if z == None: z = np.nan
+
+            # Set up -> scale (if previous norm was infinite/None/nan/<1)
+            if ((zprev == None) or (not np.isfinite(zprev))) or (zprev < 1.):
+                up = scale if (scale is not None) else up
+                scale = (up+down)/2.
+            # Set down -> scale (if previous norm was > 1)
+            else:
+                down = scale if (scale is not None) else down
+                scale = (up+down)/2.
+
+        # adjust scale to make norm in target region
         else:
-            if abs(z-1.0) < 1e-6:
+
+            # Check if sufficiently well converged
+            if abs(z-1.0) < norm_tol:
                 mpiprint(2, 'converged scale = {}, norm = {}'.format(scale,z))
-                break
-            if z < 10.0**(-1*norm_tol) or z > 10.0**(norm_tol) or be.isnan(z):
+                converged = True
+
+            # Check if we are still far away from convergence
+            elif z < 10.0**(-1*norm_tol) or z > 10.0**(norm_tol) or be.isnan(z):
                 if z > 1.0 or be.isnan(z):
-                    up = scale
+                    up = scale if (scale is not None) else up
                     scale = (up+down)/2.0
                 else:
-                    down = scale
+                    down = scale if (scale is not None) else down
                     scale = (up+down)/2.0
-            # close to convergence, apply "exact" scale
+
+            # Close to convergence, apply "exact" scale
             else:
                 sfac = z**pwr
-                scale = sfac*scale
+                scale = sfac*scale if (scale is not None) else sfac
                 mpiprint(2, 'apply exact scale: {}'.format(scale))
 
-        if istep == max_iter:
+        # Print Results of current step
+        mpiprint(2, 'step={}, (down,up)=({},{}), scale={}, norm={}'.format(
+                                                        niter,down,up,scale,z))
+
+        # Check if we have exceeded the maximum number of iterations
+        if niter == max_iter:
             mpiprint(4, 'binarySearch normalization exceeds max_iter... terminating')
-            break
+            converged=True
 
-        peps_try = multiply_peps_elements(peps.copy(),scale)
-
+    # Return normalized PEPS and norm 
     return z, peps_try
+
+#def normalize_peps(peps,max_iter=100,norm_tol=1e-2,exact_norm_tol=3,chi=10,up=5.0,
+#                    down=0.0,singleLayer=True,ket=None,pf=False):
+#    """
+#    Normalize the full PEPS by doing a binary search on the
+#    interval [down, up] for the factor which, when multiplying
+#    every element of the PEPS tensors, yields a rescaled PEPS
+#    with norm equal to 1.0.
+#
+#    Args:
+#        peps : A PEPS object
+#            The PEPS to be normalized, given as a PEPS object
+#
+#    Kwargs:
+#        max_iter : int
+#            The maximum number of iterations of the normalization
+#            procedure. Default is 20.
+#        exact_norm_tol : float
+#            We require the measured norm to be within the bounds
+#            10^(-norm_tol) < norm < 10^(norm_tol) before we do
+#            exact arithmetic to get the norm very close to 1. Default
+#            is 1.
+#        norm_tol : int
+#            How close the norm must be to 1. to consider the norm 
+#            to be sufficiently well converged
+#        chi : int
+#            Boundary MPO maximum bond dimension
+#        up : float
+#            The upper bound for the binary search factor. Default is 1.0,
+#            which assumes that the norm of the initial PEPS is greater
+#            than 10^(-norm_tol) (this is almost always true).
+#        down : float
+#            The lower bound for the binary search factor. Default is 0.0.
+#            The intial guess for the scale factor is the midpoint
+#            between up and down. It's not recommended to adjust the
+#            up and down parameters unless you really understand what
+#            they are doing.
+#        single_layer : bool
+#            Indicates whether to use a single layer environment
+#            (currently it is the only option...)
+#        ket : peps object
+#            If you would like the ket to be 'normalized', such that 
+#            when contracted with another peps, the contraction is equal
+#            to one. Only the peps (not ket) will be altered to attempt
+#            the normalization
+#        pf: bool
+#            If True, then we will normalize as though this is a partition
+#            function instead of a contraction between to peps
+#
+#    Returns:
+#        norm : float
+#            The approximate norm of the PEPS after the normalization
+#            procedure
+#        peps : list
+#            The normalized version of the PEPS, given as a PEPS object
+#
+#    """
+#    #print('Normalizing PEPS')
+#
+#    # Figure out peps size
+#    Nx = peps.Nx
+#    Ny = peps.Ny
+#    be = peps[0][0].backend
+#
+#    # Power changes if partition function or norm
+#    if pf: pwr = -1./(Nx*Ny)
+#    else: pwr = -1./(2*Nx*Ny)
+#
+#    # Make sure PEPS entries are not really huge or miniscule
+#    maxval = peps.max_entry()
+#    if (maxval > 10**4) or (maxval < 10**-4):
+#        peps = multiply_peps_elements(peps.copy(),2/maxval)
+#    if ket is not None:
+#        maxval = peps.max_entry()
+#        if (maxval > 10**-4) or (maxval < 10**-4):
+#            peps = multiply_peps_elements(peps.copy(),2/maxval)
+#
+#    # Check if state is already easily normalized
+#    try:
+#        z = calc_peps_norm(peps,chi=chi,singleLayer=singleLayer,ket=ket)
+#    except:
+#        z = None
+#    if (z is None) or (not (z < 10.**(-1*norm_tol) or z > 10.**(norm_tol))):
+#        if z is not None:
+#            sfac = z**pwr
+#            peps_try = multiply_peps_elements(peps.copy(),sfac)
+#            z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer,ket=ket)
+#            if abs(z-1.) < norm_tol: 
+#                return z, peps_try
+#        else:
+#            z = None
+#            peps_try = peps.copy()
+#
+#    # Begin search --------
+#    istep = 0
+#    scale = None
+#    z     = None
+#    zprev = None
+#    while True:
+#
+#        # if an exception is thrown in calc_peps_norm because scale is too large
+#        # (it can be too large as well...)
+#        if (z == None) or (not np.isfinite(z)):
+#
+#            # Replace None with nan (so can be compared using '<')
+#            if z == None: z = np.nan
+#
+#            if ((zprev == None) or (not np.isfinite(zprev))) or (zprev < 1.):
+#                #print('Norm is NAN, previous was also nana or < 1.')
+#                up = scale if (scale is not None) else up
+#                scale = (up+down)/2.
+#
+#            else:
+#                #print('Norm is NAN, previous was > 1.')
+#                down = scale if (scale is not None) else down
+#                scale = (up+down)/2.
+#
+#        # adjust scale to make z into target region
+#        else:
+#
+#            # Check if sufficiently well converged
+#            if abs(z-1.0) < norm_tol:
+#                mpiprint(2, 'converged scale = {}, norm = {}'.format(scale,z))
+#                break
+#
+#            if z < 10.0**(-1*norm_tol) or z > 10.0**(norm_tol) or be.isnan(z):
+#                if z > 1.0 or be.isnan(z):
+#                    #print('Decreasing!')
+#                    up = scale if (scale is not None) else up
+#                    scale = (up+down)/2.0
+#                else:
+#                    #print('Increasing!')
+#                    down = scale if (scale is not None) else down
+#                    scale = (up+down)/2.0
+#
+#            # close to convergence, apply "exact" scale
+#            else:
+#                sfac = z**pwr
+#                scale = sfac*scale if (scale is not None) else sfac
+#                mpiprint(2, 'apply exact scale: {}'.format(scale))
+#
+#        peps_try = multiply_peps_elements(peps.copy(),scale)
+#
+#        zprev = z
+#        z = None
+#        try:
+#            istep += 1
+#            #print('Calculating Norm')
+#            z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer,ket=ket)
+#            #print('z3 = {}'.format(z))
+#            print('scale: {}, up: {}, down: {}, norm: {}'.format(scale,up,down,z))
+#            z = abs(z)
+#        except Exception as e:
+#            pass
+#        mpiprint(2, 'step={}, (down,up)=({},{}), scale={}, norm={}'.format(
+#                                                        istep,down,up,scale,z))
+#
+#        if istep == max_iter:
+#            mpiprint(4, 'binarySearch normalization exceeds max_iter... terminating')
+#            break
+#
+#    return z, peps_try
 
 def calc_peps_norm(_peps,chi=4,singleLayer=True,ket=None,allow_normalize=False):
     """
@@ -3674,6 +3870,7 @@ def load_peps(fname):
     D = get_dataset('D')
     chi = get_dataset('chi')
     norm_tol = get_dataset('norm_tol')
+    exact_norm_tol = get_dataset('exact_norm_tol')
     canonical = get_dataset('canonical')
     singleLayer = get_dataset('singleLayer')
     max_norm_iter = get_dataset('max_norm_iter')
@@ -3687,6 +3884,7 @@ def load_peps(fname):
     # Create new PEPS object
     peps = PEPS(Nx=Nx,Ny=Ny,d=d,D=D,
                 chi=chi,norm_tol=norm_tol,
+                exact_norm_tol=exact_norm_tol,
                 canonical=canonical,
                 singleLayer=singleLayer,
                 max_norm_iter=max_norm_iter,
@@ -3722,8 +3920,9 @@ class PEPS:
                  chi=None,Zn=None,thermal=False,
                  dZn=None,canonical=False,backend='numpy',
                  singleLayer=True,dtype=float_,
-                 normalize=True,norm_tol=20.,
-                 max_norm_iter=100,norm_bs_upper=10.0,norm_bs_lower=0.0,
+                 normalize=True,norm_tol=1e-3,
+                 exact_norm_tol=20.,
+                 max_norm_iter=100,norm_bs_upper=2.0,norm_bs_lower=0.0,
                  fname=None,fdir='./'):
         """
         Create a random PEPS object
@@ -3765,11 +3964,13 @@ class PEPS:
             singleLayer : bool
                 Whether to use a single layer environment
                 (currently only option implemented)
-            norm_tol : float
+            exact_norm_tol : float
                 How close to 1. the norm should be before exact
                 artihmetic is used in the normalization procedure.
                 See documentation of normalize_peps() function
                 for more details.
+            norm_tol : float
+                How close to 1. the norm should be when calling peps.normalize()
             dtype : dtype
                 The data type for the PEPS
             normalize : bool
@@ -3818,6 +4019,7 @@ class PEPS:
         self.backend     = load_lib(self.backend)
         self.singleLayer = singleLayer
         self.dtype       = dtype
+        self.exact_norm_tol    = exact_norm_tol
         self.norm_tol    = norm_tol
         self.max_norm_iter = max_norm_iter
         self.norm_bs_upper = norm_bs_upper
@@ -3968,7 +4170,7 @@ class PEPS:
         if singleLayer is None: singleLayer = self.singleLayer
         return calc_peps_norm(self,chi=chi,singleLayer=singleLayer,ket=ket)
 
-    def normalize(self,max_iter=None,norm_tol=None,chi=None,up=None,down=None,
+    def normalize(self,max_iter=None,norm_tol=None,exact_norm_tol=None,chi=None,up=None,down=None,
                     singleLayer=None,ket=None,pf=False):
         """
         Normalize the full PEPS
@@ -3981,9 +4183,11 @@ class PEPS:
             max_iter : int
                 The maximum number of iterations of the normalization
                 procedure. Default is 20.
-            norm_tol : int
+            norm_tol : float
+                How close to 1. the norm should be when calling peps.normalize()
+            exact_norm_tol : int
                 We require the measured norm to be within the bounds
-                10^(-norm_tol) < norm < 10^(norm_tol) before we do
+                10^(-exact_norm_tol) < norm < 10^(exact_norm_tol) before we do
                 exact arithmetic to get the norm very close to 1. Default
                 is 20.
             chi : int
@@ -4018,6 +4222,7 @@ class PEPS:
         # Figure out good chi (if not given)
         if chi is None: chi = self.chi
         if max_iter is None: max_iter = self.max_norm_iter
+        if exact_norm_tol is None: exact_norm_tol = self.exact_norm_tol
         if norm_tol is None: norm_tol = self.norm_tol
         if up is None: up = self.norm_bs_upper
         if down is None: down = self.norm_bs_lower
@@ -4025,6 +4230,7 @@ class PEPS:
         # Run the normalization procedure
         norm, normpeps = normalize_peps(self,
                                       max_iter = max_iter,
+                                      exact_norm_tol = exact_norm_tol,
                                       norm_tol = norm_tol,
                                       chi = chi,
                                       up = up,
@@ -4121,6 +4327,7 @@ class PEPS:
         """
         peps_copy = PEPS(Nx=self.Nx,Ny=self.Ny,d=self.d,D=self.D,
                          chi=self.chi,norm_tol=self.norm_tol,
+                         exact_norm_tol=self.exact_norm_tol,
                          canonical=self.canonical,
                          singleLayer=self.singleLayer,
                          backend=self.backend,
@@ -4189,6 +4396,7 @@ class PEPS:
                      backend       = self.backend,
                      singleLayer   = self.singleLayer,
                      dtype         = self.dtype,
+                     exact_norm_tol= self.exact_norm_tol,
                      norm_tol      = self.norm_tol,
                      max_norm_iter = self.max_norm_iter,
                      norm_bs_upper = self.norm_bs_upper,
@@ -4209,10 +4417,16 @@ class PEPS:
         # Return result
         return speps
 
-    def save(self):
+    def save(self,fname=None,fdir=None):
         """
         Save the PEPS tensors
         """
+        if fdir is None:
+            fdir = self.fdir
+        if not (fdir[-1] == '/'):
+            fdir = fdir + '/'
+        if fname is None:
+            fname = self.fname
         if self.Zn is None:
             # Create dict to hold everything being saved
             #save_dict = dict()
@@ -4231,7 +4445,7 @@ class PEPS:
             # Create file
             for i in range(5):
                 try:
-                    f = open_file(self.fdir+self.fname,'w')
+                    f = open_file(fdir+fname,'w')
                     # Add PEPS Info
                     create_dataset(f,'Nx',self.Nx)
                     create_dataset(f,'Ny',self.Ny)
@@ -4244,11 +4458,12 @@ class PEPS:
                     create_dataset(f,'dZn',False if self.dZn is None else self.dZn)
                     create_dataset(f,'canonical',self.canonical)
                     create_dataset(f,'singleLayer',self.singleLayer)
+                    create_dataset(f,'exact_norm_tol',self.exact_norm_tol)
                     create_dataset(f,'norm_tol',self.norm_tol)
                     create_dataset(f,'max_norm_iter',self.max_norm_iter)
                     create_dataset(f,'norm_bs_upper',self.norm_bs_upper)
                     create_dataset(f,'norm_bs_lower',self.norm_bs_lower)
-                    create_dataset(f,'fname',self.fname)
+                    create_dataset(f,'fname',fname)
                     create_dataset(f,'fdir',self.fdir)
                     # Add PEPS Tensors
                     for i in range(len(self.tensors)):
@@ -4292,3 +4507,10 @@ class PEPS:
             close_file(f)
         else:
             raise NotImplementedError()
+
+    def max_entry(self):
+        maxval = 0.
+        for i in range(len(self)):
+            for j in range(len(self[i])):
+                maxval = max(maxval,self[i][j].abs().max())
+        return maxval

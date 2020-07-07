@@ -446,7 +446,7 @@ def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10,print_p
     E = peps.backend.sum(Ecol)+peps.backend.sum(Erow)
     return E,peps
 
-def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,als_iter=100,als_tol=1e-10,print_prepend=''):
+def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,als_iter=100,als_tol=1e-10,print_prepend='',save_all_steps=False):
     """
     """
     nSite = len(peps)*len(peps[0])
@@ -466,7 +466,10 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,als_iter=100,als_
         peps.normalize()
 
         # Save PEPS
-        peps.save()
+        if save_all_steps: 
+            peps.save(fname=peps.fname+'_iter{}'.format(iter_cnt))
+        else:
+            peps.save()
         
         # Compute Resulting Energy
         E = peps.calc_op(ham,chi=chi)
@@ -490,7 +493,8 @@ def run_tebd(Nx,Ny,d,ham,
              chi=10,
              su_chi=10,
              thermal=False,
-             norm_tol=20,
+             exact_norm_tol=20,
+             norm_tol=0.1,
              singleLayer=True,
              max_norm_iter=20,
              dtype=float_,
@@ -504,6 +508,7 @@ def run_tebd(Nx,Ny,d,ham,
              als_tol=1e-10,
              peps_fname=None,
              peps_fdir='./',
+             save_all_steps=False,
              print_prepend=''):
     """
     Run the TEBD algorithm for a PEPS
@@ -635,6 +640,7 @@ def run_tebd(Nx,Ny,d,ham,
                         Zn=Zn,
                         thermal=thermal,
                         backend=backend,
+                        exact_norm_tol=exact_norm_tol,
                         norm_tol=norm_tol,
                         singleLayer=singleLayer,
                         max_norm_iter=max_norm_iter,
@@ -647,6 +653,8 @@ def run_tebd(Nx,Ny,d,ham,
                         Zn=Zn,
                         chi=su_chi,
                         backend=backend,
+                        exact_norm_tol=exact_norm_tol,
+                        norm_tol=norm_tol,
                         singleLayer=singleLayer,
                         max_norm_iter=max_norm_iter,
                         dtype=dtype,
@@ -679,7 +687,8 @@ def run_tebd(Nx,Ny,d,ham,
                             chi = chi[Dind],
                             als_iter=als_iter,
                             als_tol=als_tol,
-                            print_prepend=print_prepend)
+                            print_prepend=print_prepend,
+                            save_all_steps=save_all_steps)
 
     # Print out results
     mpiprint(0,'\n\n'+print_prepend+'#'*50)
