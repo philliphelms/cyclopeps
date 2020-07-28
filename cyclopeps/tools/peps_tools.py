@@ -1055,7 +1055,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=1e-2,exact_norm_tol=3,chi=10,up=5.
     # Check if state is already easily normalized
     try:
         z = calc_peps_norm(peps,chi=chi,singleLayer=singleLayer,ket=ket)
-    except:
+    except Exception as e:
         z = None
     if (z is None) or (not (z < 10.**(-1*norm_tol) or z > 10.**(norm_tol))):
         if z is not None:
@@ -1085,10 +1085,10 @@ def normalize_peps(peps,max_iter=100,norm_tol=1e-2,exact_norm_tol=3,chi=10,up=5.
         z = None
         try:
             z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer,ket=ket)
-            #print('scale: {}, up: {}, down: {}, norm: {}'.format(scale,up,down,z))
             z = abs(z)
         except Exception as e:
             pass
+        #print('scale: {}, up: {}, down: {}, norm: {}'.format(scale,up,down,z))
 
         # Determine next scale (for infinite or failed norm result)
         if (z == None) or (not np.isfinite(z)):

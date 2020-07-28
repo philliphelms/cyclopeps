@@ -2339,7 +2339,6 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,
         peps.normalize()
 
         # Save PEPS
-        print(peps.fname)
         if save_all_steps:
             peps.save(fname=peps.fname+'_iter{}'.format(iter_cnt))
         else:

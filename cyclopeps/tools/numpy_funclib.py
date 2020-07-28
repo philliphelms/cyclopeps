@@ -12,9 +12,9 @@ ones = np.ones
 rint = np.rint
 random = np.random.random
 norm = np.linalg.norm
-def svd(mat):
+def svd(mat,full_matrices=False):
     try:
-        return np.linalg.svd(mat)
+        return np.linalg.svd(mat,full_matrices=full_matrices)
     except:
         return sla.svd(mat,lapack_driver='gesvd')
 qr = np.linalg.qr
