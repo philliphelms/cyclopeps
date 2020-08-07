@@ -1,0 +1,23 @@
+#!/bin/bash
+#SBATCH --partition=any
+#SBATCH -J asep_run_left_final_N=30_SY=0_SX=20_optind=4
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=8
+#SBATCH --ntasks-per-node=1
+#SBATCH --time=7-0
+#SBATCH --mem=31G
+#SBATCH --output=%x-%j.out 
+
+cd ~
+cd projects/cyclopeps/cyclopeps/
+source ~/.bashrc
+
+export MKL_NUM_THREADS=8
+export OMP_NUM_THREADS=8
+
+N=30
+SX=20
+SY=0
+optind=4
+prepend=final
+python scripts/asep/run_left_final.py $N $N $SX $SY $optind $prepend
