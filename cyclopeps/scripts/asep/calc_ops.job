@@ -1,0 +1,19 @@
+#!/bin/bash
+#SBATCH --partition=any
+#SBATCH -J calc_ops_N=50
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=8
+#SBATCH --ntasks-per-node=1
+#SBATCH --time=7-0
+#SBATCH --mem=31G
+#SBATCH --output=%x-%j.out 
+
+cd ~
+cd projects/cyclopeps/cyclopeps/
+source ~/.bashrc
+
+export MKL_NUM_THREADS=8
+export OMP_NUM_THREADS=8
+
+N=50
+python scripts/asep/calc_ops.py $N 
