@@ -43,7 +43,6 @@ abs = ctf.abs
 sum = ctf.sum
 eye = ctf.eye
 
-
 def non_zeros(a):
     return a.read_all_nnz()[0]
 

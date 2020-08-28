@@ -17,6 +17,7 @@ import copy
 import itertools
 import sys
 import numpy as np
+import uuid
 
 LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 FLIP = {'+':'-','-':'+'}
@@ -491,7 +492,8 @@ class GEN_TEN:
     """
     A generic tensor class
     """
-    def __init__(self,shape=None,sym=None,backend='numpy',dtype=float_,ten=None,legs=None):
+    def __init__(self,shape=None,sym=None,backend='numpy',dtype=float_,ten=None,legs=None,
+                 writedir=TMPDIR+'/'+DIRID,writename=None,in_mem=True):
         """
         Create a tensor of zeros of the correct tensor type
 
@@ -512,8 +514,16 @@ class GEN_TEN:
             sym : bool
                 If True, then a symtensor will be created, otherwise, 
                 the tensor will have no symmetry
-        dtype : dtype
-            The data type for the tensor, i.e. np.float_,np.complex128,etc.
+            dtype : dtype
+                The data type for the tensor, i.e. np.float_,np.complex128,etc.
+            writedir : str
+                The directory where the file will be written to on disk
+            writename : str
+                The filename where the tensor will be written to on disk
+            in_mem : bool
+                Whether the tensor should be initially stored in local 
+                memory (True) or written to disk (False). Default is
+                True.
         """
         # Load Backend
         if ten is None:
@@ -559,6 +569,12 @@ class GEN_TEN:
         else:
             self.legs = legs
         self.nlegs = len(self.legs)
+
+        # Specify the save location and whether the file is saved or loaded
+        self.saveloc = writedir + '/' + writename
+        self.in_mem = True
+        if not in_mem:
+            self.to_disk()
 
     @property
     def ndim(self):
@@ -1032,3 +1048,43 @@ class GEN_TEN:
             inv = self.backend.einsum('ABCDabcd,ABCD->ABCabcd',inv,delta)
             newten.ten.array = inv
         return newten
+
+    def to_disk(self):
+        """
+        Write the actual gen_ten tensor to disk in location specified
+        by gen_ten.saveloc
+        """
+        if self.sym is None:
+            self.saved_shape = self.ten.shape
+            if hasattr(self.ten,'write_to_file'):
+                self.ten.write_to_file(self.saveloc)
+            else:
+                self.backend.save(self.ten)
+            self.ten = None
+        else:
+            self.saved_shape = self.ten.array.shape
+            if hasattr(self.ten,'write_to_file'):
+                self.ten.array.write_to_file(self.saveloc)
+            else:
+                self.backend.save(self.ten.array)
+            self.ten.array = None
+        self.in_mem = False
+
+    def from_disk(self):
+        """
+        Read the gen_ten tensor from disk, where it has been previously 
+        saved in the location specified by gen_ten.saveloc
+        """
+        if self.sym is None:
+            if hasattr(self.ten,'write_to_file'):
+                self.ten = self.backend.zeros(self.saved_shape)
+                self.ten.read_from_file(self.saveloc)
+            else:
+                self.ten = self.backend.load(self.saveloc)
+        else:
+            if hasattr(self.ten,'write_to_file'):
+                self.ten.array = self.backend.zeros(self.saved_shape)
+                self.ten.array.read_from_file(self.saveloc)
+            else:
+                self.ten.array = self.backend.load(self.saveloc)
+        self.in_mem = True

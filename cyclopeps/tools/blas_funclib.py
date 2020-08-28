@@ -33,6 +33,9 @@ append = np.append
 sqrt = np.sqrt
 log2 = np.log2
 expm = sla.expm
+save = np.save
+load = np.load
+
 def non_zeros(a):
     idx = np.where(a.ravel()!=0)
     return idx[0]
