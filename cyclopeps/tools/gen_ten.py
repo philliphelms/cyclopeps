@@ -1032,9 +1032,3 @@ class GEN_TEN:
             inv = self.backend.einsum('ABCDabcd,ABCD->ABCabcd',inv,delta)
             newten.ten.array = inv
         return newten
-
-    def to_disk(self):
-
-    def from_disk(self):
-
-
