@@ -90,7 +90,6 @@ def svd(a,full_matrices=False):
     v = ctf.from_nparray(v)
     return u,s,v
 def eigh(a):
-    print(a)
     a = ctf.to_nparray(a)
     u,v = np.linalg.eigh(a)
     u = ctf.from_nparray(u)

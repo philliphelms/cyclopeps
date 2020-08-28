@@ -71,6 +71,7 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True,allow_normalize=False)
     bound_mpo = []
 
     for row in range(Ny):
+        #tmpprint('\t\t\t\tAdding row: {}'.format(row))
         # Remove l and L empty indices
         ket[row] = ket[row].remove_empty_ind(0)
         bra[row] = bra[row].remove_empty_ind(0)
@@ -127,11 +128,12 @@ def init_left_bmpo_sl(bra, ket=None, chi=4, truncate=True,allow_normalize=False)
         if DEBUG:
             mpiprint(6,'Computing initial bmpo norm')
             norm0 = bound_mps.norm()
+        #tmpprint('\t\t\t\tDoing MPS apply svd')
         bound_mps = bound_mps.apply_svd(chi)
         if DEBUG:
             mpiprint(6,'Computing resulting bmpo norm')
             norm1 = bound_mps.norm()
-            mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+            mpiprint(0,'Init BMPO Canonicalization Norm Difference for chi={}: {} ({},{})'.format(chi,abs(norm0-norm1)/abs(norm0),norm0,norm1))
     if allow_normalize:
         bound_mps[0] /= bound_mps[0].abs().max()**(1./2.)
 
@@ -147,6 +149,7 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,Ny,chi=4,truncate=True,allow_normalize=Fa
     bound_mpo_new = []
 
     for row in range(Ny):
+        #tmpprint('\t\t\t\tAdding row: {}'.format(row))
         mpiprint(5,'Adding Site {} to Ket'.format(row))
 
         # Calculate ket contraction first (so we can use it to determine symmetry signs of identity)
@@ -199,11 +202,12 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,Ny,chi=4,truncate=True,allow_normalize=Fa
         if DEBUG:
             mpiprint(6,'Computing initial bmpo norm')
             norm0 = bound_mps.norm()
+        #tmpprint('\t\t\t\tDoing MPS apply svd')
         bound_mps = bound_mps.apply_svd(chi)
         if DEBUG:
             mpiprint(6,'Computing resulting bmpo norm')
             norm1 = bound_mps.norm()
-            mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+            mpiprint(0,'Add ket BMPO Canonicalization Norm Difference for chi={}: {} ({},{})'.format(chi,abs(norm0-norm1)/abs(norm0),norm0,norm1))
     if allow_normalize:
         bound_mps[0] /= bound_mps[0].abs().max()**(1./2.)
 
@@ -218,6 +222,7 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,Ny,chi=4,truncate=True,allow_normalize=Fa
     bound_mpo_new = []
 
     for row in range(Ny):
+        #tmpprint('\t\t\t\tAdding row: {}'.format(row))
 
         # Add bra contraction
         res = einsum('mLn,LDPRU->mDRnUP',bound_mpo[2*row],bra[row])
@@ -277,11 +282,12 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,Ny,chi=4,truncate=True,allow_normalize=Fa
         if DEBUG:
             mpiprint(6,'Computing initial bmpo norm')
             norm0 = bound_mps.norm()
+        #tmpprint('\t\t\t\tDoing MPS apply svd')
         bound_mps = bound_mps.apply_svd(chi)
         if DEBUG:
             mpiprint(6,'Computing resulting bmpo norm')
             norm1 = bound_mps.norm()
-            mpiprint(4,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+            mpiprint(0,'Add bra BMPO Canonicalization Norm Difference for chi={}: {} ({},{})'.format(chi,abs(norm0-norm1)/abs(norm0),norm0,norm1))
     if allow_normalize:
         bound_mps[0] /= bound_mps[0].abs().max()**(1./2.)
 
@@ -322,8 +328,10 @@ def left_bmpo_sl(bra, bound_mpo, chi=4,truncate=True,ket=None,allow_normalize=Fa
         ket = copy_tensor_list(bra)
 
     # First Layer (ket) #####################################
+    #tmpprint('\t\t\tAdding ket')
     bound_mpo = left_bmpo_sl_add_ket(ket,bound_mpo,Ny,chi=chi,truncate=truncate,allow_normalize=allow_normalize)
     # Second Layer (bra) ####################################
+    #tmpprint('\t\t\tAdding bra')
     bound_mpo = left_bmpo_sl_add_bra(bra,bound_mpo,Ny,chi=chi,truncate=truncate,allow_normalize=allow_normalize)
 
     # Return result
@@ -354,10 +362,12 @@ def left_update_sl(peps_col, bound_mpo, chi=4,truncate=True,ket=None,allow_norma
     """
     # Check if we are at left edge
     if bound_mpo is None:
+        #tmpprint('\t\tInitial BMPO')
         bound_mpo = init_left_bmpo_sl(peps_col,chi=chi,truncate=truncate,ket=ket,allow_normalize=allow_normalize)
     # Otherwise update is generic
     else:
         # Start from bottom of the column
+        #tmpprint('\t\tAdding BMPO')
         bound_mpo = left_bmpo_sl(peps_col,bound_mpo,chi=chi,truncate=truncate,ket=ket,allow_normalize=allow_normalize)
     return bound_mpo
 
@@ -496,6 +506,7 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
     # Loop through the columns, creating a boundary mpo for each
     bound_mpo = [None]*(col-1)
     for colind in range(col-1):
+        #tmpprint('\t\tColumn {}'.format(colind))
         mpiprint(4,'Updating boundary mpo')
         if ket is not None:
             ket_col = ket[colind][:]
@@ -1443,8 +1454,10 @@ def make_rand_peps(Nx,Ny,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
     # Place random tensors into the PEPS
     for x in range(Nx):
         for y in range(Ny):
+            #tmpprint('Making a single random PEPS tensor at {},{}'.format(x,y))
             tensors[x][y] = rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=Zn,dZn=dZn,backend=backend,dtype=dtype)
         # At the end of each column, make the norm smaller
+        #tmpprint('Normalizing peps col {}'.format(x))
         tensors[x][:] = normalize_peps_col(tensors[x][:])
 
     return tensors
@@ -1731,7 +1744,7 @@ def update_top_env_gen(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,tru
             if DEBUG:
                 mpiprint(6,'Computing resulting bmpo norm')
                 norm1 = top_env.norm()
-                mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+                mpiprint(0,'Init top BMPO Canonicalization Norm Difference for chi={}: {} ({},{})'.format(chi,abs(norm0-norm1)/abs(norm0),norm0,norm1))
     else:
         # Add the ket layer --------------------------------------------------
         """
@@ -1836,7 +1849,7 @@ def update_top_env_gen(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,tru
             if DEBUG:
                 mpiprint(6,'Computing resulting bmpo norm')
                 norm1 = top_env.norm()
-                mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+                mpiprint(0,'Add ket top BMPO Canonicalization Norm Difference for chi={}: {} ({},{})'.format(chi,abs(norm0-norm1)/abs(norm0),norm0,norm1))
 
         # Update prev_env
         prev_env = top_env
@@ -1932,7 +1945,7 @@ def update_top_env_gen(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,tru
             if DEBUG:
                 mpiprint(6,'Computing resulting bmpo norm')
                 norm1 = top_env.norm()
-                mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+                mpiprint(0,'Add bra top BMPO Canonicalization Norm Difference for chi={}: {} ({},{})'.format(chi,abs(norm0-norm1)/abs(norm0),norm0,norm1))
 
     return top_env
 
@@ -2103,7 +2116,7 @@ def update_bot_env_gen(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,tru
             if DEBUG:
                 mpiprint(6,'Computing resulting bmpo norm')
                 norm1 = bot_env.norm()
-                mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+                mpiprint(0,'Init bot BMPO Canonicalization Norm Difference for chi={}: {} ({},{})'.format(chi,abs(norm0-norm1)/abs(norm0),norm0,norm1))
     else:
         # Add the bra layer --------------------------------------------------
         """
@@ -2209,7 +2222,7 @@ def update_bot_env_gen(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,tru
             if DEBUG:
                 mpiprint(6,'Computing resulting bmpo norm')
                 norm1 = bot_env.norm()
-                mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+                mpiprint(0,'Add ket bot BMPO Canonicalization Norm Difference for chi={}: {} ({},{})'.format(chi,abs(norm0-norm1)/abs(norm0),norm0,norm1))
 
         # Update prev_env
         prev_env = bot_env
@@ -2306,7 +2319,7 @@ def update_bot_env_gen(row,bra,ket,left1,left2,right1,right2,prev_env,chi=10,tru
             if DEBUG:
                 mpiprint(6,'Computing resulting bmpo norm')
                 norm1 = bot_env.norm()
-                mpiprint(0,'Norm Difference for chi={}: {}'.format(chi,abs(norm0-norm1)/abs(norm0)))
+                mpiprint(0,'Add bra bot BMPO Canonicalization Norm Difference for chi={}: {} ({},{})'.format(chi,abs(norm0-norm1)/abs(norm0),norm0,norm1))
 
     # return result
     return bot_env
@@ -2753,6 +2766,7 @@ def make_N_positive(N,hermitian=True,positive=True):
 
     # Get a hermitian approximation of the environment
     if hermitian:
+        #tmpprint('\t\t\t\t\tMaking it hermitian')
         N1 = N.copy()
         N1 = N1.transpose([0,2,1,3])
         N = N.transpose([1,3,0,2])
@@ -2762,6 +2776,7 @@ def make_N_positive(N,hermitian=True,positive=True):
 
     # Get a positive approximation of the environment
     if positive:
+        #tmpprint('\t\t\t\t\tMaking it positive')
         try:
             if N.sym is None:
                 N = N.transpose([0,2,1,3])
@@ -2769,32 +2784,41 @@ def make_N_positive(N,hermitian=True,positive=True):
                 n2 = np.prod([N.ten.shape[i] for i in N.legs[1]])
                 n3 = np.prod([N.ten.shape[i] for i in N.legs[2]])
                 n4 = np.prod([N.ten.shape[i] for i in N.legs[3]])
+                #tmpprint('\t\t\t\t\t\tReshape N')
                 Nmat = N.backend.reshape(N.ten,(n1*n2,n3*n4))
+                #tmpprint('\t\t\t\t\t\tEigh')
                 u,v = N.backend.eigh(Nmat)
+                #tmpprint('\t\t\t\t\t\tPositive Sqrt of Vector')
                 u = pos_sqrt_vec(u)
                 Nmat = N.backend.einsum('ij,j,kj->ik',v,u,v)
+                #tmpprint('\t\t\t\t\t\tReshape N back')
                 N.ten = Nmat.reshape(N.shape)
                 N = N.transpose([0,2,1,3])
             else:
                 N = N.copy().transpose([0,2,1,3])
                 # Make this a sparse tensor
+                #tmpprint('\t\t\t\t\t\tMaking N Sparse')
                 Nmat = N.ten.make_sparse()
                 (N1,N2,N3,N4,n1,n2,n3,n4) = Nmat.shape
+                #tmpprint('\t\t\t\t\t\tTranspose & Matricize')
                 Nmat = Nmat.transpose([0,4,1,5,2,6,3,7])
                 Nmat = Nmat.reshape((N1*n1*N2*n2,N3*n3*N4*n4))
+                #tmpprint('\t\t\t\t\t\teigh')
                 u,v = N.backend.eigh(Nmat)
                 u = pos_sqrt_vec(u)
                 Nmat = N.backend.einsum('ij,j,kj->ik',v,u,v)
+                #tmpprint('\t\t\t\t\t\tdematricize')
                 Nmat = Nmat.reshape((N1,n1,N2,n2,N3,n3,N4,n4))
                 Nmat = Nmat.transpose([0,2,4,6,1,3,5,7])
                 # Cast back into a symtensor
+                #tmpprint('\t\t\t\t\t\tBack to symtensor')
                 delta = N.ten.get_irrep_map()
                 Nmat = N.backend.einsum('ABCDabcd,ABCD->ABCabcd',Nmat,delta)
                 N.ten.array = Nmat
                 # Retranspose
                 N = N.transpose([0,2,1,3])
         except Exception as e:
-            mpiprint(0,'Failed to make N positive, eigenvalues did not converge')
+            mpiprint(0,'Failed to make N positive:\n\t{}'.format(e))
 
     return N
 
@@ -2838,43 +2862,68 @@ def calc_local_env(bra1,bra2,ket1,ket2,env_top,env_bot,lbmpo,rbmpo,reduced=True,
 
     if reduced:
         # Get reduced tensors
+        #tmpprint('\t\t\t\tReduce Bra')
         ub,phys_b,phys_t,vt = reduce_tensors(bra1,bra2)
+        #tmpprint('\t\t\t\tReduce Ket')
         ubk,phys_bk,phys_tk,vtk = reduce_tensors(ket1,ket2)
 
         # Compute bottom half of environment
         if env_bot is None:
+            #tmpprint('\t\t\t\tContraction bot 1')
             tmp = einsum('CLB,LDRU->CDBUR',lbmpo[0],ub).remove_empty_ind(0).remove_empty_ind(0)
+            #tmpprint('\t\t\t\tContraction bot 2')
             tmp = einsum('BUR,cRb->cBUb',tmp,rbmpo[0]).remove_empty_ind(0)
+            #tmpprint('\t\t\t\tContraction bot 3')
             tmp = einsum('BUb,BlA->AlUb',tmp,lbmpo[1])
+            #tmpprint('\t\t\t\tContraction bot 4')
             tmp = einsum('AlUb,ldru->dAurUb',tmp,ubk).remove_empty_ind(0)
+            #tmpprint('\t\t\t\tContraction bot 5')
             envb= einsum('AurUb,bra->AuUa',tmp,rbmpo[1])
         else:
+            #tmpprint('\t\t\t\tContraction bot 1')
             tmp = einsum('CdDc,CLB->BLdDc',env_bot,lbmpo[0])
+            #tmpprint('\t\t\t\tContraction bot 2')
             tmp = einsum('BLdDc,LDRU->BdURc',tmp,ub)
+            #tmpprint('\t\t\t\tContraction bot 3')
             tmp = einsum('BdURc,cRb->BdUb',tmp,rbmpo[0])
+            #tmpprint('\t\t\t\tContraction bot 4')
             tmp = einsum('BdUb,BlA->AldUb',tmp,lbmpo[1])
+            #tmpprint('\t\t\t\tContraction bot 5')
             tmp = einsum('AldUb,ldru->AurUb',tmp,ubk)
+            #tmpprint('\t\t\t\tContraction bot 6')
             envb= einsum('AurUb,bra->AuUa',tmp,rbmpo[1])
 
         # Compute top half of environment
         if env_top is None:
+            #tmpprint('\t\t\t\tContraction top 1')
             tmp = einsum('BlC,ldru->CuBdr',lbmpo[3],vtk).remove_empty_ind(0).remove_empty_ind(0)
+            #tmpprint('\t\t\t\tContraction top 2')
             tmp = einsum('Bdr,brc->cBdb',tmp,rbmpo[3]).remove_empty_ind(0)
+            #tmpprint('\t\t\t\tContraction top 3')
             tmp = einsum('Bdb,ALB->ALdb',tmp,lbmpo[2])
+            #tmpprint('\t\t\t\tContraction top 4')
             tmp = einsum('ALdb,LDRU->UAdDRb',tmp,vt).remove_empty_ind(0)
+            #tmpprint('\t\t\t\tContraction top 5')
             envt= einsum('AdDRb,aRb->AdDa',tmp,rbmpo[2])
         else:
+            #tmpprint('\t\t\t\tContraction top 1')
             tmp = einsum('CuUc,BlC->BluUc',env_top,lbmpo[3])
+            #tmpprint('\t\t\t\tContraction top 2')
             tmp = einsum('BluUc,ldru->BdrUc',tmp,vtk)
+            #tmpprint('\t\t\t\tContraction top 3')
             tmp = einsum('BdrUc,brc->BdUb',tmp,rbmpo[3])
+            #tmpprint('\t\t\t\tContraction top 4')
             tmp = einsum('BdUb,ALB->ALdUb',tmp,lbmpo[2])
+            #tmpprint('\t\t\t\tContraction top 5')
             tmp = einsum('ALdUb,LDRU->AdDRb',tmp,vt)
+            #tmpprint('\t\t\t\tContraction top 6')
             envt= einsum('AdDRb,aRb->AdDa',tmp,rbmpo[2])
 
         # Compute Environment
+        #tmpprint('\t\t\t\tFinal Contraction')
         N = einsum('AdDa,AuUa->uUdD',envt,envb)
+        #tmpprint('\t\t\t\tMake N Positive')
         N = make_N_positive(N,hermitian=hermitian,positive=positive)
-
         return ub,phys_b,phys_t,vt,ubk,phys_bk,phys_tk,vtk,N
     else:
         raise NotImplementedError()
@@ -3917,7 +3966,8 @@ class PEPS:
     """
 
     def __init__(self,Nx=10,Ny=10,d=2,D=2,
-                 chi=None,Zn=None,thermal=False,
+                 chi=None,chi_norm=None,chi_op=None,
+                 Zn=None,thermal=False,
                  dZn=None,canonical=False,backend='numpy',
                  singleLayer=True,dtype=float_,
                  normalize=True,norm_tol=1e-3,
@@ -3941,6 +3991,12 @@ class PEPS:
                 The auxilliary bond dimension
             chi : int
                 The boundary mpo maximum bond dimension
+            chi_norm : int
+                The boundary mpo maximum bond dimension for 
+                use when the norm is computed
+            chi_op : int
+                The boundary mpo maximum bond dimension for 
+                use when operator expectation values are computed
             Zn : int
                 Create a PEPS which preserves this Zn symmetry,
                 i.e. if Zn=2, then Z2 symmetry is preserved.
@@ -4010,6 +4066,10 @@ class PEPS:
         self.D           = D
         if chi is None: chi = 4*D**2
         self.chi         = chi
+        if chi_norm is None: chi_norm = chi
+        if chi_op is None: chi_op = chi
+        self.chi_norm = chi_norm
+        self.chi_op = chi_op
         self.Zn          = Zn
         self.thermal     = thermal
         if dZn is None: dZn = Zn
@@ -4041,6 +4101,7 @@ class PEPS:
                                              backend=self.backend,
                                              dtype=self.dtype)
         else:
+            #tmpprint('Making Initial Random PEPS')
             self.tensors = make_rand_peps(self.Nx,
                                           self.Ny,
                                           self.d,
@@ -4071,6 +4132,7 @@ class PEPS:
 
         # Normalize the PEPS
         if normalize:
+            #tmpprint('Normalize Initialized PEPS')
             self.normalize()
 
     def calc_bmpo_left(self,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None,allow_normalize=False):
@@ -4220,7 +4282,7 @@ class PEPS:
                 procedure
         """
         # Figure out good chi (if not given)
-        if chi is None: chi = self.chi
+        if chi is None: chi = self.chi_norm
         if max_iter is None: max_iter = self.max_norm_iter
         if exact_norm_tol is None: exact_norm_tol = self.exact_norm_tol
         if norm_tol is None: norm_tol = self.norm_tol
@@ -4275,7 +4337,7 @@ class PEPS:
             val : float
                 The resulting observable's expectation value
         """
-        if chi is None: chi = self.chi
+        if chi is None: chi = self.chi_op
         # Calculate the operator's value
         if nn:
             return calc_peps_nn_op(self,ops,chi=chi,normalize=normalize,ket=ket,contracted_env=contracted_env)

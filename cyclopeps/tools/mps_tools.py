@@ -167,7 +167,7 @@ def move_gauge_left_qr(ten1,ten2):
     mpiprint(0,'QR to the left not implemented yet')
     raise NotImplemented
 
-def move_gauge_right_svd(ten1,ten2,truncate_mbd=1e100,split_s=False):
+def move_gauge_right_svd(ten1,ten2,truncate_mbd=1e100,split_s=False,return_ent=False,return_wgt=False):
     """
     Move the gauge via svd from ten1 to ten2
 
@@ -200,26 +200,43 @@ def move_gauge_right_svd(ten1,ten2,truncate_mbd=1e100,split_s=False):
         res0 = einsum('abc,cde->abde',ten1,ten2).make_sparse()
 
     # Perform the svd on the tensor
-    U,S,V,EE,EEs,wgt = ten1.svd(2,truncate_mbd=truncate_mbd)
+    #tmpprint('\t\t\t\t\tDoing SVD')
+    out = ten1.svd(2,
+                   truncate_mbd=truncate_mbd,
+                   return_ent=return_ent,
+                   return_wgt=return_wgt)
+    U,S,V = out[0],out[1],out[2]
 
     # Multiply remainder into neighboring site
     if split_s:
+        #tmpprint('\t\t\t\t\tCombining U and S')
         ten1 = einsum('abc,cd->abd',U,S.sqrt())
+        #tmpprint('\t\t\t\t\tCombining S and V')
         gauge = einsum('ab,bc->ac',S.sqrt(),V)
+        #tmpprint('\t\t\t\t\tDetermining ten2')
         ten2 = einsum('ab,bpc->apc',gauge,ten2)
     else:
         ten1 = U
+        #tmpprint('\t\t\t\t\tCombining S and V')
         gauge = einsum('ab,bc->ac',S,V)
+        #tmpprint('\t\t\t\t\tDetermining ten2')
         ten2 = einsum('ab,bpc->apc',gauge,ten2)
 
     if DEBUG:
         res1 = einsum('abc,cde->abde',ten1,ten2).make_sparse()
         mpiprint(0,'SVD (right) Difference = {}'.format((res0-res1).abs().sum()))
 
-    # Return results
-    return ten1,ten2,EE,EEs,wgt
+    # Return Results
+    if return_wgt and return_ent:
+        return ten1,ten2,out[3],out[4],out[5]
+    elif return_wgt:
+        return ten1,ten2,out[3]
+    elif return_ent:
+        return ten1,ten2,out[3],out[4]
+    else:
+        return ten1,ten2
 
-def move_gauge_left_svd(ten1,ten2,truncate_mbd=1e100,split_s=False):
+def move_gauge_left_svd(ten1,ten2,truncate_mbd=1e100,split_s=False,return_ent=True,return_wgt=True):
     """
     Move the gauge via svd from ten2 to ten1
 
@@ -252,24 +269,41 @@ def move_gauge_left_svd(ten1,ten2,truncate_mbd=1e100,split_s=False):
         res0 = einsum('abc,cde->abde',ten1,ten2).make_sparse()
 
     # Perform the svd on the tensor
-    U,S,V,EE,EEs,wgt = ten2.svd(1,truncate_mbd=truncate_mbd)
+    #tmpprint('\t\t\t\t\tDoing SVD')
+    out = ten2.svd(1,
+                   truncate_mbd=truncate_mbd,
+                   return_ent=return_ent,
+                   return_wgt=return_wgt)
+    U,S,V = out[0],out[1],out[2]
 
     # Multiply remainder into neighboring site
     if split_s:
+        #tmpprint('\t\t\t\t\tCombine S & V')
         ten2 = einsum('ca,apb->cpb',S.sqrt(),V)
+        #tmpprint('\t\t\t\t\tCombine U & S')
         gauge = einsum('ab,bc->ac',U,S.sqrt())
+        #tmpprint('\t\t\t\t\tDetermine ten1')
         ten1 = einsum('apb,bc->apc',ten1,gauge)
     else:
         ten2 = V
+        #tmpprint('\t\t\t\t\tCombine U & S')
         gauge = einsum('ab,bc->ac',U,S)
+        #tmpprint('\t\t\t\t\tDetermine ten1')
         ten1 = einsum('apb,bc->apc',ten1,gauge)
 
     if DEBUG:
         res1 = einsum('abc,cde->abde',ten1,ten2).make_sparse()
         mpiprint(0,'SVD (left) Difference = {}'.format((res0-res1).abs().sum()))
 
-    # Return results
-    return ten1,ten2,EE,EEs,wgt
+    # Return Results
+    if return_wgt and return_ent:
+        return ten1,ten2,out[3],out[4],out[5]
+    elif return_wgt:
+        return ten1,ten2,out[3]
+    elif return_ent:
+        return ten1,ten2,out[3],out[4]
+    else:
+        return ten1,ten2
 
 def move_gauge_right_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wgt=True,split_s=False):
     """
@@ -320,19 +354,34 @@ def move_gauge_right_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wg
     if (truncate_mbd > ten1.shape[2]) and (not split_s):
         ten1,ten2 = move_gauge_right_qr(ten1,ten2)
         EE,EEs,wgt = None,None,None
-        #ten1,ten2,EE,EEs,wgt = move_gauge_right_svd(ten1,ten2)
-    else:
-        ten1,ten2,EE,EEs,wgt = move_gauge_right_svd(ten1,ten2,truncate_mbd=truncate_mbd,split_s=split_s)
 
-    # Return Results
-    if return_wgt and return_ent:
-        return ten1,ten2,EE,EEs,wgt
-    elif return_wgt:
-        return ten1,ten2,wgt
-    elif return_ent:
-        return ten1,ten2,EE,EEs
+        # Return Results
+        if return_wgt and return_ent:
+            return ten1,ten2,EE,EEs,wgt
+        elif return_wgt:
+            return ten1,ten2,wgt
+        elif return_ent:
+            return ten1,ten2,EE,EEs
+        else:
+            return ten1,ten2
     else:
-        return ten1,ten2
+        out = move_gauge_right_svd(ten1,ten2,
+                                   truncate_mbd=truncate_mbd,
+                                   split_s=split_s,
+                                   return_ent=return_ent,
+                                   return_wgt=return_wgt)
+        ten1,ten2 = out[0],out[1]
+
+        # Return Results
+        if return_wgt and return_ent:
+            return ten1,ten2,out[2],out[3],out[4]
+        elif return_wgt:
+            return ten1,ten2,out[2]
+        elif return_ent:
+            return ten1,ten2,out[2],out[3]
+        else:
+            return ten1,ten2
+
 
 def move_gauge_left_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wgt=True,split_s=False):
     """
@@ -375,21 +424,35 @@ def move_gauge_left_tens(ten1,ten2,truncate_mbd=1e100,return_ent=True,return_wgt
     
     # Do either svd or qr decomposition
     if False: # NOTE - Figure out how to do this correctly #truncate_mbd > ten1.shape[2]:
-        #ten1,ten2 = move_gauge_left_qr(ten1,ten2)
+
         ten1,ten2,_,_,_ = move_gauge_left_svd(ten1,ten2)
         EE,EEs,wgt = None,None,None
-    else:
-        ten1,ten2,EE,EEs,wgt = move_gauge_left_svd(ten1,ten2,truncate_mbd=truncate_mbd,split_s=split_s)
 
-    # Return Results
-    if return_wgt and return_ent:
-        return ten1,ten2,EE,EEs,wgt
-    elif return_wgt:
-        return ten1,ten2,wgt
-    elif return_ent:
-        return ten1,ten2,EE,EEs
+        # Return Results
+        if return_wgt and return_ent:
+            return ten1,ten2,EE,EEs,wgt
+        elif return_wgt:
+            return ten1,ten2,wgt
+        elif return_ent:
+            return ten1,ten2,EE,EEs
+        else:
+            return ten1,ten2
     else:
-        return ten1,ten2
+        out = move_gauge_left_svd(ten1,ten2,
+                                  truncate_mbd=truncate_mbd,
+                                  split_s=split_s,
+                                  return_ent=return_ent,
+                                  return_wgt=return_wgt)
+        ten1,ten2 = out[0],out[1]
+        if return_wgt and return_ent:
+            return ten1,ten2,out[2],out[3],out[4]
+        elif return_wgt:
+            return ten1,ten2,out[2]
+        elif return_ent:
+            return ten1,ten2,out[2],out[3]
+        else:
+            return ten1,ten2
+
 
 def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True,split_s=False):
     """
@@ -435,19 +498,14 @@ def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True
     # Check to make sure everything is done correctly
     if DEBUG:
         init_cont = einsum('abc,cde->abde',mps[site],mps[site+1])
-        if ten1.sym is None:
-            mpiprint(0,'\tInitial Shape ten1 = {}, {}'.format(mps[site].ten.shape,mps[site].legs))
-            mpiprint(0,'\tInitial Shape ten2 = {}, {}'.format(mps[site+1].ten.shape,mps[site+1].legs))
-        else:
-            mpiprint(0,'\tInitial Shape ten1 = {}, {}, {}, {}'.format(mps[site].ten.array.shape,mps[site].legs,mps[site].sym[0],mps[site].sym[1]))
-            mpiprint(0,'\tInitial Shape ten2 = {}, {}, {}, {}'.format(mps[site+1].ten.array.shape,mps[site+1].legs,mps[site+1].sym[0],mps[site+1].sym[1]))
 
     # Move the gauge
-    ten1,ten2,EE,EEs,wgt = move_gauge_right_tens(ten1,ten2,
-                                                truncate_mbd=truncate_mbd,
-                                                return_ent=True,
-                                                return_wgt=True,
-                                                split_s=split_s)
+    out = move_gauge_right_tens(ten1,ten2,
+                               truncate_mbd=truncate_mbd,
+                               return_ent=return_ent,
+                               return_wgt=return_wgt,
+                               split_s=split_s)
+    ten1,ten2 = out[0],out[1]
 
     # Put back into the mps
     mps[site] = ten1
@@ -457,22 +515,18 @@ def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True
         fin_cont = einsum('abc,cde->abde',mps[site],mps[site+1])
         if fin_cont.sym is None:
             diff = init_cont.backend.sum(init_cont.backend.abs(init_cont.ten-fin_cont.ten))
-            mpiprint(0,'\tFinal   Shape ten1 = {}, {}'.format(mps[site].ten.shape,mps[site].legs))
-            mpiprint(0,'\tFinal   Shape ten2 = {}, {}'.format(mps[site+1].ten.shape,mps[site+1].legs))
             mpiprint(0,'\tDifference before/after QR/SVD = {}'.format(diff))
         else:
             diff = init_cont.backend.sum(init_cont.backend.abs(init_cont.ten.make_sparse()-fin_cont.ten.make_sparse()))
-            mpiprint(0,'\tFinal   Shape ten1 = {}, {}, {}, {}'.format(mps[site].ten.array.shape,mps[site].legs,mps[site].sym[0],mps[site].sym[1]))
-            mpiprint(0,'\tFinal   Shape ten2 = {}, {}, {}, {}'.format(mps[site+1].ten.array.shape,mps[site+1].legs,mps[site+1].sym[0],mps[site+1].sym[1]))
             mpiprint(0,'\tDifference before/after QR/SVD = {}'.format(diff))
 
     # Return results
     if return_wgt and return_ent:
-        return mps,EE,EEs,wgt
+        return mps,out[2],out[3],out[4]
     elif return_wgt:
-        return mps,wgt
+        return mps,out[2]
     elif return_ent:
-        return mps,EE,EEs
+        return mps,out[2],out[3]
     else:
         return mps
 
@@ -519,20 +573,15 @@ def move_gauge_left(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True,
 
     if DEBUG:
         init_cont = einsum('abc,cde->abde',mps[site-1],mps[site])
-        if ten1.sym is None:
-            mpiprint(0,'\tInitial Shape ten1 = {}, {}'.format(mps[site-1].ten.shape,mps[site-1].legs))
-            mpiprint(0,'\tInitial Shape ten2 = {}, {}'.format(mps[site].ten.shape,mps[site].legs))
-        else:
-            mpiprint(0,'\tInitial Shape ten1 = {}, {}, {}, {}'.format(mps[site-1].ten.array.shape,mps[site-1].legs,mps[site-1].sym[0],mps[site-1].sym[1]))
-            mpiprint(0,'\tInitial Shape ten2 = {}, {}, {}, {}'.format(mps[site].ten.array.shape,mps[site].legs,mps[site].sym[0],mps[site].sym[1]))
 
     # Move the gauge
-    ten1,ten2,EE,EEs,wgt = move_gauge_left_tens(ten1,ten2,
-                                                truncate_mbd=truncate_mbd,
-                                                return_ent=True,
-                                                return_wgt=True,
-                                                split_s=split_s)
-
+    out = move_gauge_left_tens(ten1,ten2,
+                               truncate_mbd=truncate_mbd,
+                               return_ent=return_ent,
+                               return_wgt=return_wgt,
+                               split_s=split_s)
+    ten1,ten2 = out[0],out[1]
+    
     # Put back into the mps
     mps[site-1] = ten1
     mps[site] = ten2
@@ -541,22 +590,18 @@ def move_gauge_left(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True,
         fin_cont = einsum('abc,cde->abde',mps[site-1],mps[site])
         if fin_cont.sym is None:
             diff = init_cont.backend.sum(init_cont.backend.abs(init_cont.ten-fin_cont.ten))
-            mpiprint(0,'\tFinal   Shape ten1 = {}, {}'.format(mps[site-1].ten.shape,mps[site-1].legs))
-            mpiprint(0,'\tFinal   Shape ten2 = {}, {}'.format(mps[site].ten.shape,mps[site].legs))
             mpiprint(0,'\tDifference before/after QR/SVD = {}'.format(diff))
         else:
             diff = init_cont.backend.sum(init_cont.backend.abs(init_cont.ten.make_sparse()-fin_cont.ten.make_sparse()))
-            mpiprint(0,'\tFinal   Shape ten1 = {}, {}, {}, {}'.format(mps[site-1].ten.array.shape,mps[site-1].legs,mps[site-1].sym[0],mps[site-1].sym[1]))
-            mpiprint(0,'\tFinal   Shape ten2 = {}, {}, {}, {}'.format(mps[site].ten.array.shape,mps[site].legs,mps[site].sym[0],mps[site].sym[1]))
             mpiprint(0,'\tDifference before/after QR/SVD = {}'.format(diff))
 
     # Return results
     if return_wgt and return_ent:
-        return mps,EE,EEs,wgt
+        return mps,out[2],out[3],out[4]
     elif return_wgt:
-        return mps,wgt
+        return mps,out[2]
     elif return_ent:
-        return mps,EE,EEs
+        return mps,out[2],out[3]
     else:
         return mps
 
@@ -581,6 +626,7 @@ def make_mps_left(mps,truncate_mbd=1e100,split_s=False):
     N = len(mps)
     # Loop backwards
     for site in range(N-1):
+        #tmpprint('\t\t\t\tSite: {}'.format(site))
         mps = move_gauge_right(mps,site,
                                truncate_mbd=truncate_mbd,
                                return_ent=False,
@@ -611,6 +657,7 @@ def make_mps_right(mps,truncate_mbd=1e100,split_s=False):
     N = len(mps)
     # Loop backwards
     for site in range(int(N)-1,0,-1):
+        #tmpprint('\t\t\t\tSite: {}'.format(site))
         mps = move_gauge_left(mps,site,
                               truncate_mbd=truncate_mbd,
                               return_ent=False,
@@ -665,8 +712,10 @@ def mps_apply_svd(mps,chi,redistribute=True,split_s=True):
             The mps with a maximum bond dimension of \chi
     """
     mpiprint(8,'Moving gauge to left, prep for truncation')
+    #tmpprint('\t\t\t\tMaking MPS left canonical')
     mps = make_mps_left(mps,split_s=split_s)
     mpiprint(8,'Truncating as moving to right')
+    #tmpprint('\t\t\t\tTruncating left canonical MPS')
     mps = make_mps_right(mps,truncate_mbd=chi,split_s=split_s)
     if redistribute:
         mps = redistribute_mps_vals(mps)
