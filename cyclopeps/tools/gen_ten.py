@@ -42,6 +42,10 @@ def calc_entanglement(S,backend=np):
     """
     # Create a copy of S
     S = S.copy()
+    
+    # See if it is in mem
+    if not S.in_mem: S.from_disk()
+
     # Ensure correct normalization
     norm_fact = backend.dot(S,S.conj())**(1./2.)+1e-100
     S /= norm_fact
@@ -78,6 +82,11 @@ def qr_ten(ten,split_ind,rq=False,backend=np.linalg):
             The resulting R matrix
     """
     mpiprint(9,'Performing qr on tensors')
+
+    # Load tensor (if needed)
+    in_mem_init = ten.in_mem
+    if not in_mem_init: ten.from_disk()
+
     # Reshape tensor into matrix
     ten_shape = ten.shape
     mpiprint(9,'First, reshape the tensor into a matrix')
@@ -104,6 +113,12 @@ def qr_ten(ten,split_ind,rq=False,backend=np.linalg):
         #assert(np.allclose(ten,backend.einsum(subscripts,Q,R),rtol=1e-6))
     else:
         raise NotImplementedError()
+
+    # Write to disk (if needed)
+    if not in_mem_init:
+        R.to_disk()
+        Q.to_disk()
+
     # Return results
     if rq:
         return R,Q
@@ -150,6 +165,11 @@ def svd_ten(ten,split_ind,truncate_mbd=1e100,return_ent=True,return_wgt=True,bac
             Only returned if return_wgt == True
     """
     mpiprint(8,'Performing svd on tensors')
+
+    # Load tensor (if needed)
+    in_mem_init = ten.in_mem
+    if not in_mem_init: ten.from_disk()
+
     # Reshape tensor into matrix
     ten_shape = ten.shape
     mpiprint(9,'First, reshape the tensor into a matrix')
@@ -188,6 +208,12 @@ def svd_ten(ten,split_ind,truncate_mbd=1e100,return_ent=True,return_wgt=True,bac
     new_dims = (int(np.prod(V.shape)/np.prod(ten_shape[split_ind:])),)+ten_shape[split_ind:]
     V = V.reshape(new_dims)
 
+    # Write to disk (if needed)
+    if not in_mem_init:
+        U.to_disk()
+        S.to_disk()
+        V.to_disk()
+
     # Print some results
     if return_ent or return_wgt:
         mpiprint(10,'Entanglement Entropy = {}'.format(EE))
@@ -207,7 +233,7 @@ def svd_ten(ten,split_ind,truncate_mbd=1e100,return_ent=True,return_wgt=True,bac
     else:
         return U,S,V
 
-def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_,legs=None):
+def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_,legs=None,in_mem=True):
     """
     Create an identity tensor
 
@@ -233,6 +259,7 @@ def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_,legs=None):
         # Create a dense tensor
         ten = backend.eye(D,dtype=dtype)
         ten = GEN_TEN(ten=ten,backend=backend,legs=legs)
+        if not in_mem: ten.to_disk()
         return ten
     else:
         # Create a symmetric tensor
@@ -244,9 +271,11 @@ def eye(D,Z,is_symmetric=False,backend='numpy',dtype=float_,legs=None):
         ten = GEN_TEN(shape=(D,D),sym=sym,backend=backend,dtype=dtype,legs=legs)
         for i in range(ten.ten.array.shape[0]):
             ten.ten.array[i,:,:] = backend.eye(ten.ten.array.shape[1])
+        if not in_mem: ten.to_disk()
         return ten
 
-def rand(shape,sym=None,backend='numpy',dtype=float_,legs=None):
+
+def rand(shape,sym=None,backend='numpy',dtype=float_,legs=None,in_mem=True):
     """
     Create a random gen_ten tensor
 
@@ -276,9 +305,10 @@ def rand(shape,sym=None,backend='numpy',dtype=float_,legs=None):
         sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
     ten = GEN_TEN(shape=shape,sym=sym,backend=backend,dtype=dtype,legs=legs)
     ten.randomize()
+    if not in_mem: ten.to_disk()
     return ten
 
-def ones(shape,sym=None,backend='numpy',dtype=float_,legs=None):
+def ones(shape,sym=None,backend='numpy',dtype=float_,legs=None,in_mem=True):
     """
     Create a gen_ten tensor filled with ones
 
@@ -308,9 +338,10 @@ def ones(shape,sym=None,backend='numpy',dtype=float_,legs=None):
         sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
     ten = GEN_TEN(shape=shape,sym=sym,backend=backend,dtype=dtype,legs=legs)
     ten.fill_all(1.)
+    if not in_mem: ten.to_disk()
     return ten
 
-def zeros(shape,sym=None,backend='numpy',dtype=float_,legs=None):
+def zeros(shape,sym=None,backend='numpy',dtype=float_,legs=None,in_mem=True):
     """
     Create a gen_ten tensor filled with zeros
 
@@ -340,6 +371,7 @@ def zeros(shape,sym=None,backend='numpy',dtype=float_,legs=None):
         sym = [(sym[0]+',')[:-1],sym[1],sym[2],sym[3]]
     ten = GEN_TEN(shape=shape,sym=sym,backend=backend,dtype=dtype,legs=legs)
     ten.fill_all(0.)
+    if not in_mem: ten.to_disk()
     return ten
 
 def find_all(s,ch):
@@ -430,7 +462,12 @@ def einsum(subscripts,opA,opB):
         output : ndarray
             The resulting array from the einsum calculation
     """
-    print_str = ''
+
+    # Load tensor (if needed)
+    in_mem_init = (opA.in_mem && opB.in_mem)
+    if not opA.in_mem: opA.from_disk()
+    if not opB.in_mem: opB.from_disk()
+
     # Format String ------------------------------------
     _subscripts = subscripts
     subscripts = replace_caps(subscripts)
@@ -483,6 +520,11 @@ def einsum(subscripts,opA,opB):
                           backend = opA.backend,
                           ten = res,
                           legs = legs)
+
+    # Save to disk (if needed)
+    if not in_mem_init: res.to_disk()
+
+    # Return result
     return res
 
 ###########################################################
@@ -590,14 +632,23 @@ class GEN_TEN:
 
     @property
     def shape(self):
-        return self.ten.shape
+        if self.in_mem:
+            return self.ten.shape
+        else:
+            return self.saved_shape
 
     @property
     def full_shape(self):
         if self.sym is None:
-            return self.ten.shape
+            if self.in_mem:
+                return self.ten.shape
+            else:
+                return self.saved_shape
         else:
-            shape = list(self.ten.shape)
+            if self.in_mem:
+                shape = list(self.ten.shape)
+            else:
+                shape = list(self.saved_shape)
             for i in range(len(shape)):
                 shape[i] *= len(self.ten.sym[1][i])
             return tuple(shape)
@@ -627,18 +678,23 @@ class GEN_TEN:
         """
         Fill the tensor with a given value
         """
+        init_in_mem= self.in_mem
+        if not init_in_mem: self.from_disk()
         self.ten[:] = 0.
         if self.sym is None:
             self.ten += value*self.backend.ones(self.ten.shape)
         else:
             self.ten += value*self.backend.ones(self.ten.array.shape)
+        if not init_in_mem: self.to_disk()
 
     def make_sparse(self):
         """
         Convert the symmetric tensor into a sparse tensor
         """
+        init_in_mem= self.in_mem
+        if not init_in_mem: self.from_disk()
         if not self.is_symmetric:
-            return self.copy()
+            newten = self.copy()
         else:
             # Make a copy of the tensor
             newten = self.copy()
@@ -656,17 +712,28 @@ class GEN_TEN:
             newten.ten = newten.backend.transpose(newten.ten,order)
             newten.ten = newten.backend.reshape(newten.ten,newshape)
             return newten
+        if not init_in_mem: newten.to_disk()
+        return new_ten
 
     def copy(self):
         """
         Return a copy of the gen_ten object
         """
-        return self._as_new_tensor(self.ten.copy())
+        init_in_mem = ten.in_mem
+        if not init_in_mem: self.from_disk()
+        newten = self._as_new_tensor(self.ten.copy())
+        if not init_in_mem:
+            self.to_disk()
+            newten.to_disk()
+        return newten
 
     def _as_new_tensor(self,ten):
-        newten = GEN_TEN(ten=ten.copy(),
+        if not ten.in_mem: ten.from_disk()
+        ten = ten.copy()
+        newten = GEN_TEN(ten=ten,
                          backend=self.backend,
-                         legs=copy.deepcopy(self.legs))
+                         legs=copy.deepcopy(self.legs),
+                         in_mem=ten.in_mem)
         return newten
 
     def __str__(self):
@@ -695,6 +762,8 @@ class GEN_TEN:
         """
         Remove an index of size 1
         """
+        init_in_mem = self.in_mem
+        if not init_in_mem: self.from_disk()
         init_shape = self.ten.shape
         # Check that we are summing over only one index
         for i in range(len(self.legs[ind])):
@@ -754,7 +823,7 @@ class GEN_TEN:
             if not (i == ind):
                 newlegs += [list(range(cnt,cnt+len(self.legs[i])))]
                 cnt += len(self.legs[i])
-        return GEN_TEN(ten=newten,backend=self.backend,legs=newlegs)
+        return GEN_TEN(ten=newten,backend=self.backend,legs=newlegs,in_mem=init_in_mem)
 
     def merge_inds(self,combinds,make_cp=True):
         """
@@ -806,7 +875,8 @@ class GEN_TEN:
         """
         Returns the Q and R from a qr decomposition of the tensor
         """
-        #print('\tsplit = {}, Legs = {}, legs[split] = {}'.format(split,self.legs,self.legs[split][0]))
+        init_in_mem = self.in_mem
+        if not init_in_mem: self.from_disk()
         leg_split = split
         split = self.legs[split][0]
         if self.sym is None:
@@ -815,8 +885,8 @@ class GEN_TEN:
         else:
             # Do qr on symtensor
             Q,R = symqr(self.ten,[list(range(split)),list(range(split,self.ten.ndim))])
-        Q = GEN_TEN(ten=Q,backend=self.backend)
-        R = GEN_TEN(ten=R,backend=self.backend)
+        Q = GEN_TEN(ten=Q,backend=self.backend,in_mem=init_in_mem)
+        R = GEN_TEN(ten=R,backend=self.backend,in_mem=init_in_mem)
         # Update Q legs
         Qlegs = []
         cnt = 0
@@ -838,6 +908,8 @@ class GEN_TEN:
         """
         Returns the U,S, and V from an svd of the tensor
         """
+        init_in_mem = self.in_mem
+        if not init_in_mem: self.from_disk()
         leg_split = split
         split = self.legs[split][0]
         if self.sym is None:
@@ -858,9 +930,9 @@ class GEN_TEN:
                          return_wgt=return_wgt)
         #tmpprint('\t\t\t\t\t\tBack from symsvd')
         U,S,V = res[0],res[1],res[2]
-        U = GEN_TEN(ten=U,backend=self.backend)
-        S = GEN_TEN(ten=S,backend=self.backend)
-        V = GEN_TEN(ten=V,backend=self.backend)
+        U = GEN_TEN(ten=U,backend=self.backend,in_mem=init_in_mem)
+        S = GEN_TEN(ten=S,backend=self.backend,in_mem=init_in_mem)
+        V = GEN_TEN(ten=V,backend=self.backend,in_mem=init_in_mem)
         # Update U legs
         Ulegs = []
         cnt = 0
@@ -913,39 +985,48 @@ class GEN_TEN:
     def sqrt(self):
         if self.sym is not None:
             return self._as_new_tensor(self.ten**(1./2.))
-            #return self._as_new_tensor(self.ten.sqrt())
         else:
             return self._as_new_tensor(self.ten**(1./2.))
-            #return self._as_new_tensor(self.backend.sqrt(self.ten))
 
     def abs(self):
         return self._as_new_tensor(abs(self.ten))
 
     def sum(self):
+        init_in_mem = self.in_mem
+        if not init_in_mem: self.from_disk()
         if self.sym is None:
             res = self.backend.einsum('abcdefghijklmnopqrstuvwxyz'[:len(self.ten.shape)]+'->',self.ten)
         else:
             res = self.backend.einsum('abcdefghijklmnopqrstuvwxyz'[:len(self.ten.array.shape)]+'->',self.ten.array)
+        if not init_in_mem: self.to_disk()
         return res
 
     def max(self):
+        init_in_mem = self.in_mem
+        if not init_in_mem: self.from_disk()
         if self.sym is None:
             maxval = self.backend.max(self.ten)
         else:
             maxval = self.backend.max(self.ten.array)
+        if not init_in_mem: self.to_disk()
         return float(maxval)
 
     def min(self):
+        init_in_mem = self.in_mem
+        if not init_in_mem: self.from_disk()
         if self.sym is None:
             minval = self.backend.min(self.ten)
         else:
             minval = self.backend.min(self.ten.array)
+        if not init_in_mem: self.to_disk()
         return float(minval)
 
     def to_val(self):
         """
         Returns a single valued tensor's value
         """
+        init_in_mem = self.in_mem
+        if not init_in_mem: self.from_disk()
         if self.sym is not None:
             tmp = self.ten.array
             es = self.ten.lib.einsum
@@ -959,60 +1040,125 @@ class GEN_TEN:
                 return es('abcdefghijklmnopqrstuvwxyz'[:len(tmp.shape)]+'->',tmp)
 
     def __mul__(self,x):
-        return self._as_new_tensor(self.ten*x)
+        init_in_mem = self.in_mem 
+        if not init_in_mem: self.from_disk()
+        newten = self._as_new_tensor(self.ten*x)
+        if not init_in_mem: 
+            newten.to_disk()
+            self.to_disk()
+        return newten
 
     def __rmul__(self,x):
         return self*x
 
     def __neg__(self):
-        return self._as_new_tensor(-self.ten)
+        init_in_mem = self.in_mem 
+        if not init_in_mem: self.from_disk()
+        newten = self._as_new_tensor(-self.ten)
+        if not init_in_mem: 
+            newten.to_disk()
+            self.to_disk()
+        return newten
 
     def __div__(self,x):
-        return self._as_new_tensor((1./x)*self.ten)
+        init_in_mem = self.in_mem 
+        if not init_in_mem: self.from_disk()
+        newten = self._as_new_tensor((1./x)*self.ten)
+        if not init_in_mem: 
+            newten.to_disk()
+            self.to_disk()
+        return newten
 
     def __truediv__(self,x):
-        return self._as_new_tensor((1./x)*self.ten)
-
-    def __truediv__(self,x):
-        return self._as_new_tensor((1./x)*self.ten)
+        init_in_mem = self.in_mem 
+        if not init_in_mem: self.from_disk()
+        newten = self._as_new_tensor((1./x)*self.ten)
+        if not init_in_mem: 
+            newten.to_disk()
+            self.to_disk()
+        return newten
 
     def __floordiv__(self,x):
         raise NotImplementedError('Floordiv not defined for gen_ten arrays')
 
     def __rdiv__(self,x):
-        return self._as_new_tensor((1./x)*self.ten)
+        init_in_mem = self.in_mem 
+        if not init_in_mem: self.from_disk()
+        newten = self._as_new_tensor((1./x)*self.ten)
+        if not init_in_mem: 
+            newten.to_disk()
+            self.to_disk()
+        return newten
 
     def __rtruediv__(self,x):
-        return self._as_new_tensor((1./x)*self.ten)
+        init_in_mem = self.in_mem 
+        if not init_in_mem: self.from_disk()
+        newten = self._as_new_tensor((1./x)*self.ten)
+        if not init_in_mem: 
+            newten.to_disk()
+            self.to_disk()
+        return newten
 
     def __rfloordiv__(self,x):
         raise NotImplementedError('Floordiv not defined for gen_ten arrays')
 
     def __add__(self,x):
+        init_in_mem = self.in_mem 
+        if not init_in_mem: self.from_disk()
         if isinstance(x,GEN_TEN):
-            return self._as_new_tensor(self.ten+x.ten)
+            xinit_in_mem = x.in_mem
+            if not xinit_in_mem: x.from_disk()
+            newten = self._as_new_tensor(self.ten+x.ten)
+            if not xinit_in_mem: x.to_disk()
         else:
-            return self._as_new_tensor(self.ten+x)
+            newten = self._as_new_tensor(self.ten+x)
+        if not init_in_mem:
+            self.to_disk()
+            newten.to_disk()
+        return newten
 
     def __radd__(self,x):
+        init_in_mem = self.in_mem 
+        if not init_in_mem: self.from_disk()
         if isinstance(x,GEN_TEN):
-            return self._as_new_tensor(self.ten+x.ten)
+            xinit_in_mem = x.in_mem
+            if not xinit_in_mem: x.from_disk()
+            newten = self._as_new_tensor(self.ten+x.ten)
+            if not xinit_in_mem: x.to_disk()
         else:
-            return self._as_new_tensor(self.ten+x)
+            newten = self._as_new_tensor(self.ten+x)
+        if not init_in_mem:
+            self.to_disk()
+            newten.to_disk()
+        return newten
 
     def __sub__(self,x):
+        init_in_mem = self.in_mem 
+        if not init_in_mem: self.from_disk()
         if isinstance(x,GEN_TEN):
-            return self._as_new_tensor(self.ten-x.ten)
+            xinit_in_mem = x.in_mem
+            if not xinit_in_mem: x.from_disk()
+            newten = self._as_new_tensor(self.ten-x.ten)
+            if not xinit_in_mem: x.to_disk()
         else:
-            return self._as_new_tensor(self.tem-x)
+            newten = self._as_new_tensor(self.ten-x)
+        if not init_in_mem:
+            self.to_disk()
+            newten.to_disk()
+        return newten
 
     def __setitem__(self, key, value):
+        init_in_mem = self.in_mem 
+        if not init_in_mem: self.from_disk()
         if self.sym:
             self.ten.array[key] = value
         else:
             self.ten[key] = value
+        if not init_in_mem: self.to_disk()
 
     def invert_diag(self):
+        init_in_mem = self.in_mem
+        if not init_in_mem: self.from_disk()
         newten = self._as_new_tensor(self.ten)
         if newten.sym is None:
             assert(len(self.ten.shape) == 2)
@@ -1021,6 +1167,9 @@ class GEN_TEN:
             assert(len(self.ten.array.shape) == 3)
             for i in range(self.ten.array.shape[0]):
                 newten.ten.array[i] = self.backend.diag(1./self.backend.diag(newten.ten.array[i]))
+        if not init_in_mem:
+            self.to_disk()
+            newten.to_disk()
         return newten
 
     def square_inv(self):
@@ -1028,6 +1177,8 @@ class GEN_TEN:
         Take the inverse of a 'square' tensor, used in ALS for PEPS Full Update
         """
         newten = self._as_new_tensor(self.ten)
+        init_in_mem = newten.in_mem
+        if not init_in_mem: newten.from_disk()
         if newten.sym is None:
             assert(len(self.ten.shape) == 4)
             (n1,n2,n3,n4) = self.ten.shape
@@ -1047,6 +1198,7 @@ class GEN_TEN:
             delta = self.ten.get_irrep_map()
             inv = self.backend.einsum('ABCDabcd,ABCD->ABCabcd',inv,delta)
             newten.ten.array = inv
+        if not init_in_mem: newten.to_disk()
         return newten
 
     def to_disk(self):
@@ -1054,37 +1206,39 @@ class GEN_TEN:
         Write the actual gen_ten tensor to disk in location specified
         by gen_ten.saveloc
         """
-        if self.sym is None:
-            self.saved_shape = self.ten.shape
-            if hasattr(self.ten,'write_to_file'):
-                self.ten.write_to_file(self.saveloc)
+        if self.in_mem:
+            if self.sym is None:
+                self.saved_shape = self.ten.shape
+                if hasattr(self.ten,'write_to_file'):
+                    self.ten.write_to_file(self.saveloc)
+                else:
+                    self.backend.save(self.ten)
+                self.ten = None
             else:
-                self.backend.save(self.ten)
-            self.ten = None
-        else:
-            self.saved_shape = self.ten.array.shape
-            if hasattr(self.ten,'write_to_file'):
-                self.ten.array.write_to_file(self.saveloc)
-            else:
-                self.backend.save(self.ten.array)
-            self.ten.array = None
-        self.in_mem = False
+                self.saved_shape = self.ten.array.shape
+                if hasattr(self.ten,'write_to_file'):
+                    self.ten.array.write_to_file(self.saveloc)
+                else:
+                    self.backend.save(self.ten.array)
+                self.ten.array = None
+            self.in_mem = False
 
     def from_disk(self):
         """
         Read the gen_ten tensor from disk, where it has been previously 
         saved in the location specified by gen_ten.saveloc
         """
-        if self.sym is None:
-            if hasattr(self.ten,'write_to_file'):
-                self.ten = self.backend.zeros(self.saved_shape)
-                self.ten.read_from_file(self.saveloc)
+        if not self.in_mem:
+            if self.sym is None:
+                if hasattr(self.ten,'write_to_file'):
+                    self.ten = self.backend.zeros(self.saved_shape)
+                    self.ten.read_from_file(self.saveloc)
+                else:
+                    self.ten = self.backend.load(self.saveloc)
             else:
-                self.ten = self.backend.load(self.saveloc)
-        else:
-            if hasattr(self.ten,'write_to_file'):
-                self.ten.array = self.backend.zeros(self.saved_shape)
-                self.ten.array.read_from_file(self.saveloc)
-            else:
-                self.ten.array = self.backend.load(self.saveloc)
-        self.in_mem = True
+                if hasattr(self.ten,'write_to_file'):
+                    self.ten.array = self.backend.zeros(self.saved_shape)
+                    self.ten.array.read_from_file(self.saveloc)
+                else:
+                    self.ten.array = self.backend.load(self.saveloc)
+            self.in_mem = True

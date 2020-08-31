@@ -100,6 +100,10 @@ def calc_entanglement(S):
     """
     # Create a copy of S
     S = copy.deepcopy(S)
+
+    # Get from memory (if necessary)
+    if not S.in_mem: S.from_disk()
+
     # Ensure correct normalization
     norm_fact = sqrt(dot(S,conj(S)))
     S /= norm_fact
@@ -972,6 +976,32 @@ class MPS:
         for site in range(len(mpsconj.tensors)):
             mpsconj[site] = mpsconj[site].conj()
         return mpsconj
+
+    def to_disk(self):
+        """
+        Write all peps tensors to disk
+        """
+        for i in range(len(self)):
+            self.site_to_disk(i)
+    
+    def from_disk(self):
+        """
+        Read all peps tensors to disk
+        """
+        for i in range(len(self)):
+            self.site_from_disk(i)
+    
+    def site_to_disk(self,i):
+        """
+        Write a peps tensor at site peps[i] to disk
+        """
+        self[i].to_disk()
+
+    def site_from_disk(self,i):
+        """
+        Read a peps tensor at site peps[i] to disk
+        """
+        self[i].from_disk()
 
     # -----------------------------------------------------------------------
     # Yet to be implemented functions

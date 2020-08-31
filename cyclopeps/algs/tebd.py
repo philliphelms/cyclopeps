@@ -699,6 +699,9 @@ def run_tebd(Nx,Ny,d,ham,
     # Absorb lambda tensors if canonical
     if peps.ltensors is not None:
         peps.absorb_lambdas()
+
+    # Make sure PEPS is stored in local memory
+    peps.from_disk()
     
     # Make sure the peps is normalized
     peps.normalize(chi=chi_norm)
