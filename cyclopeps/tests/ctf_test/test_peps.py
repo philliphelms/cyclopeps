@@ -23,7 +23,6 @@ class test_peps(unittest.TestCase):
         self.assertTrue(abs((norm0-norm2)/norm0) < 1e-10)
         mpiprint(0,'Passed\n'+'='*50)
 
-    """
     def test_normalization(self):
         from cyclopeps.tools.peps_tools import PEPS
         mpiprint(0,'\n'+'='*50+'\nPeps (5x5) Normalization test without Symmetry\n'+'-'*50)
@@ -282,7 +281,6 @@ class test_peps(unittest.TestCase):
         self.assertTrue(abs((norm0-norm2)/norm2) < 1e-3)
         self.assertTrue(abs((norm0-norm3)/norm3) < 1e-3)
         mpiprint(0,'Passed\n'+'='*50)
-    """
 
 if __name__ == "__main__":
     unittest.main()

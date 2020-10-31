@@ -167,13 +167,13 @@ def tebd_step(peps,ham,mbd,step_size):
     # Return results ---------------------------
     return peps
 
-def tebd_steps(peps,ham,mbd,step_size,n_step,conv_tol,chi=None):
+def tebd_steps(peps,ham,mbd,step_size,n_step,conv_tol,chi=None,chi_norm=None,chi_op=None):
     """
     """
     nSite = len(peps)*len(peps[0])
 
     # Compute Initial Energy
-    Eprev = peps.calc_op(ham,chi=chi)
+    Eprev = peps.calc_op(ham,chi=chi_op)
     mpiprint(0,'Initial Energy/site = {}'.format(Eprev/nSite))
 
     # Do a single tebd step
@@ -183,13 +183,13 @@ def tebd_steps(peps,ham,mbd,step_size,n_step,conv_tol,chi=None):
         peps = tebd_step(peps,ham,mbd,step_size)
 
         # Normalize just in case
-        peps.normalize()
+        peps.normalize(chi=chi_norm)
 
         # Save PEPS
         #peps.save()
 
         # Compute Resulting Energy
-        E = peps.calc_op(ham,chi=chi)
+        E = peps.calc_op(ham,chi=chi_op)
 
         # Check for convergence
         mpiprint(0,'Energy/site = {} '.format(E/nSite))
@@ -208,6 +208,8 @@ def run_tebd(Nx,Ny,d,ham,
              backend='numpy',
              D=3,
              chi=10,
+             chi_norm=10,
+             chi_op=10,
              thermal=False,
              exact_norm_tol=20,
              norm_tol=0.1,
@@ -256,6 +258,12 @@ def run_tebd(Nx,Ny,d,ham,
             performed where it is slowly incremented)
         chi : int
             The boundary mpo maximum bond dimension
+        chi_norm : int
+            The boundary mpo maximum bond dimension used
+            when the norm is computed
+        chi_op : int
+            The boundary mpo maximum bond dimension used
+            when the operator expectation values are computed
         thermal : bool
             Whether to do the fu algorithm with a thermal state, i.e.
             two physical indices
@@ -327,6 +335,8 @@ def run_tebd(Nx,Ny,d,ham,
                     d=d,
                     D=D[0],
                     chi=chi[0],
+                    chi_norm=chi_norm,
+                    chi_op=chi_op,
                     Zn=Zn,
                     thermal=thermal,
                     backend=backend,
@@ -351,7 +361,9 @@ def run_tebd(Nx,Ny,d,ham,
                             step_size[Dind],
                             n_step[Dind],
                             conv_tol[Dind],
-                            chi = chi[Dind])
+                            chi = chi[Dind],
+                            chi_norm=chi_norm,
+                            chi_op=chi_op)
 
     # Print out results
     mpiprint(0,'\n\n'+'#'*50)

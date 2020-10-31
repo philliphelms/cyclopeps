@@ -1,48 +1,37 @@
+#!/usr/bin/env python
+#
+# Author: Yang Gao <younggao1994@gmail.com>
+#
+"""Numpy backend for Symtensor"""
+from mkl_interface import einsum_batched_matmul
 import numpy as np
-import scipy.linalg as sla
-#from pyscf.lib.logger import Logger
-BACKEND = 'numpy'
+BACKEND = 'blas'
 
 einsum = np.einsum
+def einsum(sub, *operands, **kwargs):
+    try:
+        out = einsum_batched_matmul(sub, *operands)
+    except Exception as e:
+        out = np.einsum(sub, *operands, **kwargs)
+    return out
+#einsum = einsum_batched_matmul
 astensor = np.asarray
 zeros = np.zeros
 empty = np.empty
-array = np.array
 ones = np.ones
 rint = np.rint
 random = np.random.random
 norm = np.linalg.norm
-def svd(mat,full_matrices=False):
-    try:
-        return np.linalg.svd(mat,full_matrices=full_matrices)
-    except:
-        return sla.svd(mat,lapack_driver='gesvd')
 qr = np.linalg.qr
-eigh = np.linalg.eigh
-def inv(mat):
-    try:
-        return np.linalg.inv(mat)
-    except:
-        return np.linalg.pinv(mat)
-#inv = np.linalg.pinv
-def pinv(mat):
-    return np.linalg.pinv(mat)
 dot = np.dot
 diag = np.diag
 reshape = np.reshape
-transpose = np.transpose
-abs = np.abs
-sum = np.sum
-eye = np.eye
-max = np.max
-min = np.min
-append = np.append
-sqrt = np.sqrt
-log2 = np.log2
 eye = np.eye
 hstack = np.hstack
 vstack = np.vstack
-isnan = np.isnan
+append = np.append
+sqrt = np.sqrt
+log2 = np.log2
 expm = sla.expm
 save = np.save
 load = np.load
@@ -52,6 +41,8 @@ def non_zeros(a):
     return idx[0]
 def copy(a):
     return a.copy()
+def pinv(mat):
+    return np.linalg.pinv(mat)
 
 def write_all(a, ind, fill):
     a.put(ind, fill)
@@ -65,3 +56,8 @@ def to_nparray(a):
 def find_less(a, threshold):
     idx = np.where(a.ravel()<threshold)[0]
     return idx
+def svd(mat,full_matrices=False):
+    try:
+        return np.linalg.svd(mat,full_matrices=False)
+    except:
+        return sla.svd(mat,lapack_driver='gesvd')

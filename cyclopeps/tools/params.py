@@ -1,4 +1,5 @@
 import os, sys
+import uuid
 try:
     from mpi4py import MPI
     # MPI Global Variables
@@ -12,7 +13,8 @@ except:
 # Temporary directories for calculation
 TMPDIR = os.environ.get('TMPDIR','.')
 TMPDIR = os.environ.get('CYCLOPEPS_TMPDIR',TMPDIR)
-
+DIRID = str(uuid.uuid1())
+ 
 # Printing Global Variables
 DEBUG = False
 VERBOSE = 1

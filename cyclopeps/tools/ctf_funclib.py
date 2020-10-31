@@ -43,7 +43,6 @@ abs = ctf.abs
 sum = ctf.sum
 eye = ctf.eye
 
-
 def non_zeros(a):
     return a.read_all_nnz()[0]
 
@@ -90,7 +89,6 @@ def svd(a,full_matrices=False):
     v = ctf.from_nparray(v)
     return u,s,v
 def eigh(a):
-    print(a)
     a = ctf.to_nparray(a)
     u,v = np.linalg.eigh(a)
     u = ctf.from_nparray(u)

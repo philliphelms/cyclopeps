@@ -205,6 +205,7 @@ def noiseless_als(phys_b,phys_t,N,eH,mbd,als_iter=100,als_tol=1e-10,stablesplit=
     physical index-holding tensors as the initial guess
     """
     # Create initial guesses for resulting tensors
+    #tmpprint('\t\t\t\tSU Initial Guess')
     phys_b_new,phys_t_new = simple_update_init_guess(phys_b,phys_t,eH,mbd)
 
     # Initialize cost function
@@ -213,17 +214,21 @@ def noiseless_als(phys_b,phys_t,N,eH,mbd,als_iter=100,als_tol=1e-10,stablesplit=
     for i in range(als_iter):
 
         # Optimize Bottom Site
+        #tmpprint('\t\t\t\tOptimize Bottom')
         phys_b_new = optimize_bottom(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
 
         # Optimize Top Site
+        #tmpprint('\t\t\t\tOptimize Top')
         phys_t_new = optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
 
         # Split singular values to stabilize
+        #tmpprint('\t\t\t\tStable Split')
         if stablesplit:
             comb = einsum('DPA,AQU->DPQU',phys_b_new,phys_t_new)
             phys_b_new,phys_t_new = split_sites(comb,mbd)
 
         # Check for convergence
+        #tmpprint('\t\t\t\tCost Function')
         cost = cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
         if (abs(cost) < als_tol) or (abs((cost-cost_prev)/cost) < als_tol):
             break
@@ -316,10 +321,8 @@ def make_equal_distance(peps1,peps2,mbd):
     peps2 = einsum('DPa,LaRU->LDPRU',phys_t,vt)
 
     # Try to shrink norm by multiplying peps1 and peps2 by constants
-    #print('Before: {} {} {} {}'.format(peps1.ten[0,0,0,0,0],peps1.ten[0,0,1,0,0],peps2.ten[0,0,0,0,0],peps2.ten[0,0,1,0,0]))
     peps1 /= peps1.abs().max()
     peps2 /= peps2.abs().max()
-    #print('After :{} {} {} {}'.format(peps1.ten[0,0,0,0,0],peps1.ten[0,0,1,0,0],peps2.ten[0,0,0,0,0],peps2.ten[0,0,1,0,0]))
 
     # Return results
     return peps1,peps2
@@ -328,33 +331,45 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,mbd,als_ite
     """
     """
     # Calculate top and bottom environments
+    #tmpprint('\t\tCalculating top envs')
     top_envs = calc_top_envs(peps_col,left_bmpo,right_bmpo)
+    #tmpprint('\t\tCalculating bot envs')
     bot_envs = calc_bot_envs(peps_col,left_bmpo,right_bmpo)
 
     # Loop through rows in the column
     E = peps_col[0].backend.zeros(len(ham),dtype=peps_col[0].dtype)
     for row in range(len(ham)):
+        #tmpprint('\t\tDoing TEBD on sites ({},{})'.format(row,row+1))
 
         # Calculate environment aroudn reduced tensors
+        #tmpprint('\t\t\tCalculating Environment')
         peps_b,phys_b,phys_t,peps_t,_,_,_,_,N = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs)
 
         # Take the exponential of the hamiltonian
+        #tmpprint('\t\t\tExponentiating Hamiltonian')
         eH = exp_gate(ham[row],-step_size)
 
         # Do alternating least squares to find new peps tensors
+        #tmpprint('\t\t\tDoing ALS')
         phys_b,phys_t = alternating_least_squares(phys_b,phys_t,N,eH,mbd,als_iter=als_iter,als_tol=als_tol)
 
         # Calculate Energy & Norm
+        #tmpprint('\t\t\tCalculating Local Energy')
         E[row],norm = calc_local_op(phys_b,phys_t,N,ham[row],return_norm=True)
 
         # Update peps_col tensors
+        #tmpprint('\t\t\tUpdating peps tensors')
         peps_col[row]   = einsum('LDRa,aPU->LDPRU',peps_b,phys_b)
         peps_col[row+1] = einsum('DPa,LaRU->LDPRU',phys_t,peps_t)
 
         # Combine and equally split the two tensors
+        #tmpprint('\t\t\tMaking peps tensors stable')
         peps_col[row],peps_col[row+1] = make_equal_distance(peps_col[row],peps_col[row+1],mbd)
+        #tmpprint('peps_col[i]: {}'.format(peps_col[row].ten.array.shape))
+        #tmpprint('peps_col[i+1]: {}'.format(peps_col[row].ten.array.shape))
 
         # Update top and bottom environments
+        #tmpprint('\t\t\tUpdating Bottom environment')
         if row == 0: prev_env = None
         else: prev_env = bot_envs[row-1]
         bot_envs[row] = update_bot_env(peps_col[row],
@@ -366,6 +381,7 @@ def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,mbd,als_ite
                                        prev_env)
 
         # Normalize everything (to try to avoid some errors)
+        #tmpprint('\t\t\tTrying to normalize')
         norm_fact = bot_envs[row].abs().max()
         bot_envs[row] /= norm_fact
         peps_col[row] /= norm_fact**(1./2.)
@@ -381,6 +397,7 @@ def tebd_step_col(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10):
     (Nx,Ny) = peps.shape
 
     # Compute the boundary MPOs
+    #tmpprint('\tCalculating Boundary MPOs')
     right_bmpo = calc_right_bound_mpo(peps, 0,chi=chi,return_all=True)
     left_bmpo  = [None]*(Nx-1)
     ident_bmpo = identity_mps(len(right_bmpo[0]),
@@ -391,6 +408,7 @@ def tebd_step_col(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10):
     # Loop through all columns
     E = peps.backend.zeros((len(ham),len(ham[0])),dtype=peps[0][0].dtype)
     for col in range(Nx):
+        #tmpprint('\tDoing TEBD In column {}'.format(col))
         # Take TEBD Step
         if col == 0:
             res = tebd_step_single_col(peps[col],
@@ -435,9 +453,11 @@ def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10,print_p
     """
     """
     # Columns ----------------------------------
+    #tmpprint('Doing Column Interactions')
     Ecol,peps = tebd_step_col(peps,ham[0],step_size,mbd,chi=chi,als_iter=als_iter,als_tol=als_tol)
     # Rows -------------------------------------
     peps.rotate(clockwise=True)
+    #tmpprint('Doing Row Interactions')
     Erow,peps = tebd_step_col(peps,ham[1],step_size,mbd,chi=chi,als_iter=als_iter,als_tol=als_tol)
     peps.rotate(clockwise=False)
     # Return results ---------------------------
@@ -446,14 +466,14 @@ def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10,print_p
     E = peps.backend.sum(Ecol)+peps.backend.sum(Erow)
     return E,peps
 
-def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,als_iter=100,als_tol=1e-10,print_prepend='',save_all_steps=False):
+def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,chi_norm=10,chi_op=None,als_iter=100,als_tol=1e-10,print_prepend='',save_all_steps=False):
     """
     """
     nSite = len(peps)*len(peps[0])
 
     # Compute Initial Energy
     mpiprint(3,print_prepend+'Calculation Initial Energy/site')
-    Eprev = peps.calc_op(ham,chi=chi)
+    Eprev = peps.calc_op(ham,chi=chi_op)
     mpiprint(0,print_prepend+'Initial Energy/site = {}'.format(Eprev/nSite))
 
     # Do a single tebd step
@@ -463,7 +483,7 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,als_iter=100,als_
         _,peps = tebd_step(peps,ham,step_size,mbd,chi=chi,als_iter=als_iter,als_tol=als_tol,print_prepend=print_prepend)
 
         # Normalize just in case
-        peps.normalize()
+        peps.normalize(chi=chi_norm)
 
         # Save PEPS
         if save_all_steps: 
@@ -472,7 +492,7 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,als_iter=100,als_
             peps.save()
         
         # Compute Resulting Energy
-        E = peps.calc_op(ham,chi=chi)
+        E = peps.calc_op(ham,chi=chi_op)
 
         # Check for convergence
         mpiprint(0,print_prepend+'Energy/site = {}'.format(E/nSite))
@@ -492,6 +512,8 @@ def run_tebd(Nx,Ny,d,ham,
              Zn=None,
              chi=10,
              su_chi=10,
+             chi_norm=None,
+             chi_op=None,
              thermal=False,
              exact_norm_tol=20,
              norm_tol=0.1,
@@ -552,6 +574,13 @@ def run_tebd(Nx,Ny,d,ham,
         su_chi : int
             The boundary mpo maximum bond dimension for computing
             the energy in the simple update initial guess generation
+        chi_norm : int
+            The boundary mpo maximum bond dimension to be used
+            when normalizing the peps
+        chi_op : int
+            The boundary mpo maximum bond dimension to be used
+            when calculating operator expectation values (default 
+            uses chi)
         thermal : bool
             Whether to do the fu algorithm with a thermal state, i.e.
             two physical indices
@@ -637,6 +666,7 @@ def run_tebd(Nx,Ny,d,ham,
                         d=d,
                         D=D[0],
                         chi=chi[0],
+                        chi_norm=chi_norm,
                         Zn=Zn,
                         thermal=thermal,
                         backend=backend,
@@ -652,6 +682,7 @@ def run_tebd(Nx,Ny,d,ham,
                         D=D[0],
                         Zn=Zn,
                         chi=su_chi,
+                        chi_norm=chi_norm,
                         backend=backend,
                         exact_norm_tol=exact_norm_tol,
                         norm_tol=norm_tol,
@@ -670,7 +701,7 @@ def run_tebd(Nx,Ny,d,ham,
         peps.absorb_lambdas()
     
     # Make sure the peps is normalized
-    peps.normalize()
+    peps.normalize(chi=chi_norm)
 
     # Loop over all (bond dims/step sizes/number of steps)
     for Dind in range(len(D)):
@@ -685,6 +716,7 @@ def run_tebd(Nx,Ny,d,ham,
                             conv_tol[Dind],
                             D[Dind],
                             chi = chi[Dind],
+                            chi_norm = chi_norm,
                             als_iter=als_iter,
                             als_tol=als_tol,
                             print_prepend=print_prepend,

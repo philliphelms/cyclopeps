@@ -17,6 +17,7 @@ import copy
 import itertools
 import sys
 import numpy as np
+import uuid
 
 LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 FLIP = {'+':'-','-':'+'}
@@ -160,7 +161,8 @@ def svd_ten(ten,split_ind,truncate_mbd=1e100,return_ent=True,return_wgt=True,bac
 
     # Compute Entanglement
     mpiprint(9,'Calculate the entanglment')
-    EE,EEs = calc_entanglement(S,backend=backend)
+    if return_ent or return_wgt:
+        EE,EEs = calc_entanglement(S,backend=backend)
 
     # Truncate results (if necessary)
     D = S.shape[0]
@@ -187,12 +189,13 @@ def svd_ten(ten,split_ind,truncate_mbd=1e100,return_ent=True,return_wgt=True,bac
     V = V.reshape(new_dims)
 
     # Print some results
-    mpiprint(10,'Entanglement Entropy = {}'.format(EE))
-    mpiprint(12,'EE Spectrum = ')
-    nEEs = EEs.shape[0]
-    for i in range(nEEs):
-        mpiprint(12,'   {}'.format(EEs[i]))
-    mpiprint(11,'Discarded weights = {}'.format(wgt))
+    if return_ent or return_wgt:
+        mpiprint(10,'Entanglement Entropy = {}'.format(EE))
+        mpiprint(12,'EE Spectrum = ')
+        nEEs = EEs.shape[0]
+        for i in range(nEEs):
+            mpiprint(12,'   {}'.format(EEs[i]))
+        mpiprint(11,'Discarded weights = {}'.format(wgt))
 
     # Return results
     if return_wgt and return_ent:
@@ -435,7 +438,9 @@ def einsum(subscripts,opA,opB):
     # Do einsum
     try:
         res = opA.lib.einsum(subscripts,opA.ten,opB.ten)
-    except:
+    except Exception as e:
+        if not (opA.lib == opB.lib):
+            raise ValueError("Backends do not match for the two tensors")
         if opB.sym is None:
             print('{},{},{},{},{}'.format(subscripts,opA.ten.shape,opB.ten.shape,opA.lib,opB.lib))
         else:
@@ -469,8 +474,7 @@ def einsum(subscripts,opA,opB):
             cnt += len(opB.legs[strB_loc])
         #print('\t\t\tcnt {}, legs {}'.format(cnt,legs))
     if not isinstance(res,float):
-        if len(subscripts.split('->')[0]) == 0:
-            print('Sized one array')
+        if len(subscripts.split('->')[1]) == 0:
             # If sized 1 array, convert to float
             ind = (0,)*len(res.shape)
             res = res[ind]
@@ -488,7 +492,8 @@ class GEN_TEN:
     """
     A generic tensor class
     """
-    def __init__(self,shape=None,sym=None,backend='numpy',dtype=float_,ten=None,legs=None):
+    def __init__(self,shape=None,sym=None,backend='numpy',dtype=float_,ten=None,legs=None,
+                 writedir=TMPDIR+'/'+DIRID,writename=None,in_mem=True):
         """
         Create a tensor of zeros of the correct tensor type
 
@@ -509,8 +514,16 @@ class GEN_TEN:
             sym : bool
                 If True, then a symtensor will be created, otherwise, 
                 the tensor will have no symmetry
-        dtype : dtype
-            The data type for the tensor, i.e. np.float_,np.complex128,etc.
+            dtype : dtype
+                The data type for the tensor, i.e. np.float_,np.complex128,etc.
+            writedir : str
+                The directory where the file will be written to on disk
+            writename : str
+                The filename where the tensor will be written to on disk
+            in_mem : bool
+                Whether the tensor should be initially stored in local 
+                memory (True) or written to disk (False). Default is
+                True.
         """
         # Load Backend
         if ten is None:
@@ -556,6 +569,12 @@ class GEN_TEN:
         else:
             self.legs = legs
         self.nlegs = len(self.legs)
+
+        # Specify the save location and whether the file is saved or loaded
+        self.saveloc = writedir + '/' + writename
+        self.in_mem = True
+        if not in_mem:
+            self.to_disk()
 
     @property
     def ndim(self):
@@ -822,7 +841,7 @@ class GEN_TEN:
         leg_split = split
         split = self.legs[split][0]
         if self.sym is None:
-            # Do qr
+            # Do svd on tensor directly
             res = svd_ten(self.ten,
                           split,
                           backend=self.backend,
@@ -830,11 +849,14 @@ class GEN_TEN:
                           return_ent=return_ent,
                           return_wgt=return_wgt)
         else:
+            # Do SVD on symmetry blocks
+            #tmpprint('\t\t\t\t\t\tGoing to symsvd')
             res = symsvd(self.ten,
                          [list(range(split)),list(range(split,self.ten.ndim))],
                          truncate_mbd=truncate_mbd,
                          return_ent=return_ent,
                          return_wgt=return_wgt)
+        #tmpprint('\t\t\t\t\t\tBack from symsvd')
         U,S,V = res[0],res[1],res[2]
         U = GEN_TEN(ten=U,backend=self.backend)
         S = GEN_TEN(ten=S,backend=self.backend)
@@ -890,9 +912,11 @@ class GEN_TEN:
 
     def sqrt(self):
         if self.sym is not None:
-            return self._as_new_tensor(self.ten.sqrt())
+            return self._as_new_tensor(self.ten**(1./2.))
+            #return self._as_new_tensor(self.ten.sqrt())
         else:
-            return self._as_new_tensor(self.backend.sqrt(self.ten))
+            return self._as_new_tensor(self.ten**(1./2.))
+            #return self._as_new_tensor(self.backend.sqrt(self.ten))
 
     def abs(self):
         return self._as_new_tensor(abs(self.ten))
@@ -906,15 +930,17 @@ class GEN_TEN:
 
     def max(self):
         if self.sym is None:
-            return self.backend.max(self.ten)
+            maxval = self.backend.max(self.ten)
         else:
-            return self.backend.max(self.ten.array)
+            maxval = self.backend.max(self.ten.array)
+        return float(maxval)
 
     def min(self):
         if self.sym is None:
-            return self.backend.min(self.ten)
+            minval = self.backend.min(self.ten)
         else:
-            return self.backend.min(self.ten.array)
+            minval = self.backend.min(self.ten.array)
+        return float(minval)
 
     def to_val(self):
         """
@@ -1022,3 +1048,43 @@ class GEN_TEN:
             inv = self.backend.einsum('ABCDabcd,ABCD->ABCabcd',inv,delta)
             newten.ten.array = inv
         return newten
+
+    def to_disk(self):
+        """
+        Write the actual gen_ten tensor to disk in location specified
+        by gen_ten.saveloc
+        """
+        if self.sym is None:
+            self.saved_shape = self.ten.shape
+            if hasattr(self.ten,'write_to_file'):
+                self.ten.write_to_file(self.saveloc)
+            else:
+                self.backend.save(self.ten)
+            self.ten = None
+        else:
+            self.saved_shape = self.ten.array.shape
+            if hasattr(self.ten,'write_to_file'):
+                self.ten.array.write_to_file(self.saveloc)
+            else:
+                self.backend.save(self.ten.array)
+            self.ten.array = None
+        self.in_mem = False
+
+    def from_disk(self):
+        """
+        Read the gen_ten tensor from disk, where it has been previously 
+        saved in the location specified by gen_ten.saveloc
+        """
+        if self.sym is None:
+            if hasattr(self.ten,'write_to_file'):
+                self.ten = self.backend.zeros(self.saved_shape)
+                self.ten.read_from_file(self.saveloc)
+            else:
+                self.ten = self.backend.load(self.saveloc)
+        else:
+            if hasattr(self.ten,'write_to_file'):
+                self.ten.array = self.backend.zeros(self.saved_shape)
+                self.ten.array.read_from_file(self.saveloc)
+            else:
+                self.ten.array = self.backend.load(self.saveloc)
+        self.in_mem = True
