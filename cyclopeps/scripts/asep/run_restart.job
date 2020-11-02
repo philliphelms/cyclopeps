@@ -1,25 +1,28 @@
 #!/bin/bash
-#SBATCH --partition=serial
-#SBATCH -J asep_run_N=50_SY=0_SX=15
+#SBATCH --partition=any
+#SBATCH -J asep_run_v7_N=50_SY=0_SX=8
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=1
-#SBATCH --ntasks-per-node=8
-#SBATCH --time=5-0
+#SBATCH --cpus-per-task=8
+#SBATCH --ntasks-per-node=1
+#SBATCH --time=7-0
 #SBATCH --mem=31G
 #SBATCH --output=%x-%j.out 
 
 cd ~
-cd projects/dev_cyclopeps/cyclopeps/
+cd projects/cyclopeps/cyclopeps/
 source ~/.bashrc
 
 export MKL_NUM_THREADS=8
 export OMP_NUM_THREADS=8
 
-N=20
-SX=1
+N=50
+SX=0
 SY=0
-fnamel=saved_peps/asep/Nx${N}_Ny${N}_sx${SX}_sy0_run_left
-fnamer=saved_peps/asep/Nx${N}_Ny${N}_sx${SX}_sy0_run_right
-startind=2
+D=2
+chi=20
+fnamel=/central/groups/changroup/members/phelms/asep/v7/peps/Nx${N}_Ny${N}_sx${SX}_sy${SY}_D${D}_chi${chi}_run_left
+fnamer=/central/groups/changroup/members/phelms/asep/v7/peps/Nx${N}_Ny${N}_sx${SX}_sy${SY}_D${D}_chi${chi}_run_right
+startind=4
 left=1
-python scripts/asep/run_restart.py $fnamer $fnamel $N $N $SX $SY $startind $left | tee output/jun15/asep_run_restart_${N}x${N}_SX${SX}_SY${SY}.txt
+
+python scripts/asep/run_restart.py $fnamer $fnamel $N $N $SX $SY $startind $left | tee /central/groups/changroup/members/phelms/asep/v7/output/asep_run_restart_${N}x${N}_SX${SX}_SY${SY}_D${D}_chi${chi}.txt

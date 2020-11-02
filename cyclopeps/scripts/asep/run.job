@@ -1,21 +1,21 @@
 #!/bin/bash
-#SBATCH --partition=serial
-#SBATCH -J asep_run_N=50_SY=0_SX=15
+#SBATCH --partition=any
+#SBATCH -J asep_run_v7_N=40_SY=0_SX=20
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=1
-#SBATCH --ntasks-per-node=8
-#SBATCH --time=5-0
+#SBATCH --cpus-per-task=8
+#SBATCH --ntasks-per-node=1
+#SBATCH --time=7-0
 #SBATCH --mem=31G
 #SBATCH --output=%x-%j.out 
 
 cd ~
-cd projects/dev_cyclopeps/cyclopeps/
+cd projects/cyclopeps/cyclopeps/
 source ~/.bashrc
 
 export MKL_NUM_THREADS=8
 export OMP_NUM_THREADS=8
 
-N=100
-SX=15
+N=40
+SX=20
 SY=0
-python scripts/asep/run.py $N $N $SX $SY | tee output/jun15/asep_run_${N}x${N}_SX${SX}_SY${SY}.txt
+python scripts/asep/run.py $N $N $SX $SY | tee /central/groups/changroup/members/phelms/asep/v7/output/asep_run_${N}x${N}_SX${SX}_SY${SY}.txt
