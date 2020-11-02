@@ -6,6 +6,7 @@ from cyclopeps.tools.ops_tools import *
 from cyclopeps.ops.ops import OPS
 from cyclopeps.tools.gen_ten import einsum
 
+#@profile
 def return_op(Nx,Ny,sym=None,backend='numpy'):
     """
     Return the operators

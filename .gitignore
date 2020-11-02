@@ -9,6 +9,7 @@
 *.txt
 *.out
 *.csv
+*_stats_*
 /cyclopeps/scripts/jobs
 /cyclopeps/saved_peps
 

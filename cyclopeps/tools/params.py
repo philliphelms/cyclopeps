@@ -10,16 +10,23 @@ except:
     RANK = 0
     SIZE = 1
 
+# Constrict Printing to only rank 0
+if RANK != 0:
+    sys.stdout = open(os.devnull,'w')
+    sys.stderr = open(os.devnull,'w')
+
 # Temporary directories for calculation
 TMPDIR = os.environ.get('TMPDIR','.')
 TMPDIR = os.environ.get('CYCLOPEPS_TMPDIR',TMPDIR)
-DIRID = str(uuid.uuid1())
+DIRID = str(uuid.uuid1()).replace('/','_')
+os.mkdir(TMPDIR+DIRID)
  
 # Printing Global Variables
 DEBUG = False
+DEBUG_MEM = False
 VERBOSE = 1
 VERBOSE_TIME = 3
-VERBOSE_MEM = -10
+VERBOSE_MEM = 10
 OUTPUT_DIGITS = 5
 OUTPUT_COLS = 5
 

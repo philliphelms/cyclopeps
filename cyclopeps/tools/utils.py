@@ -10,6 +10,7 @@ from cyclopeps.tools.params import *
 try:
     from psutil import virtual_memory as vmem
 except:
+    print('Failed to import psutil')
     pass
 from shutil import copyfile as _copyfile
 import os
@@ -19,6 +20,8 @@ try:
 except:
     h5py = None
 import sys
+if DEBUG_MEM:
+    from memory_profiler import profile
 
 def bytes2human(n):
     symbols = ('K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y')
@@ -30,7 +33,6 @@ def bytes2human(n):
             value = float(n) / prefix[s]
             return '%.1f%s' % (value, s)
     return "%sB" % n
-
 
 def mpiprint(priority,msg):
     """ 
@@ -58,7 +60,8 @@ def tmpprint(msg):
     i.e. use this function if you want to be able to print something to debug,
     then search for all instances of tmpprint to remove extra print statements
     """
-    mpiprint(0,msg)
+    memprint(0,msg)
+    #mpiprint(0,msg)
 
 def timeprint(priority,msg):
     """ 
@@ -80,8 +83,10 @@ def memprint(priority,msg):
         try:
             tot_mem = bytes2human(vmem()[0])
             av_mem = bytes2human(vmem()[3])
-            print('  '*priority+msg+': '+av_mem+' / '+tot_mem)
+            print(msg+': '+av_mem+' / '+tot_mem)
+            #print('  '*priority+msg+': '+av_mem+' / '+tot_mem)
         except: 
+            print('Failed memprint!')
             pass
 
 def mkdir(path):

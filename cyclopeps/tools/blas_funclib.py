@@ -57,7 +57,8 @@ def find_less(a, threshold):
     idx = np.where(a.ravel()<threshold)[0]
     return idx
 def svd(mat,full_matrices=False):
-    try:
-        return np.linalg.svd(mat,full_matrices=False)
-    except:
-        return sla.svd(mat,lapack_driver='gesvd')
+    return sla.svd(mat,lapack_driver='gesvd')
+    #try:
+    #    return np.linalg.svd(mat,full_matrices=False)
+    #except:
+    #    return sla.svd(mat,lapack_driver='gesvd')

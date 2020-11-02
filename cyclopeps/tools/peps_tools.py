@@ -149,7 +149,7 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,Ny,chi=4,truncate=True,allow_normalize=Fa
     bound_mpo_new = []
 
     for row in range(Ny):
-        #tmpprint('\t\t\t\tAdding row: {}'.format(row))
+        #tmpprint('     Adding row: {}'.format(row))
         mpiprint(5,'Adding Site {} to Ket'.format(row))
 
         # Calculate ket contraction first (so we can use it to determine symmetry signs of identity)
@@ -202,7 +202,7 @@ def left_bmpo_sl_add_ket(ket,bound_mpo,Ny,chi=4,truncate=True,allow_normalize=Fa
         if DEBUG:
             mpiprint(6,'Computing initial bmpo norm')
             norm0 = bound_mps.norm()
-        #tmpprint('\t\t\t\tDoing MPS apply svd')
+        #tmpprint('     Doing MPS apply svd')
         bound_mps = bound_mps.apply_svd(chi)
         if DEBUG:
             mpiprint(6,'Computing resulting bmpo norm')
@@ -222,7 +222,7 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,Ny,chi=4,truncate=True,allow_normalize=Fa
     bound_mpo_new = []
 
     for row in range(Ny):
-        #tmpprint('\t\t\t\tAdding row: {}'.format(row))
+        #tmpprint('     Adding row: {}'.format(row))
 
         # Add bra contraction
         res = einsum('mLn,LDPRU->mDRnUP',bound_mpo[2*row],bra[row])
@@ -282,7 +282,7 @@ def left_bmpo_sl_add_bra(bra,bound_mpo,Ny,chi=4,truncate=True,allow_normalize=Fa
         if DEBUG:
             mpiprint(6,'Computing initial bmpo norm')
             norm0 = bound_mps.norm()
-        #tmpprint('\t\t\t\tDoing MPS apply svd')
+        #tmpprint('     Doing MPS apply svd')
         bound_mps = bound_mps.apply_svd(chi)
         if DEBUG:
             mpiprint(6,'Computing resulting bmpo norm')
@@ -328,15 +328,16 @@ def left_bmpo_sl(bra, bound_mpo, chi=4,truncate=True,ket=None,allow_normalize=Fa
         ket = copy_tensor_list(bra)
 
     # First Layer (ket) #####################################
-    #tmpprint('\t\t\tAdding ket')
+    #tmpprint('    Adding ket')
     bound_mpo = left_bmpo_sl_add_ket(ket,bound_mpo,Ny,chi=chi,truncate=truncate,allow_normalize=allow_normalize)
     # Second Layer (bra) ####################################
-    #tmpprint('\t\t\tAdding bra')
+    #tmpprint('    Adding bra')
     bound_mpo = left_bmpo_sl_add_bra(bra,bound_mpo,Ny,chi=chi,truncate=truncate,allow_normalize=allow_normalize)
 
     # Return result
     return bound_mpo
 
+#@profile
 def left_update_sl(peps_col, bound_mpo, chi=4,truncate=True,ket=None,allow_normalize=False):
     """
     Update the boundary mpo, from the left, moving right, using single layer
@@ -362,12 +363,12 @@ def left_update_sl(peps_col, bound_mpo, chi=4,truncate=True,ket=None,allow_norma
     """
     # Check if we are at left edge
     if bound_mpo is None:
-        #tmpprint('\t\tInitial BMPO')
+        #tmpprint('   Initial BMPO')
         bound_mpo = init_left_bmpo_sl(peps_col,chi=chi,truncate=truncate,ket=ket,allow_normalize=allow_normalize)
     # Otherwise update is generic
     else:
         # Start from bottom of the column
-        #tmpprint('\t\tAdding BMPO')
+        #tmpprint('   Adding BMPO')
         bound_mpo = left_bmpo_sl(peps_col,bound_mpo,chi=chi,truncate=truncate,ket=ket,allow_normalize=allow_normalize)
     return bound_mpo
 
@@ -406,7 +407,7 @@ def update_left_bound_mpo(peps_col, bound_mpo, chi=4, singleLayer=True,truncate=
     else:
         return left_update(peps_col,bound_mpo,chi=chi,truncate=truncate,ket=ket_col)
 
-def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None,allow_normalize=False):
+def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None,allow_normalize=False,in_mem=True):
     """
     Calculate the left boundary MPO
 
@@ -430,6 +431,12 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all
             return the boundary mpo for col.
         ket : PEPS Object
             A second peps, to use as the ket, in the operator contraction
+        in_mem: bool
+            if True, then the peps tensors will all be loaded into memory
+            and all calculations will be done with them in memory. If False,
+            then the peps tensors will all be written to disk, then loaded as 
+            needed. All bmpo tensors will be written to disk. Default
+            is True
 
     returns:
         bound_mpo : list
@@ -438,21 +445,73 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all
 
     """
     mpiprint(2,'Computing Left boundary MPO')
+
+    # Ensure peps are in or out of memory
+    if in_mem:
+        peps.from_disk()
+    else:
+        peps.to_disk()
+
     # Determine the dimensions of the peps
     Nx = len(peps)
     Ny = len(peps[0])
 
-    # Loop through the columns, creating a boundary mpo for each
+    # Set up initial list to store boundary mpos
     bound_mpo = [None]*(col-1)
+
+    # Loop through the columns, creating a boundary mpo for each
     for colind in range(col-1):
+
+        #tmpprint('  Doing Column {}'.format(colind))
         mpiprint(4,'Updating left boundary mpo')
+
+        # Load appropriate peps/ket column
+        if not in_mem:
+            peps.col_from_disk(colind)
+            if ket is not None:
+                ket.col_from_disk(colind)
+        
+        # Specify ket column (if not None)
         if ket is not None:
             ket_col = ket[colind][:]
         else: ket_col = None
+
+        # Update the bmpo
         if colind == 0:
-            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], None, chi=chi, singleLayer=singleLayer,truncate=truncate,ket_col=ket_col,allow_normalize=allow_normalize)
+
+            # Update for the initial column (use None as previous boundary mpo)
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], 
+                                                      None, 
+                                                      chi=chi, 
+                                                      singleLayer=singleLayer,
+                                                      truncate=truncate,
+                                                      ket_col=ket_col,
+                                                      allow_normalize=allow_normalize)
+
         else:
-            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], bound_mpo[colind-1], chi=chi, singleLayer=singleLayer,truncate=truncate,ket_col=ket_col,allow_normalize=allow_normalize)
+
+            # Update for remaining columns
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], 
+                                                      bound_mpo[colind-1], 
+                                                      chi=chi, 
+                                                      singleLayer=singleLayer,
+                                                      truncate=truncate,
+                                                      ket_col=ket_col,
+                                                      allow_normalize=allow_normalize)
+
+            # Write previous bound_mpo to disk (if not in_mem)
+            if not in_mem:
+                bound_mpo[colind-1].to_disk()
+
+        # Write the peps/ket column to disk
+        if not in_mem:
+            peps.col_to_disk(colind)
+            if ket is not None:
+                ket.col_to_disk(colind)
+
+    # Write final bmpo to disk
+    if not in_mem:
+        bound_mpo[-1].to_disk()
 
     # Return result
     if return_all:
@@ -460,7 +519,8 @@ def calc_left_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all
     else:
         return bound_mpo[-1]
 
-def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None,allow_normalize=False):
+#@profile
+def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None,allow_normalize=False,in_mem=True):
     """
     Calculate the right boundary MPO
 
@@ -484,6 +544,12 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
             return the boundary mpo for col.
         ket : PEPS Object
             A second peps, to use as the ket, in the operator contraction
+        in_mem: bool
+            if True, then the peps tensors will all be loaded into memory
+            and all calculations will be done with them in memory. If False,
+            then the peps tensors will all be written to disk, then loaded as 
+            needed. All bmpo tensors will be written to disk. Default
+            is True
 
     returns:
         bound_mpo : list
@@ -493,33 +559,87 @@ def calc_right_bound_mpo(peps,col,chi=4,singleLayer=True,truncate=True,return_al
     """
     mpiprint(2,'Computing Left boundary MPO')
 
+    # Ensure peps are in or out of memory
+    if in_mem:
+        peps.from_disk()
+    else:
+        peps.to_disk()
+
     # Determine the dimensions of the peps
     Nx = len(peps)
     Ny = len(peps[0])
 
     # Flip the peps
-    peps = flip_peps(peps)
+    peps.flip()
+    #peps = flip_peps(peps)
     if ket is not None:
-        ket = flip_peps(ket)
+        ket.flip()
+        #ket = flip_peps(ket)
     col = Nx-col
+   
+    # Set up initial list to store boundary mpos
+    bound_mpo = [None]*(col-1)
 
     # Loop through the columns, creating a boundary mpo for each
-    bound_mpo = [None]*(col-1)
     for colind in range(col-1):
-        #tmpprint('\t\tColumn {}'.format(colind))
+
+        #tmpprint('  Doing Column {}'.format(colind))
         mpiprint(4,'Updating boundary mpo')
+
+        # Load appropriate peps column
+        if not in_mem:
+            peps.col_from_disk(colind)
+            if ket is not None:
+                ket.col_from_disk(colind)
+        
+        # Specify ket column (if not None)
         if ket is not None:
             ket_col = ket[colind][:]
         else: ket_col = None
+
+        # Update the boundary MPO
         if colind == 0:
-            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], None, chi=chi, singleLayer=singleLayer, truncate=truncate, ket_col=ket_col,allow_normalize=allow_normalize)
+
+            # Update for the initial column (use None as previous boundary mpo)
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], 
+                                                      None, 
+                                                      chi=chi, 
+                                                      singleLayer=singleLayer, 
+                                                      truncate=truncate, 
+                                                      ket_col=ket_col,
+                                                      allow_normalize=allow_normalize)
+
         else:
-            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], bound_mpo[colind-1], chi=chi, singleLayer=singleLayer, truncate=truncate, ket_col=ket_col,allow_normalize=allow_normalize)
+
+            # Update for remaining columns
+            bound_mpo[colind] = update_left_bound_mpo(peps[colind][:], 
+                                                      bound_mpo[colind-1], 
+                                                      chi=chi, 
+                                                      singleLayer=singleLayer, 
+                                                      truncate=truncate, 
+                                                      ket_col=ket_col,
+                                                      allow_normalize=allow_normalize)
+
+            # Write previous bound_mpo to disk (if not in_mem)
+            if not in_mem:
+                bound_mpo[colind-1].to_disk()
+
+        # Write the peps/ket column to disk
+        if not in_mem:
+            peps.col_to_disk(colind)
+            if ket is not None:
+                ket.col_to_disk(colind)
+
+    # Write final bmpo to disk
+    if not in_mem:
+        bound_mpo[-1].to_disk()
 
     # Unflip the peps
-    peps = flip_peps(peps)
+    peps.flip()
+    #peps = flip_peps(peps)
     if ket is not None:
-        ket = flip_peps(ket)
+        ket.flip()
+        #ket = flip_peps(ket)
 
     # Return results
     if return_all:
@@ -561,16 +681,42 @@ def rotate_peps(peps,clockwise=True):
     # Copy peps, but rotated
     for x in range(Nx):
         for y in range(Ny):
+
+            # Rotate clockwise
             if clockwise:
+
                 # Copy Correct Tensor
                 rpeps[y][Nx-1-x] = peps[x][y].copy()
-                # Reorder Indices
+
+                # Load tensor if not initially in memory
+                init_in_mem = rpeps[y][Nx-1-x].in_mem
+                if not init_in_mem:
+                    rpeps[y][Nx-1-x].from_disk()
+
+                # Do the rotation
                 rpeps[y][Nx-1-x] = rpeps[y][Nx-1-x].transpose([1,3,2,4,0])
+
+                # Write tensor back to disk if initially not in memory
+                if not init_in_mem:
+                    rpeps[y][Nx-1-x].to_disk()
+
+            # Rotate counter clockwise
             else:
+
                 # Copy Correct Tensor
                 rpeps[Ny-1-y][x] = peps[x][y].copy()
-                # Reorder Indices
+
+                # Load tensor if not initially in memory
+                init_in_mem = rpeps[Ny-1-y][x].in_mem
+                if not init_in_mem:
+                    rpeps[Ny-1-y][x].from_disk()
+
+                # Reorder Indices to do rotation
                 rpeps[Ny-1-y][x] = rpeps[Ny-1-y][x].transpose([4,0,2,1,3])
+
+                # Write tensor back to disk if initially not in memory
+                if not init_in_mem:
+                    rpeps[Ny-1-y][x].to_disk()
 
     # Return Rotated peps
     return rpeps
@@ -648,8 +794,18 @@ def flip_peps(peps,mk_copy=True):
         for y in range(Ny):
             # Copy Correct Tensor
             fpeps[x][y] = peps[(Nx-1)-x][y].copy()
-            # Reorder Indices
+
+            # Load tensors for transpose (if out of memory)
+            init_in_mem = fpeps[x][y].in_mem
+            if not init_in_mem:
+                fpeps[x][y].from_disk()
+
+            # Transpose to reorder indices
             fpeps[x][y] = fpeps[x][y].transpose([3,1,2,0,4])
+
+            # Write tensors back to disk (if originally out of memory)
+            if not init_in_mem:
+                fpeps[x][y].to_disk()
 
     # Return Flipped peps
     return fpeps
@@ -715,6 +871,10 @@ def peps_col_to_mps(peps_col):
             The resulting 1D array containing the PEPS column's tensor
 
     """
+    # Ensure all peps column elements are in memory
+    for i in range(len(peps_col)):
+        if not peps_col[i].in_mem:
+            raise ValueError('PEPS column tensor {} not in memory for calc_peps_col_norm'.format(i))
 
     # Determine number of rows
     Ny = len(peps_col)
@@ -751,6 +911,10 @@ def calc_peps_col_norm(peps_col):
         norm : float
             The norm of the peps column (reshaped as an MPS)
     """
+    # Ensure all peps column elements are in memory
+    for i in range(len(peps_col)):
+        if not peps_col[i].in_mem:
+            raise ValueError('PEPS column tensor {} not in memory for calc_peps_col_norm'.format(i))
 
     # Convert peps column to an mps by lumping indices
     mps = peps_col_to_mps(peps_col)
@@ -761,7 +925,7 @@ def calc_peps_col_norm(peps_col):
     # Return the resulting norm
     return norm
 
-def thermal_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
+def thermal_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_,in_mem=True):
     """
     Create a thermal (beta=0) tensor for a PEPS
 
@@ -790,6 +954,8 @@ def thermal_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=flo
         dtype : dtype
             The data type of the tensor
             Default : np.float_
+        in_mem : bool
+            Whether the peps tensors should be stored in memory or on disk
 
     Returns:
         ten : ndarray
@@ -854,10 +1020,13 @@ def thermal_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=flo
                         if (i == j) and (k == l):
                             ten.ten.array[0,0,k,l,0,0,0,i,j,0,0] = 1./ten.backend.sqrt(float(d))
 
+    # Store on disk (if wanted)
+    if not in_mem: ten.to_disk()
+
     # Return result
     return ten
 
-def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
+def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_,in_mem=True):
     """
     Create a random tensor for a PEPS
 
@@ -886,6 +1055,9 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_
         dtype : dtype
             The data type of the tensor
             Default : np.float_
+        in_mem : bool
+            Whether the PEPS tensor should be stored in memory or on disk.
+            Default is True (i.e. in memory)
 
     Returns:
         ten : ndarray
@@ -936,6 +1108,11 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_
     dims = (Dl,Dd,d,Dr,Du)
     ten = rand(dims,sym,backend=backend,dtype=dtype)
     #ten = 0.95*ones(dims,sym,backend=backend,dtype=dtype) + 0.1*rand(dims,sym,backend=backend,dtype=dtype)
+    #ten = 0.9995*ones(dims,sym,backend=backend,dtype=dtype) + 0.001*rand(dims,sym,backend=backend,dtype=dtype)
+
+    # Push to disk (if wanted)
+    if not in_mem:
+        ten.to_disk()
     
     # Return result
     return ten
@@ -953,6 +1130,10 @@ def normalize_peps_col(peps_col):
             A normalized version of the input peps_col
 
     """
+    # Ensure all peps column elements are in memory
+    for i in range(len(peps_col)):
+        if not peps_col[i].in_mem:
+            raise ValueError('PEPS column tensor {} not in memory for normalize peps column'.format(i))
 
     # Figure out column height
     Ny = len(peps_col)
@@ -990,7 +1171,7 @@ def multiply_peps_elements(peps,const):
     return peps
 
 def normalize_peps(peps,max_iter=100,norm_tol=1e-2,exact_norm_tol=3,chi=10,up=5.0,
-                    down=0.0,singleLayer=True,ket=None,pf=False):
+                    down=0.0,singleLayer=True,ket=None,pf=False,in_mem=True):
     """
     Normalize the full PEPS by doing a binary search on the
     interval [down, up] for the factor which, when multiplying
@@ -1036,6 +1217,10 @@ def normalize_peps(peps,max_iter=100,norm_tol=1e-2,exact_norm_tol=3,chi=10,up=5.
         pf: bool
             If True, then we will normalize as though this is a partition
             function instead of a contraction between to peps
+        in_mem: bool
+            if True, then the peps tensors will all be loaded into memory
+            and all calculations will be done with them in memory, default
+            is True
 
     Returns:
         norm : float
@@ -1045,6 +1230,13 @@ def normalize_peps(peps,max_iter=100,norm_tol=1e-2,exact_norm_tol=3,chi=10,up=5.
             The normalized version of the PEPS, given as a PEPS object
 
     """
+    # Make sure PEPS tensors are in or out of mem
+    #tmpprint(' Normalizing PEPS')
+    if in_mem:
+        peps.from_disk()
+    else:
+        peps.to_disk()
+
     # Figure out peps size
     Nx = peps.Nx
     Ny = peps.Ny
@@ -1065,14 +1257,15 @@ def normalize_peps(peps,max_iter=100,norm_tol=1e-2,exact_norm_tol=3,chi=10,up=5.
 
     # Check if state is already easily normalized
     try:
-        z = calc_peps_norm(peps,chi=chi,singleLayer=singleLayer,ket=ket)
+        z = calc_peps_norm(peps,chi=chi,singleLayer=singleLayer,ket=ket,in_mem=in_mem)
     except Exception as e:
         z = None
+    #tmpprint('  Initial Norm = {}'.format(z))
     if (z is None) or (not (z < 10.**(-1*norm_tol) or z > 10.**(norm_tol))):
         if z is not None:
             sfac = z**pwr
             peps_try = multiply_peps_elements(peps.copy(),sfac)
-            z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer,ket=ket)
+            z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer,ket=ket,in_mem=in_mem)
             if abs(z-1.) < norm_tol: 
                 return z, peps_try
         else:
@@ -1095,7 +1288,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=1e-2,exact_norm_tol=3,chi=10,up=5.
         zprev = z
         z = None
         try:
-            z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer,ket=ket)
+            z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer,ket=ket,in_mem=in_mem)
             z = abs(z)
         except Exception as e:
             pass
@@ -1151,169 +1344,7 @@ def normalize_peps(peps,max_iter=100,norm_tol=1e-2,exact_norm_tol=3,chi=10,up=5.
     # Return normalized PEPS and norm 
     return z, peps_try
 
-#def normalize_peps(peps,max_iter=100,norm_tol=1e-2,exact_norm_tol=3,chi=10,up=5.0,
-#                    down=0.0,singleLayer=True,ket=None,pf=False):
-#    """
-#    Normalize the full PEPS by doing a binary search on the
-#    interval [down, up] for the factor which, when multiplying
-#    every element of the PEPS tensors, yields a rescaled PEPS
-#    with norm equal to 1.0.
-#
-#    Args:
-#        peps : A PEPS object
-#            The PEPS to be normalized, given as a PEPS object
-#
-#    Kwargs:
-#        max_iter : int
-#            The maximum number of iterations of the normalization
-#            procedure. Default is 20.
-#        exact_norm_tol : float
-#            We require the measured norm to be within the bounds
-#            10^(-norm_tol) < norm < 10^(norm_tol) before we do
-#            exact arithmetic to get the norm very close to 1. Default
-#            is 1.
-#        norm_tol : int
-#            How close the norm must be to 1. to consider the norm 
-#            to be sufficiently well converged
-#        chi : int
-#            Boundary MPO maximum bond dimension
-#        up : float
-#            The upper bound for the binary search factor. Default is 1.0,
-#            which assumes that the norm of the initial PEPS is greater
-#            than 10^(-norm_tol) (this is almost always true).
-#        down : float
-#            The lower bound for the binary search factor. Default is 0.0.
-#            The intial guess for the scale factor is the midpoint
-#            between up and down. It's not recommended to adjust the
-#            up and down parameters unless you really understand what
-#            they are doing.
-#        single_layer : bool
-#            Indicates whether to use a single layer environment
-#            (currently it is the only option...)
-#        ket : peps object
-#            If you would like the ket to be 'normalized', such that 
-#            when contracted with another peps, the contraction is equal
-#            to one. Only the peps (not ket) will be altered to attempt
-#            the normalization
-#        pf: bool
-#            If True, then we will normalize as though this is a partition
-#            function instead of a contraction between to peps
-#
-#    Returns:
-#        norm : float
-#            The approximate norm of the PEPS after the normalization
-#            procedure
-#        peps : list
-#            The normalized version of the PEPS, given as a PEPS object
-#
-#    """
-#    #print('Normalizing PEPS')
-#
-#    # Figure out peps size
-#    Nx = peps.Nx
-#    Ny = peps.Ny
-#    be = peps[0][0].backend
-#
-#    # Power changes if partition function or norm
-#    if pf: pwr = -1./(Nx*Ny)
-#    else: pwr = -1./(2*Nx*Ny)
-#
-#    # Make sure PEPS entries are not really huge or miniscule
-#    maxval = peps.max_entry()
-#    if (maxval > 10**4) or (maxval < 10**-4):
-#        peps = multiply_peps_elements(peps.copy(),2/maxval)
-#    if ket is not None:
-#        maxval = peps.max_entry()
-#        if (maxval > 10**-4) or (maxval < 10**-4):
-#            peps = multiply_peps_elements(peps.copy(),2/maxval)
-#
-#    # Check if state is already easily normalized
-#    try:
-#        z = calc_peps_norm(peps,chi=chi,singleLayer=singleLayer,ket=ket)
-#    except:
-#        z = None
-#    if (z is None) or (not (z < 10.**(-1*norm_tol) or z > 10.**(norm_tol))):
-#        if z is not None:
-#            sfac = z**pwr
-#            peps_try = multiply_peps_elements(peps.copy(),sfac)
-#            z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer,ket=ket)
-#            if abs(z-1.) < norm_tol: 
-#                return z, peps_try
-#        else:
-#            z = None
-#            peps_try = peps.copy()
-#
-#    # Begin search --------
-#    istep = 0
-#    scale = None
-#    z     = None
-#    zprev = None
-#    while True:
-#
-#        # if an exception is thrown in calc_peps_norm because scale is too large
-#        # (it can be too large as well...)
-#        if (z == None) or (not np.isfinite(z)):
-#
-#            # Replace None with nan (so can be compared using '<')
-#            if z == None: z = np.nan
-#
-#            if ((zprev == None) or (not np.isfinite(zprev))) or (zprev < 1.):
-#                #print('Norm is NAN, previous was also nana or < 1.')
-#                up = scale if (scale is not None) else up
-#                scale = (up+down)/2.
-#
-#            else:
-#                #print('Norm is NAN, previous was > 1.')
-#                down = scale if (scale is not None) else down
-#                scale = (up+down)/2.
-#
-#        # adjust scale to make z into target region
-#        else:
-#
-#            # Check if sufficiently well converged
-#            if abs(z-1.0) < norm_tol:
-#                mpiprint(2, 'converged scale = {}, norm = {}'.format(scale,z))
-#                break
-#
-#            if z < 10.0**(-1*norm_tol) or z > 10.0**(norm_tol) or be.isnan(z):
-#                if z > 1.0 or be.isnan(z):
-#                    #print('Decreasing!')
-#                    up = scale if (scale is not None) else up
-#                    scale = (up+down)/2.0
-#                else:
-#                    #print('Increasing!')
-#                    down = scale if (scale is not None) else down
-#                    scale = (up+down)/2.0
-#
-#            # close to convergence, apply "exact" scale
-#            else:
-#                sfac = z**pwr
-#                scale = sfac*scale if (scale is not None) else sfac
-#                mpiprint(2, 'apply exact scale: {}'.format(scale))
-#
-#        peps_try = multiply_peps_elements(peps.copy(),scale)
-#
-#        zprev = z
-#        z = None
-#        try:
-#            istep += 1
-#            #print('Calculating Norm')
-#            z = calc_peps_norm(peps_try,chi=chi,singleLayer=singleLayer,ket=ket)
-#            #print('z3 = {}'.format(z))
-#            print('scale: {}, up: {}, down: {}, norm: {}'.format(scale,up,down,z))
-#            z = abs(z)
-#        except Exception as e:
-#            pass
-#        mpiprint(2, 'step={}, (down,up)=({},{}), scale={}, norm={}'.format(
-#                                                        istep,down,up,scale,z))
-#
-#        if istep == max_iter:
-#            mpiprint(4, 'binarySearch normalization exceeds max_iter... terminating')
-#            break
-#
-#    return z, peps_try
-
-def calc_peps_norm(_peps,chi=4,singleLayer=True,ket=None,allow_normalize=False):
+def calc_peps_norm(_peps,chi=4,singleLayer=True,ket=None,allow_normalize=False,in_mem=True):
     """
     Calculate the norm of the PEPS
 
@@ -1327,16 +1358,23 @@ def calc_peps_norm(_peps,chi=4,singleLayer=True,ket=None,allow_normalize=False):
         single_layer : bool
             Indicates whether to use a single layer environment
             (currently it is the only option...)
+        in_mem: bool
+            if True, then the peps tensors will all be loaded into memory
+            and all calculations will be done with them in memory, default
+            is True
 
     Returns:
         norm : float
             The (approximate) norm of the PEPS
     """
+    #tmpprint('Calculating PEPS norm')
+
     # Absorb Lambda tensors if needed
     if _peps.ltensors is not None:
         peps = _peps.copy()
         peps.absorb_lambdas()
     else:
+        #tmpprint(' Copying PEPS')
         peps = _peps.copy()
     if ket is not None and ket.ltensors is not None:
         ket = ket.copy()
@@ -1344,23 +1382,37 @@ def calc_peps_norm(_peps,chi=4,singleLayer=True,ket=None,allow_normalize=False):
     elif ket is not None:
         ket = ket.copy()
 
+    # Load tensors or send to memory
+    if in_mem:
+        peps.from_disk()
+    else:
+        peps.to_disk()
+
     # Get PEPS Dims
     Nx = len(peps)
     Ny = len(peps[0])
 
     # Get the boundary MPO from the left (for the furthest right column)
-    left_bound_mpo  = calc_left_bound_mpo(peps,Nx,chi=chi,singleLayer=singleLayer,ket=ket,allow_normalize=allow_normalize)
+    #tmpprint(' Calculating lbmpo')
+    left_bound_mpo  = calc_left_bound_mpo(peps,Nx,chi=chi,singleLayer=singleLayer,ket=ket,allow_normalize=allow_normalize,in_mem=in_mem)
 
     # Get the boundary MPO from the right (for the furthest right column)
-    right_bound_mpo = calc_right_bound_mpo(peps,Nx-2,chi=chi,singleLayer=singleLayer,ket=ket,allow_normalize=allow_normalize)
+    #tmpprint(' Calculating rbmpo')
+    right_bound_mpo = calc_right_bound_mpo(peps,Nx-2,chi=chi,singleLayer=singleLayer,ket=ket,allow_normalize=allow_normalize,in_mem=in_mem)
+
+    # Load needed bmpos
+    if not in_mem:
+        left_bound_mpo.from_disk()
+        right_bound_mpo.from_disk()
 
     # Contract the two MPOs
+    #tmpprint(' Contracting two bmpos')
     norm = left_bound_mpo.contract(right_bound_mpo)
 
     # Return result
-    return norm
+    return abs(norm)
 
-def make_thermal_peps(Nx,Ny,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
+def make_thermal_peps(Nx,Ny,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_,in_mem=True):
     """
     Make a thermal (beta=0) PEPS
 
@@ -1389,6 +1441,8 @@ def make_thermal_peps(Nx,Ny,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
         dtype : dtype
             The data type of the tensor
             Default : np.float_
+        in_mem : bool
+            Whether the peps tensors should be stored in memory or on disk
 
     Returns:
         peps : array of arrays
@@ -1402,14 +1456,19 @@ def make_thermal_peps(Nx,Ny,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
             tmp += [None]
         tensors += [tmp]
 
-    # Place random tensors into the PEPS
+    # Place thermal tensors into the PEPS
     for x in range(Nx):
         for y in range(Ny):
-            tensors[x][y] = thermal_peps_tensor(Nx,Ny,x,y,d,D,Zn=Zn,dZn=dZn,backend=backend,dtype=dtype)
+            tensors[x][y] = thermal_peps_tensor(Nx,Ny,x,y,d,D,
+                                                Zn=Zn,
+                                                dZn=dZn,
+                                                backend=backend,
+                                                dtype=dtype,
+                                                in_mem=in_mem)
 
     return tensors
 
-def make_rand_peps(Nx,Ny,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
+def make_rand_peps(Nx,Ny,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_,in_mem=True):
     """
     Make a random PEPS
 
@@ -1438,6 +1497,9 @@ def make_rand_peps(Nx,Ny,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
         dtype : dtype
             The data type of the tensor
             Default : np.float_
+        in_mem : bool
+            Whether the peps tensors should be stored in memory or on disk.
+            Default is True
 
     Returns:
         peps : array of arrays
@@ -1454,15 +1516,24 @@ def make_rand_peps(Nx,Ny,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_):
     # Place random tensors into the PEPS
     for x in range(Nx):
         for y in range(Ny):
-            #tmpprint('Making a single random PEPS tensor at {},{}'.format(x,y))
-            tensors[x][y] = rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=Zn,dZn=dZn,backend=backend,dtype=dtype)
+            tensors[x][y] = rand_peps_tensor(Nx,Ny,x,y,d,D,
+                                             Zn=Zn,
+                                             dZn=dZn,
+                                             backend=backend,
+                                             dtype=dtype,
+                                             in_mem=True)
+
         # At the end of each column, make the norm smaller
-        #tmpprint('Normalizing peps col {}'.format(x))
         tensors[x][:] = normalize_peps_col(tensors[x][:])
+
+        # And write to disk
+        if not in_mem:
+            for y in range(Ny):
+                tensors[x][y].to_disk()
 
     return tensors
 
-def thermal_lambda_tensor(D,Zn=None,backend='numpy',dtype=float_):
+def thermal_lambda_tensor(D,Zn=None,backend='numpy',dtype=float_,in_mem=True):
     """
     Create a thermal (currently identity) lambda tensor for a canonical PEPS
 
@@ -1482,6 +1553,9 @@ def thermal_lambda_tensor(D,Zn=None,backend='numpy',dtype=float_):
         dtype : dtype
             The data type of the tensor
             Default : np.float_
+        in_mem : bool
+            If True, then the tensor will be stored in local memory. Otherwise,
+            it will be written to disk
 
     Returns:
         ten : ndarray
@@ -1507,10 +1581,14 @@ def thermal_lambda_tensor(D,Zn=None,backend='numpy',dtype=float_):
         for i in range(Zn):
             l.ten.array[i,:,:] = l.backend.diag(l.backend.ones(D))
 
+    # Write to disk if needed
+    if not in_mem:
+        l.to_disk()
+
     # Return result
     return l
 
-def rand_lambda_tensor(D,Zn=None,backend='numpy',dtype=float_):
+def rand_lambda_tensor(D,Zn=None,backend='numpy',dtype=float_,in_mem=True):
     """
     Create a random lambda tensor for a canonical PEPS
 
@@ -1530,6 +1608,9 @@ def rand_lambda_tensor(D,Zn=None,backend='numpy',dtype=float_):
         dtype : dtype
             The data type of the tensor
             Default : np.float_
+        in_mem : bool
+            If True (default), then the tensor will be stored in local
+            memory. Otherwise it will be written to disk
 
     Returns:
         ten : ndarray
@@ -1555,10 +1636,14 @@ def rand_lambda_tensor(D,Zn=None,backend='numpy',dtype=float_):
         for i in range(Zn):
             l.ten.array[i,:,:] = l.backend.diag(l.backend.random(D))
 
+    # Write to disk (if wanted)
+    if not in_mem:
+        l.to_disk()
+
     # Return result
     return l
 
-def make_thermal_lambdas(Nx,Ny,D,Zn=None,backend='numpy',dtype=float_):
+def make_thermal_lambdas(Nx,Ny,D,Zn=None,backend='numpy',dtype=float_,in_mem=True):
     """
     Make identites as diagonal matrices to serve as the
     singular values for the Gamma-Lambda canonical
@@ -1572,7 +1657,7 @@ def make_thermal_lambdas(Nx,Ny,D,Zn=None,backend='numpy',dtype=float_):
     for x in range(Nx):
         tmp = []
         for y in range(Ny-1):
-            tmp += [thermal_lambda_tensor(D,Zn=Zn,backend=backend,dtype=dtype)]
+            tmp += [thermal_lambda_tensor(D,Zn=Zn,backend=backend,dtype=dtype,in_mem=in_mem)]
         vert += [tmp]
 
     # Lambda tensors along horizontal bonds
@@ -1580,14 +1665,14 @@ def make_thermal_lambdas(Nx,Ny,D,Zn=None,backend='numpy',dtype=float_):
     for x in range(Nx-1):
         tmp = []
         for x in range(Ny):
-            tmp += [thermal_lambda_tensor(D,Zn=Zn,backend=backend,dtype=dtype)]
+            tmp += [thermal_lambda_tensor(D,Zn=Zn,backend=backend,dtype=dtype,in_mem=in_mem)]
         horz += [tmp]
 
     # Add horizontal and vertical lambdas to tensor list
     tensors = [vert,horz]
     return tensors
 
-def make_rand_lambdas(Nx,Ny,D,Zn=None,backend='numpy',dtype=float_):
+def make_rand_lambdas(Nx,Ny,D,Zn=None,backend='numpy',dtype=float_,in_mem=True):
     """
     Make random diagonal matrices to serve as the
     singular values for the Gamma-Lambda canonical
@@ -1601,7 +1686,7 @@ def make_rand_lambdas(Nx,Ny,D,Zn=None,backend='numpy',dtype=float_):
     for x in range(Nx):
         tmp = []
         for y in range(Ny-1):
-            tmp += [rand_lambda_tensor(D,Zn=Zn,backend=backend,dtype=dtype)]
+            tmp += [rand_lambda_tensor(D,Zn=Zn,backend=backend,dtype=dtype,in_mem=in_mem)]
         vert += [tmp]
 
     # Lambda tensors along horizontal bonds
@@ -1609,7 +1694,7 @@ def make_rand_lambdas(Nx,Ny,D,Zn=None,backend='numpy',dtype=float_):
     for x in range(Nx-1):
         tmp = []
         for x in range(Ny):
-            tmp += [rand_lambda_tensor(D,Zn=Zn,backend=backend,dtype=dtype)]
+            tmp += [rand_lambda_tensor(D,Zn=Zn,backend=backend,dtype=dtype,in_mem=in_mem)]
         horz += [tmp]
 
     # Add horizontal and vertical lambdas to tensor list
@@ -2577,24 +2662,58 @@ def update_top_env(bra,ket,left1,left2,right1,right2,prev_env):
      M       d       D       m
 
     """
+    # Check if stuff is in memory (or needs loading)
+    in_mem_bra = bra.in_mem
+    in_mem_ket = ket.in_mem
+    in_mem_left1 = left1.in_mem
+    in_mem_left2 = left2.in_mem
+    in_mem_right1 = right1.in_mem
+    in_mem_right2 = right2.in_mem
+    if prev_env is not None:
+        in_mem_prev_env = prev_env.in_mem
+    else:
+        in_mem_prev_env = True
+
+    # Load stuff that is not in memory
+    if not in_mem_bra: bra.from_disk()
+    if not in_mem_ket: ket.from_disk()
+    if not in_mem_left1: left1.from_disk()
+    if not in_mem_left2: left2.from_disk()
+    if not in_mem_right1: right1.from_disk()
+    if not in_mem_right2: right2.from_disk()
+    if not in_mem_prev_env: prev_env.from_disk()
+
+    # Compute first bottom environment
     if prev_env is None:
-        # Create first top env
         tmp = einsum('ldpru,NlO->uONdpr',ket,left2).remove_empty_ind(0).remove_empty_ind(0)
         tmp = einsum('Ndpr,nro->oNdpn',tmp,right2).remove_empty_ind(0)
         tmp = einsum('Ndpn,LDpRU->UNdLDRn',tmp,bra).remove_empty_ind(0)
         tmp = einsum('NdLDRn,MLN->MdDRn',tmp,left1)
         top_env = einsum('MdDRn,mRn->MdDm',tmp,right1)
+
+    # Add on to top env
     else:
-        # Add on to top env
         tmp = einsum('ldpru,OuUo->OldprUo',ket,prev_env)
         tmp = einsum('OldprUo,NlO->NdprUo',tmp,left2)
         tmp = einsum('NdprUo,nro->NdpUn',tmp,right2)
         tmp = einsum('NdpUn,LDpRU->NdLDRn',tmp,bra)
         tmp = einsum('NdLDRn,MLN->MdDRn',tmp,left1)
         top_env = einsum('MdDRn,mRn->MdDm',tmp,right1)
+
+    # Cache stuff that is not in memory
+    if not in_mem_bra: bra.to_disk()
+    if not in_mem_ket: ket.to_disk()
+    if not in_mem_left1: left1.to_disk()
+    if not in_mem_left2: left2.to_disk()
+    if not in_mem_right1: right1.to_disk()
+    if not in_mem_right2: right2.to_disk()
+    if not in_mem_prev_env: prev_env.to_disk()
+
+    # Return result
     return top_env
 
-def calc_top_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
+#@profile
+def calc_top_envs(bra_col,left_bmpo,right_bmpo,ket_col=None,in_mem=True):
     """
     Doing the following contraction:
 
@@ -2622,13 +2741,27 @@ def calc_top_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
         ket_col = [None]*len(bra_col)
         for i in range(len(ket_col)):
             ket_col[i] = bra_col[i].copy()
-    # TODO - Conjugate this ket col?
 
     # Compute top environment
     top_env = [None]*Ny
     for row in reversed(range(Ny)):
+        
+        # Get previous Environemnt
         if row == Ny-1: prev_env = None
         else: prev_env = top_env[row+1]
+
+        # Make sure everything we need is loaded
+        if not in_mem:
+            bra_col[row].from_disk()
+            ket_col[row].from_disk()
+            left_bmpo[2*row].from_disk()
+            left_bmpo[2*row+1].from_disk()
+            right_bmpo[2*row].from_disk()
+            right_bmpo[2*row+1].from_disk()
+            if prev_env is not None:
+                prev_env.from_disk()
+
+        # Update the top environments
         top_env[row] = update_top_env(bra_col[row],
                                       ket_col[row],
                                       left_bmpo[2*row],
@@ -2636,6 +2769,23 @@ def calc_top_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
                                       right_bmpo[2*row],
                                       right_bmpo[2*row+1],
                                       prev_env)
+
+        # Write tensors back to disk (if needed)
+        if not in_mem:
+            bra_col[row].to_disk()
+            ket_col[row].to_disk()
+            left_bmpo[2*row].to_disk()
+            left_bmpo[2*row+1].to_disk()
+            right_bmpo[2*row].to_disk()
+            right_bmpo[2*row+1].to_disk()
+            if row != Ny-1:
+                top_env[row+1].to_disk()
+
+    # Write final top env to disk
+    if not in_mem:
+        top_env[row].to_disk()
+
+    # Return Result
     return top_env
 
 def update_bot_env(bra,ket,left1,left2,right1,right2,prev_env):
@@ -2659,12 +2809,36 @@ def update_bot_env(bra,ket,left1,left2,right1,right2,prev_env):
      +-------+-------+-------+
 
     """
+    # Check if stuff is in memory (or needs loading)
+    in_mem_bra = bra.in_mem
+    in_mem_ket = ket.in_mem
+    in_mem_left1 = left1.in_mem
+    in_mem_left2 = left2.in_mem
+    in_mem_right1 = right1.in_mem
+    in_mem_right2 = right2.in_mem
+    if prev_env is not None:
+        in_mem_prev_env = prev_env.in_mem
+    else:
+        in_mem_prev_env = True
+
+    # Load stuff that is not in memory
+    if not in_mem_bra: bra.from_disk()
+    if not in_mem_ket: ket.from_disk()
+    if not in_mem_left1: left1.from_disk()
+    if not in_mem_left2: left2.from_disk()
+    if not in_mem_right1: right1.from_disk()
+    if not in_mem_right2: right2.from_disk()
+    if not in_mem_prev_env: prev_env.from_disk()
+
+    # Compute first bottom environment
     if prev_env is None:
         tmp = einsum('LDPRU,MLN->DMNPUR',bra,left1).remove_empty_ind(0).remove_empty_ind(0)
         tmp = einsum('NPUR,mRn->mNPUn',tmp,right1).remove_empty_ind(0)
         tmp = einsum('NPUn,ldPru->dNlurUn',tmp,ket).remove_empty_ind(0)
         tmp = einsum('NlurUn,NlO->OurUn',tmp,left2)
         bot_env = einsum('OurUn,nro->OuUo',tmp,right2)
+
+    # Update bottom environemnt
     else:
         tmp = einsum('LDPRU,MdDm->MdLPURm',bra,prev_env)
         tmp = einsum('MdLPURm,MLN->NdPURm',tmp,left1)
@@ -2672,9 +2846,21 @@ def update_bot_env(bra,ket,left1,left2,right1,right2,prev_env):
         tmp = einsum('NdPUn,ldPru->NlurUn',tmp,ket)
         tmp = einsum('NlurUn,NlO->OurUn',tmp,left2)
         bot_env = einsum('OurUn,nro->OuUo',tmp,right2)
+
+    # Cache stuff that is not in memory
+    if not in_mem_bra: bra.to_disk()
+    if not in_mem_ket: ket.to_disk()
+    if not in_mem_left1: left1.to_disk()
+    if not in_mem_left2: left2.to_disk()
+    if not in_mem_right1: right1.to_disk()
+    if not in_mem_right2: right2.to_disk()
+    if not in_mem_prev_env: prev_env.to_disk()
+
+    # Return result
     return bot_env
 
-def calc_bot_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
+#@profile
+def calc_bot_envs(bra_col,left_bmpo,right_bmpo,ket_col=None,in_mem=True):
     """
     Doing the following contraction:
 
@@ -2708,8 +2894,23 @@ def calc_bot_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
     # Compute the bottom environment
     bot_env = [None]*Ny
     for row in range(Ny):
+
+        # Get previous environment
         if row == 0: prev_env = None
         else: prev_env = bot_env[row-1]
+
+        # Make sure everything we need is loaded
+        if not in_mem:
+            bra_col[row].from_disk()
+            ket_col[row].from_disk()
+            left_bmpo[2*row].from_disk()
+            left_bmpo[2*row+1].from_disk()
+            right_bmpo[2*row].from_disk()
+            right_bmpo[2*row+1].from_disk()
+            if prev_env is not None:
+                prev_env.from_disk()
+
+        # Update the top environments
         bot_env[row] = update_bot_env(bra_col[row],
                                       ket_col[row],
                                       left_bmpo[2*row],
@@ -2717,6 +2918,23 @@ def calc_bot_envs(bra_col,left_bmpo,right_bmpo,ket_col=None):
                                       right_bmpo[2*row],
                                       right_bmpo[2*row+1],
                                       prev_env)
+
+        # Write tensors back to disk (if needed)
+        if not in_mem:
+            bra_col[row].to_disk()
+            ket_col[row].to_disk()
+            left_bmpo[2*row].to_disk()
+            left_bmpo[2*row+1].to_disk()
+            right_bmpo[2*row].to_disk()
+            right_bmpo[2*row+1].to_disk()
+            if row-1 > 0:
+                bot_env[row-1].to_disk()
+
+    # Write final top env to disk
+    if not in_mem:
+        bot_env[row].to_disk()
+
+    # Return result
     return bot_env
 
 def reduce_tensors(peps1,peps2):
@@ -2760,69 +2978,105 @@ def pos_sqrt_vec(vec):
             vec[i] = 0.
     return vec
 
-def make_N_positive(N,hermitian=True,positive=True):
+#@profile
+def make_N_positive(N,hermitian=True,positive=True,reduced=True):
     """
     """
 
     # Get a hermitian approximation of the environment
     if hermitian:
-        #tmpprint('\t\t\t\t\tMaking it hermitian')
-        N1 = N.copy()
-        N1 = N1.transpose([0,2,1,3])
-        N = N.transpose([1,3,0,2])
-        N = (N+N1)/2.
-        N1 = N.copy()
-        N = einsum('UDab,abud->UuDd',N,N1)
+        if reduced:
+            N1 = N.copy()
+            N1 = N1.transpose([0,2,1,3])
+            N = N.transpose([1,3,0,2])
+            N = (N+N1)/2.
+            N1 = N.copy()
+            N = einsum('UDab,abud->UuDd',N,N1)
+        else:
+            N1 = N.copy()
+            N1 = N1.transpose([0,2,4,6,8,10,1,3,5,7,9,11])
+            N = N.transpose([1,3,5,7,9,11,0,2,4,6,8,10])
+            N = (N+N1)/2.
+            N1 = N.copy()
+            N = einsum('ldrkustvwxyz,tvwxyzLDRKUS->lLdDrRkKuUsS',N,N1)
 
     # Get a positive approximation of the environment
     if positive:
-        #tmpprint('\t\t\t\t\tMaking it positive')
         try:
-            if N.sym is None:
-                N = N.transpose([0,2,1,3])
-                n1 = np.prod([N.ten.shape[i] for i in N.legs[0]])
-                n2 = np.prod([N.ten.shape[i] for i in N.legs[1]])
-                n3 = np.prod([N.ten.shape[i] for i in N.legs[2]])
-                n4 = np.prod([N.ten.shape[i] for i in N.legs[3]])
-                #tmpprint('\t\t\t\t\t\tReshape N')
-                Nmat = N.backend.reshape(N.ten,(n1*n2,n3*n4))
-                #tmpprint('\t\t\t\t\t\tEigh')
-                u,v = N.backend.eigh(Nmat)
-                #tmpprint('\t\t\t\t\t\tPositive Sqrt of Vector')
-                u = pos_sqrt_vec(u)
-                Nmat = N.backend.einsum('ij,j,kj->ik',v,u,v)
-                #tmpprint('\t\t\t\t\t\tReshape N back')
-                N.ten = Nmat.reshape(N.shape)
-                N = N.transpose([0,2,1,3])
+            if reduced:
+                if N.sym is None:
+                    N = N.transpose([0,2,1,3])
+                    n1 = np.prod([N.ten.shape[i] for i in N.legs[0]])
+                    n2 = np.prod([N.ten.shape[i] for i in N.legs[1]])
+                    n3 = np.prod([N.ten.shape[i] for i in N.legs[2]])
+                    n4 = np.prod([N.ten.shape[i] for i in N.legs[3]])
+                    Nmat = N.backend.reshape(N.ten,(n1*n2,n3*n4))
+                    u,v = N.backend.eigh(Nmat)
+                    u = pos_sqrt_vec(u)
+                    Nmat = N.backend.einsum('ij,j,kj->ik',v,u,v)
+                    N.ten = Nmat.reshape(N.shape)
+                    N = N.transpose([0,2,1,3])
+                else:
+                    N = N.copy().transpose([0,2,1,3])
+                    Nmat = N.ten.make_sparse()
+                    (N1,N2,N3,N4,n1,n2,n3,n4) = Nmat.shape
+                    Nmat = Nmat.transpose([0,4,1,5,2,6,3,7])
+                    Nmat = Nmat.reshape((N1*n1*N2*n2,N3*n3*N4*n4))
+                    u,v = N.backend.eigh(Nmat)
+                    u = pos_sqrt_vec(u)
+                    Nmat = N.backend.einsum('ij,j,kj->ik',v,u,v)
+                    Nmat = Nmat.reshape((N1,n1,N2,n2,N3,n3,N4,n4))
+                    Nmat = Nmat.transpose([0,2,4,6,1,3,5,7])
+                    # Cast back into a symtensor
+                    delta = N.ten.get_irrep_map()
+                    Nmat = N.backend.einsum('ABCDabcd,ABCD->ABCabcd',Nmat,delta)
+                    N.ten.array = Nmat
+                    # Retranspose
+                    N = N.transpose([0,2,1,3])
             else:
-                N = N.copy().transpose([0,2,1,3])
-                # Make this a sparse tensor
-                #tmpprint('\t\t\t\t\t\tMaking N Sparse')
-                Nmat = N.ten.make_sparse()
-                (N1,N2,N3,N4,n1,n2,n3,n4) = Nmat.shape
-                #tmpprint('\t\t\t\t\t\tTranspose & Matricize')
-                Nmat = Nmat.transpose([0,4,1,5,2,6,3,7])
-                Nmat = Nmat.reshape((N1*n1*N2*n2,N3*n3*N4*n4))
-                #tmpprint('\t\t\t\t\t\teigh')
-                u,v = N.backend.eigh(Nmat)
-                u = pos_sqrt_vec(u)
-                Nmat = N.backend.einsum('ij,j,kj->ik',v,u,v)
-                #tmpprint('\t\t\t\t\t\tdematricize')
-                Nmat = Nmat.reshape((N1,n1,N2,n2,N3,n3,N4,n4))
-                Nmat = Nmat.transpose([0,2,4,6,1,3,5,7])
-                # Cast back into a symtensor
-                #tmpprint('\t\t\t\t\t\tBack to symtensor')
-                delta = N.ten.get_irrep_map()
-                Nmat = N.backend.einsum('ABCDabcd,ABCD->ABCabcd',Nmat,delta)
-                N.ten.array = Nmat
-                # Retranspose
-                N = N.transpose([0,2,1,3])
+                if N.sym is None:
+                    N = N.transpose([0,2,4,6,8,10,1,3,5,7,9,11])
+                    n0 = np.prod([N.ten.shape[i] for i in N.legs[0]])
+                    n1 = np.prod([N.ten.shape[i] for i in N.legs[1]])
+                    n2 = np.prod([N.ten.shape[i] for i in N.legs[2]])
+                    n3 = np.prod([N.ten.shape[i] for i in N.legs[3]])
+                    n4 = np.prod([N.ten.shape[i] for i in N.legs[4]])
+                    n5 = np.prod([N.ten.shape[i] for i in N.legs[5]])
+                    n6 = np.prod([N.ten.shape[i] for i in N.legs[6]])
+                    n7 = np.prod([N.ten.shape[i] for i in N.legs[7]])
+                    n8 = np.prod([N.ten.shape[i] for i in N.legs[8]])
+                    n9 = np.prod([N.ten.shape[i] for i in N.legs[9]])
+                    n10 = np.prod([N.ten.shape[i] for i in N.legs[10]])
+                    n11 = np.prod([N.ten.shape[i] for i in N.legs[11]])
+                    Nmat = N.backend.reshape(N.ten,(n0*n1*n2*n3*n4*n5,n6*n7*n8*n9*n10*n11))
+                    u,v = N.backend.eigh(Nmat)
+                    u = pos_sqrt_vec(u)
+                    Nmat = N.backend.einsum('ij,j,kj->ik',v,u,v)
+                    N.ten = Nmat.reshape(N.shape)
+                    N = N.transpose([0,6,1,7,2,8,3,9,4,10,5,11])
+                else:
+                    N = N.copy().transpose([0,2,4,6,8,10,1,3,5,7,9,11])
+                    Nmat = N.ten.make_sparse()
+                    (N0,N1,N2,N3,N4,N5,N6,N7,N8,N9,N10,N11,n0,n1,n2,n3,n4,n5,n6,n7,n8,n9,n10,n11) = Nmat.shape
+                    Nmat = Nmat.transpose([0,12,1,13,2,14,3,15,4,16,5,17,6,18,7,19,8,20,9,21,10,22,11,23])
+                    Nmat = Nmat.reshape((N0*n0*N1*n1*N2*n2*N3*n3*N4*n4*N5*n5,N6*n6*N7*n7*N8*n8*N9*n9*N10*n10*N11*n11))
+                    u,v = N.backend.eigh(Nmat)
+                    u = pos_sqrt_vec(u)
+                    Nmat = N.backend.einsum('ij,j,kj->ik',v,u,v)
+                    Nmat = Nmat.reshape((N0,n0,N1,n1,N2,n2,N3,n3,N4,n4,N5,n5,N6,n6,N7,n7,N8,n8,N9,n9,N10,n10,N11,n11))
+                    Nmat = Nmat.transpose([0,2,4,6,8,10,12,14,16,18,20,22,1,3,5,7,9,11,13,15,17,19,21,23])
+                    delta = N.ten.get_irrep_map()
+                    Nmat = N.backend.einsum('ABCDEFGHIJKLabcdefghijkl,ABCDEFGHIJKL->ABCDEFGHIJKabcdefghijkl',Nmat,delta)
+                    N.ten.array = Nmat
+                    N = N.transpose([0,6,1,7,2,8,3,9,4,10,5,11])
         except Exception as e:
             mpiprint(0,'Failed to make N positive:\n\t{}'.format(e))
 
     return N
 
-def calc_local_env(bra1,bra2,ket1,ket2,env_top,env_bot,lbmpo,rbmpo,reduced=True,hermitian=True,positive=True):
+#@profile
+def calc_local_env(bra1,bra2,ket1,ket2,env_top,env_bot,lbmpo,rbmpo,
+                   reduced=True,hermitian=True,positive=True,in_mem=True):
     """
     Calculate the local environment around two peps tensors
 
@@ -2857,76 +3111,164 @@ def calc_local_env(bra1,bra2,ket1,ket2,env_top,env_bot,lbmpo,rbmpo,reduced=True,
         positive : bool
             Approximate the environment with its nearest
             possible positive approximate
+        in_mem : bool
+            Whether the tensors input to this function are in 
+            memory. If not, tensors should be loaded first (and rewritten
+            to disk afterwards). The output of this funciton, i.e.
+            the local env, will always be in memory.
 
     """
 
+    # Load tensors (as needed)
+    if not in_mem:
+        bra1.from_disk()
+        bra2.from_disk()
+        ket1.from_disk()
+        ket2.from_disk()
+        if env_top is not None: env_top.from_disk()
+        if env_bot is not None: env_bot.from_disk()
+        for i in range(len(lbmpo)):
+            lbmpo[i].from_disk()
+        for i in range(len(rbmpo)):
+            rbmpo[i].from_disk()
+
     if reduced:
         # Get reduced tensors
-        #tmpprint('\t\t\t\tReduce Bra')
-        ub,phys_b,phys_t,vt = reduce_tensors(bra1,bra2)
-        #tmpprint('\t\t\t\tReduce Ket')
-        ubk,phys_bk,phys_tk,vtk = reduce_tensors(ket1,ket2)
+        peps_b,phys_b,phys_t,peps_t = reduce_tensors(bra1,bra2)
+        ket_b,phys_bk,phys_tk,ket_t = reduce_tensors(ket1,ket2)
 
         # Compute bottom half of environment
         if env_bot is None:
-            #tmpprint('\t\t\t\tContraction bot 1')
-            tmp = einsum('CLB,LDRU->CDBUR',lbmpo[0],ub).remove_empty_ind(0).remove_empty_ind(0)
-            #tmpprint('\t\t\t\tContraction bot 2')
+            tmp = einsum('CLB,LDRU->CDBUR',lbmpo[0],peps_b).remove_empty_ind(0).remove_empty_ind(0)
             tmp = einsum('BUR,cRb->cBUb',tmp,rbmpo[0]).remove_empty_ind(0)
-            #tmpprint('\t\t\t\tContraction bot 3')
             tmp = einsum('BUb,BlA->AlUb',tmp,lbmpo[1])
-            #tmpprint('\t\t\t\tContraction bot 4')
-            tmp = einsum('AlUb,ldru->dAurUb',tmp,ubk).remove_empty_ind(0)
-            #tmpprint('\t\t\t\tContraction bot 5')
+            tmp = einsum('AlUb,ldru->dAurUb',tmp,ket_b).remove_empty_ind(0)
             envb= einsum('AurUb,bra->AuUa',tmp,rbmpo[1])
         else:
-            #tmpprint('\t\t\t\tContraction bot 1')
             tmp = einsum('CdDc,CLB->BLdDc',env_bot,lbmpo[0])
-            #tmpprint('\t\t\t\tContraction bot 2')
-            tmp = einsum('BLdDc,LDRU->BdURc',tmp,ub)
-            #tmpprint('\t\t\t\tContraction bot 3')
+            tmp = einsum('BLdDc,LDRU->BdURc',tmp,peps_b)
             tmp = einsum('BdURc,cRb->BdUb',tmp,rbmpo[0])
-            #tmpprint('\t\t\t\tContraction bot 4')
             tmp = einsum('BdUb,BlA->AldUb',tmp,lbmpo[1])
-            #tmpprint('\t\t\t\tContraction bot 5')
-            tmp = einsum('AldUb,ldru->AurUb',tmp,ubk)
-            #tmpprint('\t\t\t\tContraction bot 6')
+            tmp = einsum('AldUb,ldru->AurUb',tmp,ket_b)
             envb= einsum('AurUb,bra->AuUa',tmp,rbmpo[1])
 
         # Compute top half of environment
         if env_top is None:
-            #tmpprint('\t\t\t\tContraction top 1')
-            tmp = einsum('BlC,ldru->CuBdr',lbmpo[3],vtk).remove_empty_ind(0).remove_empty_ind(0)
-            #tmpprint('\t\t\t\tContraction top 2')
+            tmp = einsum('BlC,ldru->CuBdr',lbmpo[3],ket_t).remove_empty_ind(0).remove_empty_ind(0)
             tmp = einsum('Bdr,brc->cBdb',tmp,rbmpo[3]).remove_empty_ind(0)
-            #tmpprint('\t\t\t\tContraction top 3')
             tmp = einsum('Bdb,ALB->ALdb',tmp,lbmpo[2])
-            #tmpprint('\t\t\t\tContraction top 4')
-            tmp = einsum('ALdb,LDRU->UAdDRb',tmp,vt).remove_empty_ind(0)
-            #tmpprint('\t\t\t\tContraction top 5')
+            tmp = einsum('ALdb,LDRU->UAdDRb',tmp,peps_t).remove_empty_ind(0)
             envt= einsum('AdDRb,aRb->AdDa',tmp,rbmpo[2])
         else:
-            #tmpprint('\t\t\t\tContraction top 1')
             tmp = einsum('CuUc,BlC->BluUc',env_top,lbmpo[3])
-            #tmpprint('\t\t\t\tContraction top 2')
-            tmp = einsum('BluUc,ldru->BdrUc',tmp,vtk)
-            #tmpprint('\t\t\t\tContraction top 3')
+            tmp = einsum('BluUc,ldru->BdrUc',tmp,ket_t)
             tmp = einsum('BdrUc,brc->BdUb',tmp,rbmpo[3])
-            #tmpprint('\t\t\t\tContraction top 4')
             tmp = einsum('BdUb,ALB->ALdUb',tmp,lbmpo[2])
-            #tmpprint('\t\t\t\tContraction top 5')
-            tmp = einsum('ALdUb,LDRU->AdDRb',tmp,vt)
-            #tmpprint('\t\t\t\tContraction top 6')
+            tmp = einsum('ALdUb,LDRU->AdDRb',tmp,peps_t)
             envt= einsum('AdDRb,aRb->AdDa',tmp,rbmpo[2])
 
         # Compute Environment
-        #tmpprint('\t\t\t\tFinal Contraction')
         N = einsum('AdDa,AuUa->uUdD',envt,envb)
-        #tmpprint('\t\t\t\tMake N Positive')
         N = make_N_positive(N,hermitian=hermitian,positive=positive)
-        return ub,phys_b,phys_t,vt,ubk,phys_bk,phys_tk,vtk,N
+
+        # write tensors to disk (as needed)
+        if not in_mem:
+            bra1.to_disk()
+            bra2.to_disk()
+            ket1.to_disk()
+            ket2.to_disk()
+            if env_top is not None: env_top.to_disk()
+            if env_bot is not None: env_bot.to_disk()
+            for i in range(len(lbmpo)):
+                lbmpo[i].to_disk()
+            for i in range(len(rbmpo)):
+                rbmpo[i].to_disk()
+
+        # Return Results
+        return peps_b, phys_b, phys_t, peps_t, ket_b, phys_bk, phys_tk, ket_t, N
     else:
-        raise NotImplementedError()
+        # Get the PEPS tensors
+        peps_b, peps_t = bra1, bra2
+        ket_b, ket_t = ket1, ket2
+
+        # Compute bottom half of environment
+        if env_bot is None:
+            if lbmpo[0].is_symmetric:
+                # Must determine correct signs for empty tensor (a bit overly complicated)
+                symtmp = einsum('CLB,BlA->CLlA',lbmpo[0],lbmpo[1])
+                symtmp = einsum('LDPRU,CLlA->DPRUClA',peps_b,symtmp)
+                symtmp = einsum('cRb,DPRUClA->DPUClAcb',rbmpo[0],symtmp)
+                symtmp = einsum('bra,DPUClAcb->DPUClAcra',rbmpo[1],symtmp)
+                symtmp = einsum('ldPru,DPUClAcra->CdDcAuUa',ket_b,symtmp)
+                # Create an empty environment
+                env_bot = ones((1,1,1,1),
+                               sym=[symtmp.sym[0][:4],
+                                    symtmp.sym[1][:4],
+                                    None,
+                                    None],
+                               backend=lbmpo[0].
+                               backend,dtype=lbmpo[0].dtype)
+            else:
+                # Create an empty environment
+                env_bot = ones((1,1,1,1),
+                               sym=None,
+                               backend=lbmpo[0].backend,
+                               dtype=lbmpo[0].dtype)
+        # Contract bottom half of environment
+        tmp  = einsum('CdDc,CLB->BLdDc',env_bot,lbmpo[0])
+        tmp  = einsum('BLdDc,cRb->BLdDRb',tmp,rbmpo[0])
+        tmp  = einsum('BLdDRb,BlA->AlLdDRb',tmp,lbmpo[1])
+        envb = einsum('AlLdDRb,bra->AlLdDrRa',tmp,rbmpo[1])
+
+        # Compute top half of environment
+        if env_top is None:
+            if lbmpo[3].is_symmetric:
+                # Must determine correct signs for empty tensor (a bit overly complicated)
+                symtmp = einsum('ALB,BlC->ALlC',lbmpo[2],lbmpo[3])
+                symtmp = einsum('LDPRU,ALlC->DPRUAlC',peps_t,symtmp)
+                symtmp = einsum('aRb,DPRUAlC->DPUAlCab',rbmpo[2],symtmp)
+                symtmp = einsum('brc,DPUAlCab->DPUAlCarc',rbmpo[3],symtmp)
+                symtmp = einsum('ldPru,DPUAlCarc->CuUcDaAd',ket_t,symtmp)
+                # Create an empty environment
+                env_top = ones((1,1,1,1),
+                               sym=[symtmp.sym[0][:4],
+                                    symtmp.sym[1][:4],
+                                    None,
+                                    None],
+                               backend=lbmpo[0].backend,
+                               dtype=lbmpo[0].dtype)
+            else:
+                # Create an empty environment
+                env_top = ones((1,1,1,1),
+                               sym=None,
+                               backend=lbmpo[0].backend,dtype=lbmpo[0].dtype)
+        tmp  = einsum('CuUc,BlC->BluUc',env_top,lbmpo[3])
+        tmp  = einsum('BluUc,brc->BluUrb',tmp,rbmpo[3])
+        tmp  = einsum('BluUrb,ALB->ALluUrb',tmp,lbmpo[2])
+        envt = einsum('ALluUrb,aRb->AlLuUrRa',tmp,rbmpo[2])
+
+        # Compute Environment
+        N = einsum('AkKuUsSa,AlLdDrRa->lLdDrRkKuUsS',envt,envb)
+        N = make_N_positive(N,
+                            hermitian=hermitian,
+                            positive=positive,
+                            reduced=reduced)
+
+        # write tensors to disk (as needed)
+        if not in_mem:
+            bra1.to_disk()
+            bra2.to_disk()
+            ket1.to_disk()
+            ket2.to_disk()
+            if env_top is not None: env_top.to_disk()
+            if env_bot is not None: env_bot.to_disk()
+            for i in range(len(lbmpo)):
+                lbmpo[i].to_disk()
+            for i in range(len(rbmpo)):
+                rbmpo[i].to_disk()
+
+        # Return Results
+        return N 
 
 def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
                       phys_b_ket=None,phys_t_ket=None,
@@ -2964,21 +3306,44 @@ def calc_local_op(phys_b_bra,phys_t_bra,N,ham,
                 E = einsum('PQpq,PQpq->',tmp,ham)
         else:
             E = norm
-        mpiprint(7,'E = {}/{} = {}'.format(E,norm,E/norm))
-        if normalize:
-            if return_norm:
-                return E/norm,norm
-            else:
-                return E/norm
-        else:
-            if return_norm:
-                return E,norm
-            else:
-                return E
     else:
-        raise NotImplementedError()
+        # (Bra is capital, ket is lower case)
+        comb1 = einsum('LDPRZ,KZQSU->LDPRKQSU', phys_b_bra, phys_t_bra)
+        comb1 = einsum('LDPRKQSU,lLdDrRkKuUsS->PQldrkus', comb1, N)
+        comb2 = einsum('ldprz,kzqsu->ldprkqsu', phys_b_ket, phys_t_ket)
+        norm = einsum('PQldrkus,ldPrkQsu->', comb1, comb2)
+        if ham is not None:
+            phys_inds = einsum('PQldrkus,ldprkqsu->PQpq', comb1, comb2)
+            if len(phys_inds.legs[0]) == 2:
+                # Thermal state
+                phys_inds.unmerge_ind(3)
+                phys_inds.unmerge_ind(2)
+                phys_inds.unmerge_ind(1)
+                phys_inds.unmerge_ind(0)
+                E = einsum('PaQbpaqb,PQpq->', phys_inds, ham)
+                phys_inds.merge_inds([0,1])
+                phys_inds.merge_inds([1,2])
+                phys_inds.merge_inds([2,3])
+                phys_inds.merge_inds([3,4])
+            else:
+                # Normal peps
+                E = einsum('PQpq,PQpq->', phys_inds, ham)
+        else:
+            E = norm
 
-def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,positive=True,ket_col=None):
+    # Return Result
+    if normalize:
+        if return_norm:
+            return E/norm,norm
+        else:
+            return E/norm
+    else:
+        if return_norm:
+            return E,norm
+        else:
+            return E
+
+def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,positive=True,ket_col=None,in_mem=True,reduced=True):
     """
     Calculate the environment tensor
     """
@@ -3002,7 +3367,9 @@ def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,pos
                                  left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                                  right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                                  hermitian=hermitian,
-                                 positive=positive)
+                                 positive=positive,
+                                 in_mem=in_mem,
+                                 reduced=reduced)
         else:
             # Identity only on bottom
             res = calc_local_env(bra_col[row],
@@ -3014,7 +3381,9 @@ def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,pos
                                  left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                                  right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                                  hermitian=hermitian,
-                                 positive=positive)
+                                 positive=positive,
+                                 in_mem=in_mem,
+                                 reduced=reduced)
     elif row == len(bra_col)-2:
         # Identity needed on top
         res = calc_local_env(bra_col[row],
@@ -3026,7 +3395,9 @@ def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,pos
                              left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                              right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                              hermitian=hermitian,
-                             positive=positive)
+                             positive=positive,
+                             in_mem=in_mem,
+                             reduced=reduced)
     else:
         # Get the local environment tensor (no identity needed)
         res = calc_local_env(bra_col[row],
@@ -3038,7 +3409,9 @@ def calc_N(row,bra_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=True,pos
                              left_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                              right_bmpo[row*2,row*2+1,row*2+2,row*2+3],
                              hermitian=hermitian,
-                             positive=positive)
+                             positive=positive,
+                             in_mem=in_mem,
+                             reduced=reduced)
     return res
 
 def calc_local_nn_op_lb(mpo,bra,ket,top,bot,left,right,normalize=True,contracted_env=False,chi=10):
@@ -3438,7 +3811,8 @@ def calc_single_column_nn_op(peps,left_bmpo,right_bmpo,ops_col,normalize=True,ke
                                   contracted_env=contracted_env)
     return E
 
-def calc_single_column_op(peps_col,left_bmpo,right_bmpo,ops_col,normalize=True,ket_col=None):
+def calc_single_column_op(peps_col,left_bmpo,right_bmpo,ops_col,
+                          normalize=True,ket_col=None,in_mem=True):
     """
     Calculate contribution to operator from interactions within
     a single column.
@@ -3454,21 +3828,38 @@ def calc_single_column_op(peps_col,left_bmpo,right_bmpo,ops_col,normalize=True,k
             The operators acting on nearest neighboring sites
             within the column
 
+    Kwargs:
+        in_mem: bool
+            if True, then the peps tensors will all be loaded into memory
+            and all calculations will be done with them in memory
+
     """
 
     # Calculate top and bottom environments
-    top_envs = calc_top_envs(peps_col,left_bmpo,right_bmpo,ket_col=ket_col)
-    bot_envs = calc_bot_envs(peps_col,left_bmpo,right_bmpo,ket_col=ket_col)
+    top_envs = calc_top_envs(peps_col,left_bmpo,right_bmpo,ket_col=ket_col,in_mem=in_mem)
+    bot_envs = calc_bot_envs(peps_col,left_bmpo,right_bmpo,ket_col=ket_col,in_mem=in_mem)
 
-    # Calculate Energy
+    # Set up array to hold resulting energies
     E = peps_col[0].backend.zeros(len(ops_col))
+
+    # Loop through rows calculating local energies
     for row in range(len(ops_col)):
-        res = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs,hermitian=False,positive=False,ket_col=ket_col)
+        
+        # Calculate environment
+        res = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs,
+                     hermitian=False,
+                     positive=False,
+                     ket_col=ket_col,
+                     in_mem=in_mem)
         _,phys_b,phys_t,_,_,phys_bk,phys_tk,_,N = res
+
+        # Calc the local operator
         E[row] = calc_local_op(phys_b,phys_t,N,ops_col[row],normalize=normalize,phys_b_ket=phys_bk,phys_t_ket=phys_tk)
+
+    # Return the energy
     return E
 
-def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None,allow_normalize=False):
+def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None,allow_normalize=False,in_mem=True):
     """
     Calculate contribution to operator from interactions within all columns,
     ignoring interactions between columns
@@ -3487,6 +3878,9 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None,a
             a 2D array showing the energy contribution from each bond.
         ket : A list of lists of ket tensors
             A second peps, to use as the ket, in the operator contraction
+        in_mem: bool
+            if True, then the peps tensors will all be loaded into memory
+            and all calculations will be done with them in memory
 
     Returns:
         val : float
@@ -3499,28 +3893,68 @@ def calc_all_column_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None,a
     Ny = len(peps[0])
 
     # Compute the boundary MPOs
-    right_bmpo = calc_right_bound_mpo(peps, 0,chi=chi,return_all=True,ket=ket,allow_normalize=allow_normalize)
-    left_bmpo  = calc_left_bound_mpo (peps,Nx,chi=chi,return_all=True,ket=ket,allow_normalize=allow_normalize)
+    right_bmpo = calc_right_bound_mpo(peps, 0,
+                                      chi=chi,
+                                      return_all=True,
+                                      ket=ket,
+                                      allow_normalize=allow_normalize,
+                                      in_mem=in_mem)
+    left_bmpo  = calc_left_bound_mpo (peps,Nx,
+                                      chi=chi,
+                                      return_all=True,
+                                      ket=ket,
+                                      allow_normalize=allow_normalize,
+                                      in_mem=in_mem)
     ident_bmpo = identity_mps(len(right_bmpo[0]),
                               dtype=peps[0][0].dtype,
                               sym=(peps[0][0].sym is not None),
                               backend=peps.backend)
 
-    # Loop through all columns
+    # Set up array to store energies
     E = peps.backend.zeros((len(ops),len(ops[0])),dtype=peps[0][0].dtype)
+
+    # Loop through all columns
     for col in range(Nx):
+        
+        # Get the ket column (if not None)
         if ket is None:
             ket_col = None
         else: ket_col = ket[col]
+
+        # First column (nothing on left side)
         if col == 0:
-            E[col,:] = calc_single_column_op(peps[col],ident_bmpo,right_bmpo[col],ops[col],normalize=normalize,ket_col=ket_col)
+            E[col,:] = calc_single_column_op(peps[col],
+                                             ident_bmpo,
+                                             right_bmpo[col],
+                                             ops[col],
+                                             normalize=normalize,
+                                             ket_col=ket_col,
+                                             in_mem=in_mem)
+
+        # Second column (nothing on right side)
         elif col == Nx-1:
-            # Use Identity on the right side
-            E[col,:] = calc_single_column_op(peps[col],left_bmpo[col-1],ident_bmpo,ops[col],normalize=normalize,ket_col=ket_col)
+            E[col,:] = calc_single_column_op(peps[col],
+                                             left_bmpo[col-1],
+                                             ident_bmpo,
+                                             ops[col],
+                                             normalize=normalize,
+                                             ket_col=ket_col,
+                                             in_mem=in_mem)
+
+        # Center columns
         else:
-            E[col,:] = calc_single_column_op(peps[col],left_bmpo[col-1],right_bmpo[col],ops[col],normalize=normalize,ket_col=ket_col)
+            E[col,:] = calc_single_column_op(peps[col],
+                                             left_bmpo[col-1],
+                                             right_bmpo[col],
+                                             ops[col],
+                                             normalize=normalize,
+                                             ket_col=ket_col,
+                                             in_mem=in_mem)
+
+    # Print Energies
     mpiprint(8,'Energy [:,:] = \n{}'.format(E))
 
+    # Return results
     if return_sum:
         return E.sum()
     else:
@@ -3633,7 +4067,7 @@ def calc_peps_nn_op(peps,ops,chi=10,normalize=True,ket=None,contracted_env=False
     # Return Result
     return E.sum()
 
-def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
+def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None,in_mem=True):
     """
     Calculate the expectation value for a given operator
 
@@ -3653,13 +4087,19 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
             as ops, or a summation of all operators
         ket : PEPS Object
             A second peps, to use as the ket, in the operator contraction
+        in_mem: bool
+            if True, then the peps tensors will all be loaded into memory
+            and all calculations will be done with them in memory
 
     Returns:
         val : float
             The resulting observable's expectation value
     """
     # "normalize" with respect to the contraction between the two peps
-    peps.normalize(ket=ket,pf=True)
+    peps.normalize(ket=ket,
+                   pf=True,
+                   in_mem=in_mem)
+
     # Absorb Lambda tensors if needed
     if peps.ltensors is not None:
         peps = peps.copy()
@@ -3673,13 +4113,23 @@ def calc_peps_op(peps,ops,chi=10,return_sum=True,normalize=True,ket=None):
         ket = ket.copy()
 
     # Calculate contribution from interactions between columns
-    col_energy = calc_all_column_op(peps,ops[0],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
+    col_energy = calc_all_column_op(peps,ops[0],
+                                    chi=chi,
+                                    normalize=normalize,
+                                    return_sum=return_sum,
+                                    ket=ket,
+                                    in_mem=in_mem)
 
     # Calculate contribution from interactions between rows
     peps.rotate(clockwise=True)
     if ket is not None: 
         ket.rotate(clockwise=True)
-    row_energy = calc_all_column_op(peps,ops[1],chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
+    row_energy = calc_all_column_op(peps,ops[1],
+                                    chi=chi,
+                                    normalize=normalize,
+                                    return_sum=return_sum,
+                                    ket=ket,
+                                    in_mem=in_mem)
     peps.rotate(clockwise=False)
     if ket is not None: 
         ket.rotate(clockwise=False)
@@ -3896,13 +4346,16 @@ def peps_absorb_lambdas(Gamma,Lambda,mk_copy=True):
     # Return results
     return Gamma
 
-def load_peps(fname):
+def load_peps(fname,in_mem=True):
     """
     Load a saved PEPS into a new PEPS object
 
     Args:
         fname : str
             The file which holds the saved PEPS object
+        in_mem : bool
+            Whether all peps tensors will be stored in local
+            memory or as references to tensors stored in disk
 
     Returns:
         peps : PEPS object
@@ -3954,6 +4407,12 @@ def load_peps(fname):
                 for y in range(len(self.ltensors[ind][x])):
                     peps.ltensors[ind][x][y] = get_dataset('ltensor_{}_{}_{}'.format(ind,x,y))
 
+    # Write to memory (if needed)
+    if not in_mem:
+        peps.to_disk()
+    if canonical:
+        raise ValueError('Store to disk not yet implemented for canonical PEPS')
+
     # Return resulting PEPS
     return peps
 
@@ -3965,6 +4424,7 @@ class PEPS:
     A class to hold and manipulate a PEPS
     """
 
+    #@profile
     def __init__(self,Nx=10,Ny=10,d=2,D=2,
                  chi=None,chi_norm=None,chi_op=None,
                  Zn=None,thermal=False,
@@ -3972,8 +4432,8 @@ class PEPS:
                  singleLayer=True,dtype=float_,
                  normalize=True,norm_tol=1e-3,
                  exact_norm_tol=20.,
-                 max_norm_iter=100,norm_bs_upper=2.0,norm_bs_lower=0.0,
-                 fname=None,fdir='./'):
+                 max_norm_iter=100,norm_bs_upper=10.0,norm_bs_lower=0.0,
+                 fname=None,fdir='./',in_mem=True):
         """
         Create a random PEPS object
 
@@ -4052,6 +4512,9 @@ class PEPS:
             fdir : str
                 The directory where the PEPS will be saved, default is
                 current working directory
+            in_mem : bool
+                Whether the peps tensors should be written to disk or 
+                stored in local memory
 
         Returns:
             PEPS : PEPS Object
@@ -4109,7 +4572,8 @@ class PEPS:
                                           Zn=self.Zn,
                                           dZn=self.dZn,
                                           backend=self.backend,
-                                          dtype=self.dtype)
+                                          dtype=self.dtype,
+                                          in_mem=in_mem)
 
         # Add in lambda "singular value" matrices
         if self.canonical:
@@ -4119,23 +4583,25 @@ class PEPS:
                                                      self.D,
                                                      Zn=self.Zn,
                                                      backend=self.backend,
-                                                     dtype=self.dtype)
+                                                     dtype=self.dtype,
+                                                     in_mem=in_mem)
             else:
                 self.ltensors = make_rand_lambdas(self.Nx,
                                                   self.Ny,
                                                   self.D,
                                                   Zn=self.Zn,
                                                   backend=self.backend,
-                                                  dtype=self.dtype)
+                                                  dtype=self.dtype,
+                                                  in_mem=in_mem)
         else:
             self.ltensors = None
 
         # Normalize the PEPS
         if normalize:
             #tmpprint('Normalize Initialized PEPS')
-            self.normalize()
+            self.normalize(in_mem=in_mem)
 
-    def calc_bmpo_left(self,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None,allow_normalize=False):
+    def calc_bmpo_left(self,col,chi=4,singleLayer=True,truncate=True,return_all=False,ket=None,allow_normalize=False,in_mem=True):
         """
         Calculate the left boundary MPO
 
@@ -4159,19 +4625,37 @@ class PEPS:
                 return the boundary mpo for col.
             ket : List
                 A list of lists containing the ket's peps tensors
+            in_mem: bool
+                if True, then the peps tensors will all be loaded into memory
+                and all calculations will be done with them in memory, default
+                is True
 
         returns:
             bound_mpo : list
                 An mpo stored as a list, corresponding to the
                 resulting boundary mpo.
         """
+        # Get needed parameters
         if chi is None:
             chi = self.chi
         if singleLayer is None:
             singleLayer = self.singleLayer
-        return calc_left_bound_mpo(self,col,chi=chi,singleLayer=singleLayer,truncate=truncate,return_all=return_all,ket=ket,allow_normalize=allow_normalize)
 
-    def calc_bmpo_right(self,col,chi=None,singleLayer=None,truncate=True,return_all=False,ket=None,allow_normalize=False):
+        # Calc BMPO
+        bmpo = calc_left_bound_mpo(self,
+                                   col,
+                                   chi=chi,
+                                   singleLayer=singleLayer,
+                                   truncate=truncate,
+                                   return_all=return_all,
+                                   ket=ket,
+                                   allow_normalize=allow_normalize,
+                                   in_mem=in_mem)
+        
+        # Return result
+        return bmpo
+
+    def calc_bmpo_right(self,col,chi=None,singleLayer=None,truncate=True,return_all=False,ket=None,allow_normalize=False,in_mem=True):
         """
         Calculate the right boundary MPO
 
@@ -4195,6 +4679,10 @@ class PEPS:
                 return the boundary mpo for col.
             ket : List
                 A list of lists containing the ket's peps tensors
+            in_mem: bool
+                if True, then the peps tensors will all be loaded into memory
+                and all calculations will be done with them in memory, default
+                is True
 
         returns:
             bound_mpo : list
@@ -4202,13 +4690,27 @@ class PEPS:
                 resulting boundary mpo.
 
         """
+        # Get needed parameters
         if chi is None:
             chi = self.chi
         if singleLayer is None:
             singleLayer = self.singleLayer
-        return calc_right_bound_mpo(self,col,chi=chi,singleLayer=singleLayer,truncate=truncate,return_all=return_all,ket=ket,allow_normalize=allow_normalize)
 
-    def calc_norm(self,chi=None,singleLayer=None,ket=None):
+        # Do calculation
+        bmpo = calc_right_bound_mpo(self,
+                                    col,
+                                    chi=chi,
+                                    singleLayer=singleLayer,
+                                    truncate=truncate,
+                                    return_all=return_all,
+                                    ket=ket,
+                                    allow_normalize=allow_normalize,
+                                    in_mem=in_mem)
+
+        # Return bmpo
+        return bmpo
+
+    def calc_norm(self,chi=None,singleLayer=None,ket=None,in_mem=True):
         """
         Calculate the norm of the PEPS
 
@@ -4223,6 +4725,10 @@ class PEPS:
                 (currently it is the only option...)
             ket : PEPS Object
                 A peps containing the ket's peps tensors
+            in_mem: bool
+                if True, then the peps tensors will all be loaded into memory
+                and all calculations will be done with them in memory, default
+                is True
 
         Returns:
             norm : float
@@ -4230,10 +4736,10 @@ class PEPS:
         """
         if chi is None: chi = self.chi
         if singleLayer is None: singleLayer = self.singleLayer
-        return calc_peps_norm(self,chi=chi,singleLayer=singleLayer,ket=ket)
+        return calc_peps_norm(self,chi=chi,singleLayer=singleLayer,ket=ket,in_mem=in_mem)
 
     def normalize(self,max_iter=None,norm_tol=None,exact_norm_tol=None,chi=None,up=None,down=None,
-                    singleLayer=None,ket=None,pf=False):
+                    singleLayer=None,ket=None,pf=False,in_mem=True):
         """
         Normalize the full PEPS
 
@@ -4275,6 +4781,9 @@ class PEPS:
             pf: bool
                 If True, then we will normalize as though this is a partition
                 function instead of a contraction between to peps
+        in_mem: bool
+            if True, then the peps tensors will all be loaded into memory
+            and all calculations will be done with them in memory
 
         Returns:
             norm : float
@@ -4299,7 +4808,8 @@ class PEPS:
                                       down = down,
                                       singleLayer=singleLayer,
                                       ket=ket,
-                                      pf=pf)
+                                      pf=pf,
+                                      in_mem=in_mem)
         # Copy the resulting tensors
         self.tensors = copy_peps_tensors(normpeps)
         if self.ltensors is not None:
@@ -4307,7 +4817,7 @@ class PEPS:
 
         return norm
 
-    def calc_op(self,ops,chi=None,normalize=True,return_sum=True,ket=None,nn=False,contracted_env=False):
+    def calc_op(self,ops,chi=None,normalize=True,return_sum=True,ket=None,nn=False,contracted_env=False,in_mem=True):
         """
         Calculate the expectation value for a given operator
 
@@ -4332,6 +4842,9 @@ class PEPS:
             contracted_env: bool
                 Whether to contract the upper and lower environment
                 or leave it as a boundary mps
+            in_mem: bool
+                if True, then the peps tensors will all be loaded into memory
+                and all calculations will be done with them in memory
 
         Returns:
             val : float
@@ -4340,9 +4853,10 @@ class PEPS:
         if chi is None: chi = self.chi_op
         # Calculate the operator's value
         if nn:
+            if not in_mem: raise ValueError('Unable to do next nearest neighbor calcs with peps not in memory')
             return calc_peps_nn_op(self,ops,chi=chi,normalize=normalize,ket=ket,contracted_env=contracted_env)
         else:
-            return calc_peps_op(self,ops,chi=chi,normalize=normalize,return_sum=return_sum,ket=ket)
+            return calc_peps_op(self,ops,chi=chi,normalize=normalize,return_sum=return_sum,ket=ket,in_mem=in_mem)
 
     def increase_mbd(self,newD,chi=None,noise=1e-10,normalize=True):
         """
@@ -4507,7 +5021,9 @@ class PEPS:
             # Create file
             for i in range(5):
                 try:
+
                     f = open_file(fdir+fname,'w')
+
                     # Add PEPS Info
                     create_dataset(f,'Nx',self.Nx)
                     create_dataset(f,'Ny',self.Ny)
@@ -4527,18 +5043,38 @@ class PEPS:
                     create_dataset(f,'norm_bs_lower',self.norm_bs_lower)
                     create_dataset(f,'fname',fname)
                     create_dataset(f,'fdir',self.fdir)
+
                     # Add PEPS Tensors
                     for i in range(len(self.tensors)):
                         for j in range(len(self.tensors[i])):
+                            
+                            # Load tensor (if needed)
+                            init_in_mem = self.tensors[i][j].in_mem
+                            if not init_in_mem: self.tensors[i][j].from_disk()
+                                
+                            # Save the tensor
                             create_dataset(f,'tensor_{}_{}'.format(i,j),self.tensors[i][j].ten)
                             #create_dataset(f,'tensorlegs_{}_{}'.format(i,j),self.tensors[i][j].legs)
+
+                            # Put the tensor back on disk (if needed)
+                            if not init_in_mem: self.tensors[i][j].to_disk()
+
                     # Add Lambda Tensors (if Canonical)
                     if self.ltensors is not None:
                         for ind in range(len(self.ltensors)):
                             for x in range(len(self.ltensors[ind])):
                                 for y in range(len(self.ltensors[ind][x])):
+
+                                    # Load tensor (if needed)
+                                    init_in_mem = self.ltensors[ind][x][y].in_mem
+                                    if not init_in_mem: self.ltensors[ind][x][y].from_disk()
+
+                                    # Save the tensor
                                     create_dataset(f,'ltensor_{}_{}_{}'.format(ind,x,y),self.ltensors[ind][x][y].ten)
                                     #create_dataset(f,'ltensorlegs_{}_{}_{}'.format(ind,x,y),self.ltensors[ind][x][y].legs)
+
+                                    # Put the tensor back on disk (if needed)
+                                    if not init_in_mem: self.ltensors[ind][x][y].to_disk()
                     # Close file
                     close_file(f)
                     break
@@ -4546,7 +5082,8 @@ class PEPS:
                     #print('Saving PEPS Failed... Attempt ({}/5)'.format(i))
                     pass
         else:
-            raise NotImplementedError()
+            print('Didnt save peps...')
+            #raise NotImplementedError()
 
     def load_tensors(self,fname):
         if self.Zn is None:
@@ -4574,5 +5111,59 @@ class PEPS:
         maxval = 0.
         for i in range(len(self)):
             for j in range(len(self[i])):
-                maxval = max(maxval,self[i][j].abs().max())
+                maxval = max(maxval,self[i][j].max_abs())
         return maxval
+
+    def to_disk(self):
+        """
+        Write all peps tensors to disk
+        """
+        for x in range(self.Nx):
+            self.col_to_disk(x)
+
+    def from_disk(self):
+        """
+        Read all peps tensors from disk
+        """
+        for x in range(self.Nx):
+            self.col_from_disk(x)
+
+    def col_to_disk(self,x):
+        """
+        Write all the peps tensors in a column to disk
+        """
+        for y in range(self.Ny):
+            self.site_to_disk(x,y)
+
+    def col_from_disk(self,x):
+        """
+        Read all peps tensors in a column from disk
+        """
+        for y in range(self.Ny):
+            self.site_from_disk(x,y)
+
+    def row_to_disk(self,y):
+        """
+        Write all the peps tensors in a row to disk
+        """
+        for x in range(self.Nx):
+            self.site_to_disk(x,y)
+
+    def row_from_disk(self,y):
+        """
+        Read all peps tensors in a row from disk
+        """
+        for x in range(self.Nx):
+            self.site_from_disk(x,y)
+
+    def site_to_disk(self,x,y):
+        """
+        Write a peps tensor at site peps[x][y] to disk
+        """
+        self[x][y].to_disk()
+
+    def site_from_disk(self,x,y):
+        """
+        Read a peps tensor at site peps[x][y] to disk
+        """
+        self[x][y].from_disk()

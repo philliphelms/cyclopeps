@@ -496,8 +496,9 @@ def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True
     ten2 = mps[site+1]
 
     # Check to make sure everything is done correctly
-    if DEBUG:
+    if True:
         init_cont = einsum('abc,cde->abde',mps[site],mps[site+1])
+        old_stuff = [mps[site].copy(),mps[site+1].copy()]
 
     # Move the gauge
     out = move_gauge_right_tens(ten1,ten2,
@@ -519,6 +520,18 @@ def move_gauge_right(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True
         else:
             diff = init_cont.backend.sum(init_cont.backend.abs(init_cont.ten.make_sparse()-fin_cont.ten.make_sparse()))
             mpiprint(0,'\tDifference before/after QR/SVD = {}'.format(diff))
+        #if diff > 1e-5:
+        #    print('\n\nOh No!'+'!'*100)
+        #    print('Ten1:')
+        #    print('\tshape: {}'.format(old_stuff[0].ten.array.shape))
+        #    print('\tlegs: {}'.format(old_stuff[0].legs))
+        #    print('\tsymmetry: {}'.format(old_stuff[0].sym))
+        #    print('Ten2:')
+        #    print('\tshape: {}'.format(old_stuff[1].ten.array.shape))
+        #    print('\tlegs: {}'.format(old_stuff[1].legs))
+        #    print('\tsymmetry: {}'.format(old_stuff[1].sym))
+        #    import sys
+        #    sys.exit()
 
     # Return results
     if return_wgt and return_ent:
@@ -605,6 +618,37 @@ def move_gauge_left(mps,site,truncate_mbd=1e100,return_ent=True,return_wgt=True,
     else:
         return mps
 
+def remove_empty_right_end(mps):
+    """
+    Removes any extra empty indices on the last site of the mps
+    """
+    nleft = len(mps[0].legs[0])
+    if nleft > 1:
+        mps[0].unmerge_ind(0)
+        for i in reversed(range(nleft-1)):
+            mps[0] = mps[0].remove_empty_ind(i)
+    return mps
+
+def remove_empty_left_end(mps):
+    """
+    Removes any extra empty indices on the first site of the mps
+    """
+    nright = len(mps[-1].legs[2])
+    if nright > 1:
+        mps[-1].unmerge_ind(2)
+        for i in reversed(range(len(mps[-1].legs[0])+len(mps[-1].legs[1]),len(mps[-1].legs[0])+len(mps[-1].legs[1])+nright-1)):
+            mps[-1] = mps[-1].remove_empty_ind(i)
+    return mps
+
+def remove_empty_ends(mps):
+    """
+    Removes any extra empty indices on the first and 
+    last site of the mps
+    """
+    mps = remove_empty_left_end(mps)
+    mps = remove_empty_right_end(mps)
+    return mps
+
 def make_mps_left(mps,truncate_mbd=1e100,split_s=False):
     """
     Put an mps into left canonical form
@@ -632,6 +676,9 @@ def make_mps_left(mps,truncate_mbd=1e100,split_s=False):
                                return_ent=False,
                                return_wgt=False,
                                split_s=split_s)
+
+    # Remove empty indices at the ends of the mps
+    mps = remove_empty_ends(mps)
 
     # Return results
     return mps
@@ -683,7 +730,7 @@ def redistribute_mps_vals(mps):
     """
     maxval = mps[0].abs().max()
     normval = maxval**(1./(float(len(mps))-1.))
-    #print('\tmaxval = {}, normval = {}'.format(maxval,normval))
+    #tmpprint('maxval = {}, divideval = {}'.format(maxval,normval))
     mps[0].ten /= maxval
     for i in range(1,len(mps)):
         mps[i] *= normval
@@ -711,6 +758,7 @@ def mps_apply_svd(mps,chi,redistribute=True,split_s=True):
         mps : List of mps tensors
             The mps with a maximum bond dimension of \chi
     """
+    #tmpprint('Initial MPS norm: {}'.format(mps.norm()))
     mpiprint(8,'Moving gauge to left, prep for truncation')
     #tmpprint('\t\t\t\tMaking MPS left canonical')
     mps = make_mps_left(mps,split_s=split_s)
@@ -719,6 +767,7 @@ def mps_apply_svd(mps,chi,redistribute=True,split_s=True):
     mps = make_mps_right(mps,truncate_mbd=chi,split_s=split_s)
     if redistribute:
         mps = redistribute_mps_vals(mps)
+    #tmpprint('Final MPS norm: {}'.format(mps.norm()))
     return mps
 
 def identity_mps(N,dtype=float_,sym=False,backend='numpy',alternating=True):
@@ -926,30 +975,63 @@ class MPS:
             res : float
                 The resulting scalar from the contraction
         """
+        # Throw error if either mps is not in memory
+        if not self.all_in_mem(): 
+            raise ValueError('MPS not in memory for norm calculation')
+
+        if not mps2.all_in_mem():
+            raise ValueError('MPS not in memory for norm calculation')
+
         # Move to the left, contracting env with bra and ket tensors
         for site in range(self.N):
+
             if site == 0:
+
                 # Form initial norm environment
                 norm_env = einsum('apb,ApB->aAbB',self[site],mps2[site])
+
                 # Remove initial empty indices
                 norm_env = norm_env.remove_empty_ind(0)
                 norm_env = norm_env.remove_empty_ind(0)
+
             else:
+
                 # Add next mps tensors to norm environment
                 tmp1 = einsum('aA,apb->Apb',norm_env,self[site])
                 norm_env = einsum('Apb,ApB->bB',tmp1,mps2[site])
+
         # Extract and return result
         if norm_env.sym is None:
-            norm = norm_env.backend.einsum('abcdefghijklmnopqrstuvwxyz'[:len(norm_env.ten.shape)]+'->',norm_env.ten)
+            einstr = 'abcdefghijklmnopqrstuvwxyz'[:len(norm_env.ten.shape)]+'->'
+            norm = norm_env.backend.einsum(einstr,norm_env.ten)
         else:
-            norm = norm_env.backend.einsum('abcdefghijklmnopqrstuvwxyz'[:len(norm_env.ten.array.shape)]+'->',norm_env.ten.array)
+            einstr = 'abcdefghijklmnopqrstuvwxyz'[:len(norm_env.ten.array.shape)]+'->'
+            norm = norm_env.backend.einsum(einstr,norm_env.ten.array)
+
+        # Return result
         return norm
+
+    def all_in_mem(self):
+        """
+        Returns true if all tensors are in memory
+        """
+        for i in range(self.N):
+            if not self[i].in_mem:
+                return False
+        return True
 
     def norm(self):
         """
         Compute the norm of the MPS
         """
-        return self.contract(self.conj())
+        # Throw error if mps is not in memory
+        if not self.all_in_mem(): raise ValueError('MPS not in memory for norm calculation')
+
+        # Compute norm
+        norm = self.contract(self.conj())
+
+        # Return result
+        return norm
 
     def __len__(self):
         return len(self.tensors)
@@ -959,12 +1041,16 @@ class MPS:
             backend = self[0].backend
         except:
             backend = np
+
+        # Set an initial maximum value
         maxval = 0
         for i in range(len(self)):
             if absolute:
-                maxval = max(self.tensors[i].abs().max(),maxval)
+                maxval = max(self.tensors[i].max_abs(),maxval)
             else:
                 maxval = max(self.tensors[i].max(),maxval)
+
+        # Return result
         return maxval
 
     def conj(self):
@@ -972,6 +1058,32 @@ class MPS:
         for site in range(len(mpsconj.tensors)):
             mpsconj[site] = mpsconj[site].conj()
         return mpsconj
+
+    def to_disk(self):
+        """
+        Write all mps tensors to disk
+        """
+        for i in range(self.N):
+            self.site_to_disk(i)
+
+    def from_disk(self):
+        """
+        Read all mps tensors from disk
+        """
+        for i in range(self.N):
+            self.site_from_disk(i)
+
+    def site_to_disk(self,i):
+        """
+        Write the mps tensor at site i to disk
+        """
+        self[i].to_disk()
+
+    def site_from_disk(self,i):
+        """
+        Read the mps tensor at site i from disk
+        """
+        self[i].from_disk()
 
     # -----------------------------------------------------------------------
     # Yet to be implemented functions

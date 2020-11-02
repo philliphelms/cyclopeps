@@ -7,7 +7,8 @@ from cyclopeps.algs.simple_update import run_tebd as su
 from numpy import float_,isfinite
 import numpy as np
 
-def cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,U):
+#@profile
+def cost_func(N, bot, top, bot_new, top_new, U, reduced=True):
     """
     Calculate the cost function to check similarity between new and
     old peps tensors
@@ -40,260 +41,358 @@ def cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,U):
     """
 
     # Calculate a^+ * R * a
-    aRa = calc_local_op(phys_b_new,phys_t_new,N,None,normalize=False)
+    aRa = calc_local_op(bot_new, 
+                        top_new, 
+                        N, 
+                        None, 
+                        normalize=False, 
+                        reduced=reduced)
+
     # Calculate a^+ * S
     # PH - Need to make sure the tensors aren't flipped for time evolution
-    Sa = calc_local_op(phys_b_new,phys_t_new,N,U,phys_b_ket=phys_b,phys_t_ket=phys_t,normalize=False)
+    Sa = calc_local_op(bot_new,
+                       top_new,
+                       N,
+                       U,
+                       phys_b_ket=bot,
+                       phys_t_ket=top,
+                       normalize=False,
+                       reduced=reduced)
+
     # Calculate S^+ * a
     # (currently just using a copy)
     aS  = Sa
 
+    # Return Cost Function
     return aRa-aS-Sa
 
-def optimize_bottom(N,phys_b,phys_t,phys_b_new,phys_t_new,eH):
+#@profile
+def optimize_bottom(N, bot, top, bot_new, top_new, eH, reduced=True):
     """
     Note:
         implemented according to Section II.B of
         https://arxiv.org/pdf/1503.05345.pdf
     """
+    if reduced:
 
-    # Calculate R
-    tmp = einsum('DPU,dPu->DUdu',phys_t_new,phys_t_new.copy().conj())
-    R   = einsum('DUdu,AaUu->ADad',tmp,N)
+        # Calculate R
+        tmp = einsum('DPU,dPu->DUdu', top_new, top_new.copy().conj())
+        R   = einsum('DUdu,AaUu->ADad', tmp, N)
 
-    # Calculate S
-    tmp = einsum('APD,AaBb->DPaBb',phys_b,N)
-    tmp = einsum('DPaBb,DQB->PaQb',tmp,phys_t)
-    if len(tmp.legs[0]) == 2:
-        # Then thermal state
-        tmp.unmerge_ind(2)
-        tmp.unmerge_ind(0)
-        tmp = einsum('PxaQyb,PQpq->abpxqy',tmp,eH)
-        tmp.merge_inds([4,5])
-        tmp.merge_inds([2,3])
+        # Calculate S
+        tmp = einsum('APD,AaBb->DPaBb', bot, N)
+        tmp = einsum('DPaBb,DQB->PaQb', tmp, top)
+
+        if len(tmp.legs[0]) == 2:
+            # Then thermal state
+            tmp.unmerge_ind(2)
+            tmp.unmerge_ind(0)
+            tmp = einsum('PxaQyb,PQpq->abpxqy', tmp, eH)
+            tmp.merge_inds([4,5])
+            tmp.merge_inds([2,3])
+        else:
+            # Then regular state
+            tmp = einsum('PaQb,PQpq->abpq', tmp, eH)
+        S = einsum('abpq,dqb->apd', tmp, top_new)
+
+        # Take inverse of R
+        R_ = R.square_inv()
+
+        # Compute phys_b_new
+        bot_new = einsum('ADad,apd->ApD', R_, S)
+
     else:
-        # Then regular state
-        tmp = einsum('PaQb,PQpq->abpq',tmp,eH)
-    S   = einsum('abpq,dqb->apd',tmp,phys_t_new)
 
-    # Take inverse of R
-    R_ = R.square_inv()
+        # Calculate R
+        tmp = einsum('KZQSU,kzQsu->KZSUkzsu', top_new, top_new.copy().conj())
+        R   = einsum('KZSUkzsu,lLdDrRkKuUsS->LDRZldrz', tmp, N)
 
-    # Compute phys_b_new
-    phys_b_new = einsum('ADad,apd->ApD',R_,S)
+        # Calculate S
+        tmp = einsum('LDPRZ,lLdDrRkKuUsS->PZldrkKuUsS', bot, N)
+        tmp = einsum('PZldrkKuUsS,KZQSU->PQldrkus', tmp, top)
+
+        if len(tmp.legs[0]) == 2:
+            # Then thermal state
+            tmp.unmerge_ind(1)
+            tmp.unmerge_ind(0)
+            tmp = einsum('PxQyldrkus,PQpq->pxqyldrkus', tmp, eH)
+            tmp.merge_inds([0,1])
+            tmp.merge_inds([1,2])
+        else:
+            # Then regular state
+            tmp = einsum('PQldrkus,PQpq->pqldrkus', tmp, eH)
+        S = einsum('pqldrkus,kzqsu->ldprz', tmp, top_new)
+
+        # Take inverse of R
+        R_ = R.square_inv()
+
+        # Compute phys_b_new
+        bot_new = einsum('LDRZldrz,ldprz->LDpRZ', R_, S)
 
     # Return Results
-    return phys_b_new
+    return bot_new
 
-def svd_evolve(phys_b,phys_t,eH):
-    """
-    Do time evolution by applying gate, then
-    doing svd and truncation to separate sites again
-    """
-    # Do time evolution
-    tmp = einsum('aPb,bQc->aPQc',phys_b,phys_t)
-    if len(tmp.legs[1]) == 2:
-        # Thermal state
-        tmp.unmerge_ind(2)
-        tmp.unmerge_ind(1)
-        result = einsum('aPxQyc,PQpq->apxqyc',tmp,eH)
-        result.merge_inds([1,2])
-        result.merge_inds([2,3])
-    else:
-        # Regular peps state
-        result = einsum('aPQc,PQpq->apqc',tmp,eH)
-    
-    # Do svd & truncation
-    if phys_b.sym is None:
-        D = phys_b.ten.shape[phys_b.legs[2][0]]
-    else:
-        D = len(phys_b.ten.sym[1][phys_b.legs[2][0]])*phys_b.ten.shape[phys_b.legs[2][0]]
-    U,S,V = result.svd(2,
-                       truncate_mbd=D,
-                       return_ent=False,
-                       return_wgt=False)
-    # Absorb singular values
-    U = einsum('ijk,kl->ijl',U,S.sqrt())
-    V = einsum('ij,jkl->ikl',S.sqrt(),V)
-
-    return U,V
-
-def optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH,use_inv=False):
+#@profile
+def optimize_top(N, bot, top, bot_new, top_new, eH, use_inv=False, reduced=True):
     """
     Note:
         implemented according to Section II.B of
         https://arxiv.org/pdf/1503.05345.pdf
     """
+    if reduced:
 
-    # Calculate R
-    #tmp = einsum('DPU,dPu->DUdu',phys_b_new,conj(copy.deepcopy(phys_b_new)))
-    tmp = einsum('DPU,dPu->DUdu',phys_b_new,phys_b_new.copy().conj())
-    R = einsum('DUdu,DdAa->UAua',tmp,N)
+        # Calculate R
+        tmp = einsum('DPU,dPu->DUdu', bot_new, bot_new.copy().conj())
+        R = einsum('DUdu,DdAa->UAua', tmp, N)
 
-    # Calculate S
-    tmp = einsum('UQA,DdAa->UQDda',phys_t,N)
-    tmp = einsum('UQDda,DPU->PQad',tmp,phys_b)
-    if len(tmp.legs[0]) == 2:
-        tmp.unmerge_ind(1)
-        tmp.unmerge_ind(0)
-        tmp = einsum('PxQyad,PQpq->pxqyad',tmp,eH)
-        tmp.merge_inds([2,3])
-        tmp.merge_inds([0,1])
+        # Calculate S
+        tmp = einsum('UQA,DdAa->UQDda', top, N)
+        tmp = einsum('UQDda,DPU->PQad', tmp, bot)
+        if len(tmp.legs[0]) == 2:
+            tmp.unmerge_ind(1)
+            tmp.unmerge_ind(0)
+            tmp = einsum('PxQyad,PQpq->pxqyad', tmp, eH)
+            tmp.merge_inds([2,3])
+            tmp.merge_inds([0,1])
+        else:
+            tmp = einsum('PQad,PQpq->pqad', tmp, eH)
+        S   = einsum('pqad,dpu->uqa', tmp, bot_new)
+
+        # Solve least squares problem
+        # Take inverse of R
+        R_ = R.square_inv()
+
+        # Compute new phys_t_new
+        phys_t_new = einsum('uaUA,uqa->UqA', R_, S)
+
     else:
-        tmp = einsum('PQad,PQpq->pqad',tmp,eH)
-    S   = einsum('pqad,dpu->uqa',tmp,phys_b_new)
 
-    # Solve least squares problem
-    # Take inverse of R
-    R_ = R.square_inv()
+        # Calculate R
+        tmp = einsum('LDPRZ,ldPrz->LDRZldrz', bot_new, bot_new.copy().conj())
+        R = einsum('LDRZldrz,lLdDrRkKuUsS->KZSUkzsu', tmp, N)
 
-    # Compute new phys_t_new
-    phys_t_new = einsum('uaUA,uqa->UqA',R_,S)
+        # Calculate S
+        tmp = einsum('KZQSU,lLdDrRkKuUsS->ZQlLdDrRkus', top, N)
+        tmp = einsum('ZQlLdDrRkus,LDPRZ->PQldrkus', tmp, bot)
+        if len(tmp.legs[0]) == 2:
+            tmp.unmerge_ind(1)
+            tmp.unmerge_ind(0)
+            tmp = einsum('PxQyldrkus,PQpq->pxqyldrkus', tmp, eH)
+            tmp.merge_inds([2,3])
+            tmp.merge_inds([0,1])
+        else:
+            tmp = einsum('PQldrkus,PQpq->pqldrkus', tmp, eH)
+        S   = einsum('pqldrkus,ldprz->kzqsu', tmp, bot_new)
+
+        # Solve least squares problem
+        # Take inverse of R
+        R_ = R.square_inv()
+
+        # Compute new phys_t_new
+        top_new = einsum('kzsuKZSU,kzqsu->KZqSU', R_, S)
 
     # Return Results
-    return phys_t_new
+    return top_new
 
-def split_sites(comb,mbd):
+def split_sites(comb, mbd, reduced=True):
     """
     Given two combined (reduced) sites,
     split them back into two separated
     tensor sites via svd
     """
-    # Do the SVD Decomposition
-    site1,sings,site2 = comb.svd(2,
-                                 truncate_mbd=mbd,
-                                 return_ent=False,
-                                 return_wgt=False)
+    if reduced:
+        # Do the SVD Decomposition
+        site1,sings,site2 = comb.svd(2,
+                                     truncate_mbd=mbd,
+                                     return_ent=False,
+                                     return_wgt=False)
 
-    # Do some renormalization
-    sings /= einsum('ij,jk->ik',sings,sings).sqrt().to_val()
+        # Do some renormalization
+        sings /= einsum('ij,jk->ik', sings, sings).sqrt().to_val()
 
-    # Absorb singular values into sites
-    site1 = einsum('ijk,kl->ijl',site1,sings.sqrt())
-    site2 = einsum('ij,jkl->ikl',sings.sqrt(),site2)
+        # Absorb singular values into sites
+        site1 = einsum('ijk,kl->ijl', site1, sings.sqrt())
+        site2 = einsum('ij,jkl->ikl', sings.sqrt(), site2)
+    else:
+        # Do the SVD Decomposition
+        site1,sings,site2 = comb.svd(4,
+                                     truncate_mbd=mbd,
+                                     return_ent=False,
+                                     return_wgt=False)
+
+        # Do some renormalization
+        sings /= einsum('ij,jk->ik', sings, sings).sqrt().to_val()
+
+        # Absorb singular values into sites
+        site1 = einsum('LDPRX,XU->LDPRU', site1, sings.sqrt())
+        site2 = einsum('DX,XLPRU->LDPRU', sings.sqrt(), site2)
 
     # Return the result
     return site1,site2
 
-def simple_update_init_guess(phys_b,phys_t,eH,mbd):
+def simple_update_init_guess_reduced(bot, top, eH, mbd):
+    """
+    Create an initial guess for the ALS procedure 
+    via a simple update style update, for the 
+    reduced peps tensors (meaning the physical index
+    has been pulled off the peps tensor via a qr)
+    """
+    # Apply time evolution gate
+    comb = einsum('DPA,AQU->DPQU',bot,top)
+    if len(comb.legs[1]) == 2:
+        # Thermal State time evolution
+        comb.unmerge_ind(2)
+        comb.unmerge_ind(1)
+        comb = einsum('DPxQyU,PQpq->DpxqyU',comb,eH)
+        comb.merge_inds([1,2])
+        comb.merge_inds([2,3])
+    else:
+        # Regular state time evolution
+        comb = einsum('DPQU,PQpq->DpqU',comb,eH)
+
+    # Split via SVD
+    bot, top = split_sites(comb, mbd, reduced=True)
+
+    # Return Results
+    return bot, top
+
+def simple_update_init_guess_full(bot, top, eH, mbd):
+    """
+    Create an initial guess for the ALS procedure 
+    via a simple update style update, for the 
+    full peps tensors (rank 5)
+    """
+    # Apply time evolution gate
+    comb = einsum('LDPRZ,lZQru->LDPRlQru',bot,top)
+
+    if len(comb.legs[2]) == 2:
+        # Thermal State Time Evolution
+        comb.unmerge_ind(5)
+        comb.unmerge_ind(2)
+        comb = einsum('LDPxRlQyru,PQpq->LDpxRlqyru',comb,eH)
+        comb.merge_inds([2,3])
+        comb.merge_inds([5,6])
+    else:
+        # Regurlar state time evolution
+        comb = einsum('LDPRlQru,PQpq->LDpRlqru',comb,eH)
+
+    # Split via SVD
+    bot, top = split_sites(comb, mbd, reduced=False)
+
+    # Return Results
+    return bot, top
+
+def simple_update_init_guess(bot, top, eH, mbd, reduced=True):
     """
     Create an initial guess for the ALS procedure
     via a simple update style update
     """
-    # Apply time evolution gate
-    tmp = einsum('DPA,AQU->DPQU',phys_b,phys_t)
-    if len(tmp.legs[1]) == 2:
-        # Thermal State time evolution
-        tmp.unmerge_ind(2)
-        tmp.unmerge_ind(1)
-        tmp = einsum('DPxQyU,PQpq->DpxqyU',tmp,eH)
-        tmp.merge_inds([1,2])
-        tmp.merge_inds([2,3])
+    if reduced:
+        return simple_update_init_guess_reduced(bot,
+                                                top,
+                                                eH,
+                                                mbd)
     else:
-        # Regular state time evolution
-        tmp = einsum('DPQU,PQpq->DpqU',tmp,eH)
+        return simple_update_init_guess_full(bot,
+                                             top,
+                                             eH,
+                                             mbd)
 
-    # Split via SVD
-    phys_b,phys_t = split_sites(tmp,mbd)
-
-    # Return Results
-    return phys_b,phys_t
-
-def noiseless_als(phys_b,phys_t,N,eH,mbd,als_iter=100,als_tol=1e-10,stablesplit=True):
+#@profile
+def noiseless_als(bot, top, N, eH, mbd,
+                  als_iter=100, als_tol=1e-10, stablesplit=True,
+                  use_su=True, reduced=True):
     """
     Do the Alternating least squares procedure, using the current
     physical index-holding tensors as the initial guess
     """
     # Create initial guesses for resulting tensors
-    #tmpprint('\t\t\t\tSU Initial Guess')
-    phys_b_new,phys_t_new = simple_update_init_guess(phys_b,phys_t,eH,mbd)
+    # #print('We should just add noise here')
+
+    if use_su:
+        bot_new, top_new = simple_update_init_guess(bot, top, eH, mbd, reduced=reduced)
+    else:
+        bot_new, top_new = bot.copy(), top.copy()
 
     # Initialize cost function
-    cost_prev = cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
+    cost_prev = cost_func(N,
+                          bot,
+                          top,
+                          bot_new,
+                          top_new,
+                          eH,
+                          reduced=reduced)
 
     for i in range(als_iter):
+        #print('\t\t\t\tALS iter {}'.format(i))
 
         # Optimize Bottom Site
-        #tmpprint('\t\t\t\tOptimize Bottom')
-        phys_b_new = optimize_bottom(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
+        #print('\t\t\t\t\tOptimizing bottom')
+        bot_new = optimize_bottom(N,
+                                  bot,
+                                  top,
+                                  bot_new,
+                                  top_new,
+                                  eH,
+                                  reduced=reduced)
 
         # Optimize Top Site
-        #tmpprint('\t\t\t\tOptimize Top')
-        phys_t_new = optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
-
+        #print('\t\t\t\t\tOptimizing top')
+        top_new = optimize_top(N,
+                               bot,
+                               top,
+                               bot_new,
+                               top_new,
+                               eH,
+                               reduced=reduced)
         # Split singular values to stabilize
-        #tmpprint('\t\t\t\tStable Split')
         if stablesplit:
-            comb = einsum('DPA,AQU->DPQU',phys_b_new,phys_t_new)
-            phys_b_new,phys_t_new = split_sites(comb,mbd)
+            if reduced:
+                comb = einsum('DPA,AQU->DPQU', bot_new, top_new)
+            else:
+                comb = einsum('LDPRZ,KZQSU->LDPRKQSU', bot_new, top_new)
+            bot_new, top_new = split_sites(comb, mbd, reduced=reduced)
+
+        # Compute cost function 
+        #print('\t\t\t\t\tConst Function')
+        cost = cost_func(N,
+                         bot,
+                         top,
+                         bot_new,
+                         top_new,
+                         eH,
+                         reduced=reduced)
 
         # Check for convergence
-        #tmpprint('\t\t\t\tCost Function')
-        cost = cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
         if (abs(cost) < als_tol) or (abs((cost-cost_prev)/cost) < als_tol):
             break
         else:
             cost_prev = cost
 
     # Return result
-    return phys_b_new,phys_t_new
+    return bot_new, top_new
 
-def noisy_als(phys_b,phys_t,N,eH,als_iter=100,als_tol=1e-10,stablesplit=True):
-    """
-    Do the Alternating least squares procedure, using the current
-    physical index-holding tensors (with some noise) as the initial guess
-    """
-    # Create initial guesses for resulting tensors
-    phys_b_new,phys_t_new = simple_update_init_guess(phys_b,phys_t,eH,mbd)
-
-    # Add a bit of noise
-    noise_b = phys_b_new.copy()
-    noise_t = phys_t_new.copy()
-    noise_b.randomize()
-    noise_t.randomize()
-    phys_b_new += 1e-5*noise_b
-    phys_t_new += 1e-5*noise_t
-
-    # Initialize cost function
-    cost_prev = cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
-
-    for i in range(als_iter):
-
-        # Optimize Bottom Site
-        phys_b_new = optimize_bottom(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
-
-        # Optimize Top Site
-        phys_t_new = optimize_top(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
-
-        # Split singular values to stabilize
-        if stablesplit:
-            comb = einsum('DPA,AQU->DPQU',phys_b_new,phys_t_new)
-            phys_b_new,phys_t_new = split_sites(comb,mbd)
-
-        # Check for convergence
-        cost = cost_func(N,phys_b,phys_t,phys_b_new,phys_t_new,eH)
-        if (abs(cost) < als_tol) or (abs((cost-cost_prev)/cost) < als_tol):
-            break
-        else:
-            cost_prev = cost
-
-    # Return result
-    return phys_b_new,phys_t_new
-
-def alternating_least_squares(phys_b,phys_t,N,eH,mbd,als_iter=100,als_tol=1e-10):
+def alternating_least_squares(bot, top, N, eH, mbd,
+                              als_iter=100, als_tol=1e-10,
+                              reduced=True):
     """
     Do alternating least squares to determine best tensors
     to represent time evolved tensors at smaller bond dimensions
     """
-    try:
-        return noiseless_als(phys_b,phys_t,N,eH,mbd,als_iter=als_iter,als_tol=als_tol)
-    except:
-        # If als fails, then there are likely many zeros, so we expect
-        # the time evolved tensors to be low rank, meaning doing a simple
-        # update style evolution will provide a better initial guess
-        phys_b,phys_t = svd_evolve(phys_b,phys_t,eH)
-        return noiseless_als(phys_b,phys_t,N,eH,mbd,als_iter=als_iter,als_tol=als_tol)
+    # Run ALS
+    res = noiseless_als(bot,
+                        top,
+                        N,
+                        eH,
+                        mbd,
+                        als_iter=als_iter,
+                        als_tol=als_tol,
+                        reduced=reduced)
 
+    # Return result
+    return res
+
+#@profile
 def make_equal_distance(peps1,peps2,mbd):
     """
     Multiplying nearest neighbor peps tensors together and resplitting them
@@ -327,78 +426,144 @@ def make_equal_distance(peps1,peps2,mbd):
     # Return results
     return peps1,peps2
 
-def tebd_step_single_col(peps_col,step_size,left_bmpo,right_bmpo,ham,mbd,als_iter=100,als_tol=1e-10):
+def tebd_single_gate(row, ham, peps_col, left_bmpo, right_bmpo,
+                     top_envs, bot_envs, step_size, mbd,
+                     als_iter=100, als_tol=1e-10, in_mem=True,
+                     reduced=True):
+    """
+    """
+    # Calculate environment aroudn reduced tensors
+    #print('\t\t\tCalculating Env')
+    res = calc_N(row,
+                 peps_col,
+                 left_bmpo,
+                 right_bmpo,
+                 top_envs,
+                 bot_envs,
+                 in_mem=in_mem,
+                 reduced=reduced)
+    if reduced:
+        peps_b,bot,top,peps_t,_,_,_,_,N = res
+    else:
+        bot = peps_col[row]
+        top = peps_col[row+1]
+        N   = res
+
+    # Take the exponential of the hamiltonian
+    #print('\t\t\tExponentiating gate')
+    eH = exp_gate(ham[row],-step_size)
+
+    # Do alternating least squares to find new peps tensors
+    #print('\t\t\tALS')
+    bot,top = alternating_least_squares(bot,
+                                        top,
+                                        N,
+                                        eH,
+                                        mbd,
+                                        als_iter=als_iter,
+                                        als_tol=als_tol,
+                                        reduced=reduced)
+
+    # Calculate Energy & Norm
+    #print('\t\t\tCalc local op')
+    E,norm = calc_local_op(bot,
+                           top,
+                           N,
+                           ham[row],
+                           return_norm=True,
+                           reduced=reduced)
+
+    # Update peps_col tensors
+    if reduced:
+        peps_col[row]   = einsum('LDRa,aPU->LDPRU', peps_b,    bot)
+        peps_col[row+1] = einsum('DPa,LaRU->LDPRU',    top, peps_t)
+    else:
+        peps_col[row]   = bot
+        peps_col[row+1] = top
+
+    # Combine and equally split the two tensors
+    peps_col[row],peps_col[row+1] = make_equal_distance(peps_col[row],peps_col[row+1],mbd)
+
+    # Update top and bottom environments
+    if row == 0: prev_env = None
+    else: prev_env = bot_envs[row-1]
+    bot_envs[row] = update_bot_env(peps_col[row],
+                                   peps_col[row].conj(),
+                                   left_bmpo[2*row],
+                                   left_bmpo[2*row+1],
+                                   right_bmpo[2*row],
+                                   right_bmpo[2*row+1],
+                                   prev_env)
+
+    # Normalize everything (to try to avoid some errors)
+    norm_fact = bot_envs[row].abs().max()
+    bot_envs[row] /= norm_fact
+    peps_col[row] /= norm_fact**(1./2.)
+    peps_col[row+1] /= norm_fact**(1./2.)
+
+    # Write everything back to disk (if wanted)
+    if not in_mem:
+        bot_envs[row].to_disk()
+        peps_col[row].to_disk()
+        peps_col[row+1].to_disk()
+
+    return E, peps_col, bot_envs, top_envs
+
+#@profile
+def tebd_step_single_col(peps_col, step_size, left_bmpo, right_bmpo, ham, mbd,
+                         als_iter=100, als_tol=1e-10, in_mem=True, reduced=True):
     """
     """
     # Calculate top and bottom environments
-    #tmpprint('\t\tCalculating top envs')
-    top_envs = calc_top_envs(peps_col,left_bmpo,right_bmpo)
-    #tmpprint('\t\tCalculating bot envs')
-    bot_envs = calc_bot_envs(peps_col,left_bmpo,right_bmpo)
+    top_envs = calc_top_envs(peps_col,left_bmpo,right_bmpo,in_mem=in_mem)
+    bot_envs = calc_bot_envs(peps_col,left_bmpo,right_bmpo,in_mem=in_mem)
+
+    # Set up array to store energies of sites in columns
+    E = peps_col[0].backend.zeros(len(ham),dtype=peps_col[0].dtype)
 
     # Loop through rows in the column
-    E = peps_col[0].backend.zeros(len(ham),dtype=peps_col[0].dtype)
     for row in range(len(ham)):
-        #tmpprint('\t\tDoing TEBD on sites ({},{})'.format(row,row+1))
+        #print('\t\tDoing tebd step on site {} out of {}'.format(row,len(ham)))
 
-        # Calculate environment aroudn reduced tensors
-        #tmpprint('\t\t\tCalculating Environment')
-        peps_b,phys_b,phys_t,peps_t,_,_,_,_,N = calc_N(row,peps_col,left_bmpo,right_bmpo,top_envs,bot_envs)
+        # Do TEBD on a single duo of sites
+        out = tebd_single_gate(row,
+                               ham,
+                               peps_col,
+                               left_bmpo,
+                               right_bmpo,
+                               top_envs,
+                               bot_envs,
+                               step_size,
+                               mbd,
+                               als_iter=als_iter,
+                               als_tol=als_tol,
+                               in_mem=in_mem,
+                               reduced=reduced)
 
-        # Take the exponential of the hamiltonian
-        #tmpprint('\t\t\tExponentiating Hamiltonian')
-        eH = exp_gate(ham[row],-step_size)
-
-        # Do alternating least squares to find new peps tensors
-        #tmpprint('\t\t\tDoing ALS')
-        phys_b,phys_t = alternating_least_squares(phys_b,phys_t,N,eH,mbd,als_iter=als_iter,als_tol=als_tol)
-
-        # Calculate Energy & Norm
-        #tmpprint('\t\t\tCalculating Local Energy')
-        E[row],norm = calc_local_op(phys_b,phys_t,N,ham[row],return_norm=True)
-
-        # Update peps_col tensors
-        #tmpprint('\t\t\tUpdating peps tensors')
-        peps_col[row]   = einsum('LDRa,aPU->LDPRU',peps_b,phys_b)
-        peps_col[row+1] = einsum('DPa,LaRU->LDPRU',phys_t,peps_t)
-
-        # Combine and equally split the two tensors
-        #tmpprint('\t\t\tMaking peps tensors stable')
-        peps_col[row],peps_col[row+1] = make_equal_distance(peps_col[row],peps_col[row+1],mbd)
-        #tmpprint('peps_col[i]: {}'.format(peps_col[row].ten.array.shape))
-        #tmpprint('peps_col[i+1]: {}'.format(peps_col[row].ten.array.shape))
-
-        # Update top and bottom environments
-        #tmpprint('\t\t\tUpdating Bottom environment')
-        if row == 0: prev_env = None
-        else: prev_env = bot_envs[row-1]
-        bot_envs[row] = update_bot_env(peps_col[row],
-                                       peps_col[row].conj(),
-                                       left_bmpo[2*row],
-                                       left_bmpo[2*row+1],
-                                       right_bmpo[2*row],
-                                       right_bmpo[2*row+1],
-                                       prev_env)
-
-        # Normalize everything (to try to avoid some errors)
-        #tmpprint('\t\t\tTrying to normalize')
-        norm_fact = bot_envs[row].abs().max()
-        bot_envs[row] /= norm_fact
-        peps_col[row] /= norm_fact**(1./2.)
-        peps_col[row+1] /= norm_fact**(1./2.)
+        # Unpack output
+        E[row]   = out[0]
+        peps_col = out[1]
+        bot_envs = out[2]
+        top_envs = out[3]
 
     # Return the result
     return E,peps_col
 
-def tebd_step_col(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10):
+#@profile
+def tebd_step_col(peps,ham,step_size,mbd,
+                  chi=None,als_iter=100,
+                  als_tol=1e-10,in_mem=True,
+                  reduced=True):
     """
     """
     # Figure out peps size
     (Nx,Ny) = peps.shape
 
     # Compute the boundary MPOs
-    #tmpprint('\tCalculating Boundary MPOs')
-    right_bmpo = calc_right_bound_mpo(peps, 0,chi=chi,return_all=True)
+    right_bmpo = calc_right_bound_mpo(peps, 0,
+                                      chi=chi,
+                                      in_mem=in_mem,
+                                      return_all=True)
     left_bmpo  = [None]*(Nx-1)
     ident_bmpo = identity_mps(len(right_bmpo[0]),
                               dtype=peps[0][0].dtype,
@@ -408,8 +573,9 @@ def tebd_step_col(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10):
     # Loop through all columns
     E = peps.backend.zeros((len(ham),len(ham[0])),dtype=peps[0][0].dtype)
     for col in range(Nx):
-        #tmpprint('\tDoing TEBD In column {}'.format(col))
+
         # Take TEBD Step
+        #print('\tDoing tebd step on col/row {} out of {}'.format(col,Nx))
         if col == 0:
             res = tebd_step_single_col(peps[col],
                                        step_size,
@@ -418,7 +584,9 @@ def tebd_step_col(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10):
                                        ham[col],
                                        mbd,
                                        als_iter=als_iter,
-                                       als_tol=als_tol)
+                                       als_tol=als_tol,
+                                       in_mem=in_mem,
+                                       reduced=reduced)
         elif col == Nx-1:
             res = tebd_step_single_col(peps[col],
                                        step_size,
@@ -427,7 +595,9 @@ def tebd_step_col(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10):
                                        ham[col],
                                        mbd,
                                        als_iter=als_iter,
-                                       als_tol=als_tol)
+                                       als_tol=als_tol,
+                                       in_mem=in_mem,
+                                       reduced=reduced)
         else:
             res = tebd_step_single_col(peps[col],
                                        step_size,
@@ -436,9 +606,17 @@ def tebd_step_col(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10):
                                        ham[col],
                                        mbd,
                                        als_iter=als_iter,
-                                       als_tol=als_tol)
+                                       als_tol=als_tol,
+                                       in_mem=in_mem,
+                                       reduced=reduced)
         E[col,:] = res[0]
         peps[col] = res[1]
+
+        # Ensure Needed PEPS & BMPO columns are in memory
+        if not in_mem:
+            peps.col_from_disk(col)
+            if col > 0:
+                left_bmpo[col-1].from_disk()
 
         # Update left boundary tensors
         if col == 0:
@@ -446,44 +624,81 @@ def tebd_step_col(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10):
         elif col != Nx-1:
             left_bmpo[col] = update_left_bound_mpo(peps[col], left_bmpo[col-1], chi=chi)
 
+        # Write everything in memory to disk (if needed)
+        if not in_mem:
+            peps.col_to_disk(col)
+            if col > 0:
+                left_bmpo[col-1].to_disk()
+            elif col != Nx-1:
+                left_bmpo[col].to_disk()
+
     # Return result
     return E,peps
 
-def tebd_step(peps,ham,step_size,mbd,chi=None,als_iter=100,als_tol=1e-10,print_prepend=''):
+#@profile
+def tebd_step(peps,ham,step_size,mbd,
+              chi=None,als_iter=100,als_tol=1e-10,
+              print_prepend='',in_mem=True,reduced=True):
     """
     """
     # Columns ----------------------------------
-    #tmpprint('Doing Column Interactions')
-    Ecol,peps = tebd_step_col(peps,ham[0],step_size,mbd,chi=chi,als_iter=als_iter,als_tol=als_tol)
+    #print('Doing TEBD step on columns')
+    Ecol,peps = tebd_step_col(peps,ham[0],step_size,mbd,
+                              chi=chi,
+                              als_iter=als_iter,
+                              als_tol=als_tol,
+                              in_mem=in_mem,
+                              reduced=reduced)
+
     # Rows -------------------------------------
+    #print('Doing TEBD step on rows')
     peps.rotate(clockwise=True)
-    #tmpprint('Doing Row Interactions')
-    Erow,peps = tebd_step_col(peps,ham[1],step_size,mbd,chi=chi,als_iter=als_iter,als_tol=als_tol)
+    Erow,peps = tebd_step_col(peps,ham[1],step_size,mbd,
+                              chi=chi,
+                              als_iter=als_iter,
+                              als_tol=als_tol,
+                              in_mem=in_mem,
+                              reduced=reduced)
     peps.rotate(clockwise=False)
+
     # Return results ---------------------------
     mpiprint(5,print_prepend+'Column energies =\n{}'.format(Ecol))
     mpiprint(5,print_prepend+'Row energies =\n{}'.format(Erow))
+    # Sum energies
     E = peps.backend.sum(Ecol)+peps.backend.sum(Erow)
+
     return E,peps
 
-def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,chi_norm=10,chi_op=None,als_iter=100,als_tol=1e-10,print_prepend='',save_all_steps=False):
+def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,
+               chi=None,chi_norm=10,chi_op=None,
+               als_iter=100,als_tol=1e-10,
+               print_prepend='',save_all_steps=False,
+               in_mem=True,reduced=True):
     """
     """
     nSite = len(peps)*len(peps[0])
 
     # Compute Initial Energy
     mpiprint(3,print_prepend+'Calculation Initial Energy/site')
-    Eprev = peps.calc_op(ham,chi=chi_op)
+    Eprev = peps.calc_op(ham,
+                         chi=chi_op,
+                         in_mem=in_mem)
     mpiprint(0,print_prepend+'Initial Energy/site = {}'.format(Eprev/nSite))
 
     # Do a single tebd step
     for iter_cnt in range(n_step):
 
         # Do TEBD Step
-        _,peps = tebd_step(peps,ham,step_size,mbd,chi=chi,als_iter=als_iter,als_tol=als_tol,print_prepend=print_prepend)
+        _,peps = tebd_step(peps,ham,step_size,mbd,
+                           chi=chi,
+                           als_iter=als_iter,
+                           als_tol=als_tol,
+                           print_prepend=print_prepend,
+                           in_mem=in_mem,
+                           reduced=reduced)
 
         # Normalize just in case
-        peps.normalize(chi=chi_norm)
+        peps.normalize(chi=chi_norm, in_mem=in_mem)
 
         # Save PEPS
         if save_all_steps: 
@@ -492,7 +707,9 @@ def tebd_steps(peps,ham,step_size,n_step,conv_tol,mbd,chi=None,chi_norm=10,chi_o
             peps.save()
         
         # Compute Resulting Energy
-        E = peps.calc_op(ham,chi=chi_op)
+        E = peps.calc_op(ham,
+                         chi=chi_op,
+                         in_mem=in_mem)
 
         # Check for convergence
         mpiprint(0,print_prepend+'Energy/site = {}'.format(E/nSite))
@@ -528,8 +745,10 @@ def run_tebd(Nx,Ny,d,ham,
              su_conv_tol=1e-4,
              als_iter=5,
              als_tol=1e-10,
+             reduced=True,
              peps_fname=None,
              peps_fdir='./',
+             in_mem=True,
              save_all_steps=False,
              print_prepend=''):
     """
@@ -607,6 +826,10 @@ def run_tebd(Nx,Ny,d,ham,
             trotter step size. If it is a list, then
             len(step_size) == len(n_step) and
             len(D) == len(n_step) must both be True.
+        reduced : bool
+            Whether or not to use the reduced update (True) 
+            where the physical index is pulled off the peps
+            tensor via a QR before the ALS procedure is done
         su_n_step : int
             The number of steps to be taken for each
             trotter step size in the simple update procedure.
@@ -618,6 +841,15 @@ def run_tebd(Nx,Ny,d,ham,
             The name of the saved peps file
         peps_fdir : str
             The location where the peps will be saved
+        in_mem : bool
+            Whether all arrays will be stored in local memory
+            or written to disk (default is False). The location
+            of the directory where this is stored is specified 
+            by the environment variable TMPDIR, where a randomly 
+            named directory will be created and all temporary files
+            will be stored there.
+        save_all_steps : bool
+            Whether to save all states of the PEPS 
         print_prepend : str
             What to add to the beginning of all printed results, 
             default is nothing
@@ -676,7 +908,8 @@ def run_tebd(Nx,Ny,d,ham,
                         max_norm_iter=max_norm_iter,
                         dtype=dtype,
                         fname=peps_fname,
-                        fdir=peps_fdir)
+                        fdir=peps_fdir,
+                        in_mem=in_mem)
         else:
             _,peps = su(Nx,Ny,d,ham,
                         D=D[0],
@@ -694,14 +927,20 @@ def run_tebd(Nx,Ny,d,ham,
                         conv_tol=su_conv_tol,
                         peps_fname=peps_fname,
                         peps_fdir=peps_fdir)
+                        # TODO - Implement SU out of memory
+                        #in_mem=in_mem)
             peps.absorb_lambdas()
 
     # Absorb lambda tensors if canonical
     if peps.ltensors is not None:
         peps.absorb_lambdas()
+
+    # Push PEPS to disk (if not already)
+    if not in_mem:
+        peps.to_disk()
     
     # Make sure the peps is normalized
-    peps.normalize(chi=chi_norm)
+    peps.normalize(chi=chi_norm,in_mem=in_mem)
 
     # Loop over all (bond dims/step sizes/number of steps)
     for Dind in range(len(D)):
@@ -720,7 +959,9 @@ def run_tebd(Nx,Ny,d,ham,
                             als_iter=als_iter,
                             als_tol=als_tol,
                             print_prepend=print_prepend,
-                            save_all_steps=save_all_steps)
+                            save_all_steps=save_all_steps,
+                            in_mem=in_mem,
+                            reduced=reduced)
 
     # Print out results
     mpiprint(0,'\n\n'+print_prepend+'#'*50)

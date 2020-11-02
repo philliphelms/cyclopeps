@@ -13,10 +13,11 @@ rint = np.rint
 random = np.random.random
 norm = np.linalg.norm
 def svd(mat,full_matrices=False):
-    try:
-        return np.linalg.svd(mat,full_matrices=full_matrices)
-    except:
-        return sla.svd(mat,lapack_driver='gesvd')
+    return sla.svd(mat,lapack_driver='gesvd')
+    #try:
+    #    return np.linalg.svd(mat,full_matrices=full_matrices)
+    #except:
+    #    return sla.svd(mat,lapack_driver='gesvd')
 qr = np.linalg.qr
 eigh = np.linalg.eigh
 def inv(mat):

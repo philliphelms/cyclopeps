@@ -15,14 +15,15 @@ chi= int(argv[4])
 Zn = int(argv[5])
 if Zn == 0:
     Zn = None
-backend = 'numpy'
+reduced = int(argv[6]) == 1
+backend = argv[7]
 d = 2
 
 # TEBD Parameters
-step_sizes = [0.1,0.05, 0.01]
-n_step     = [500, 500,  500]
-chi        = [ 10,  20,   50]
-conv_tol   = [1e-5,1e-5,1e-5]
+step_sizes = [0.1]#,0.05, 0.01]
+n_step     = [500]#, 500,  500]
+chi        = [ chi]#,  20,   50]
+conv_tol   = [1e-5]#,1e-5,1e-5]
 
 # Get mpo
 if Zn is None:
@@ -45,6 +46,8 @@ Ef,_ = fu(Nx,
           su_step_size=step_sizes,
           su_chi=chi[0],
           su_conv_tol=conv_tol,
-          su_n_step=n_step)
+          su_n_step=1,#n_step,
+          reduced=reduced,
+          in_mem=True)
 
 print('\n\nFinal  E = {}'.format(Ef))
