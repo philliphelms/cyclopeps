@@ -64,6 +64,7 @@ def cost_func(N, bot, top, bot_new, top_new, U, reduced=True):
     aS  = Sa
 
     # Return Cost Function
+    #print('\t\t\t\t\t\t  cost: {}'.format(aRa-aS-Sa))
     return aRa-aS-Sa
 
 #@profile
@@ -307,7 +308,7 @@ def noiseless_als(bot, top, N, eH, mbd,
     physical index-holding tensors as the initial guess
     """
     # Create initial guesses for resulting tensors
-    # #print('We should just add noise here')
+    # print('We should just add noise here')
 
     if use_su:
         bot_new, top_new = simple_update_init_guess(bot, top, eH, mbd, reduced=reduced)
@@ -743,7 +744,7 @@ def run_tebd(Nx,Ny,d,ham,
              su_n_step=None,
              conv_tol=1e-8,
              su_conv_tol=1e-4,
-             als_iter=5,
+             als_iter=100,
              als_tol=1e-10,
              reduced=True,
              peps_fname=None,

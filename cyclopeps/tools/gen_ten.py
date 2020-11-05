@@ -17,6 +17,7 @@ import copy
 import itertools
 import sys
 import numpy as np
+import ctf
 import uuid
 from shutil import copyfile as _copyfile
 
@@ -672,6 +673,16 @@ class GEN_TEN:
     @property
     def is_symmetric(self):
         return (not (self.sym is None))
+
+    @property
+    def is_ctf(self):
+        if self.in_mem:
+            if self.is_symmetric:
+                return hasattr(self.ten.array,'write_to_file')
+            else:
+                return hasattr(self.ten,'write_to_file')
+        else:
+            return self._is_ctf
 
     def randomize(self):
         """
@@ -1398,7 +1409,7 @@ class GEN_TEN:
         # Return result
         return newten
 
-    def square_inv(self):
+    def square_inv(self, use_full=False, rcond=1e-15):
         """
         Take the inverse of a 'square' tensor, used in ALS for PEPS Full Update
         """
@@ -1413,40 +1424,96 @@ class GEN_TEN:
             init_shape = self.ten.shape
             nleg = len(init_shape)
             assert(nleg%2==0)
-            left_size, right_size = np.prod(init_shape[:nleg/2]), np.prod(init_shape[nleg/2:])
+            left_size, right_size = np.prod(init_shape[:int(nleg/2)]), np.prod(init_shape[int(nleg/2):])
             mat = self.backend.reshape(self.ten,(left_size,right_size))
             inv = self.backend.pinv(mat)
             newten.ten = self.backend.reshape(inv,init_shape)
 
         # Do sparse tensor inverse
         else:
-            # Split the tensor into two
+            # Ensure the tensor is square
             nleg = len(self.legs)
+            nleg_2 = int(nleg/2)
             assert(nleg%2 == 0)
 
-            # Do the SVD of the tensor
-            U,S,V = self.svd(nleg/2,
-                             truncate_mbd=None,
-                             return_ent=False,
-                             return_wgt=False)
-            
-            # Invert S
-            inds = S.backend.find_less(1.-S.ten.array, 1.-1e-15)
-            sshape = S.ten.array.shape
-            for loc in inds:
-                loc = np.unravel_index(loc, sshape)
-                S.ten.array[loc] = 1./S.ten.array[loc]
+            if use_full:
+                # Convert to a sparse tensor, then use pinv
+                # function to find inverse
 
-            # Contract to get the inverse
-            einstr = LETTERS[:nleg/2+1] + ',' + \
-                     LETTERS[nleg/2:nleg/2+2] + '->' + \
-                     LETTERS[:nleg/2]+LETTERS[nleg/2+1]
-            inv = einsum(einstr,U,S)
-            einstr = LETTERS[:nleg/2+1] + ',' + \
-                     LETTERS[nleg/2:nleg+1] + '->' + \
-                     LETTERS[:nleg/2]+LETTERS[nleg/2+1:nleg+1]
-            inv = einsum(einstr,inv,V)
-            newten.ten.array = inv.ten.array
+                # Convert symtensor into full tensor
+                mat = self.ten.make_sparse()
+
+                # Convert into a matrix
+                tenshape = mat.shape
+                order = []
+                matshape = [1,1]
+                for i in range(nleg):
+                    order += [i,i+nleg]
+                    if i < int(nleg/2):
+                        matshape[0] *= tenshape[i]*tenshape[i+nleg]
+                    else:
+                        matshape[1] *= tenshape[i]*tenshape[i+nleg]
+
+                mat = mat.transpose(order)
+                tenshape = mat.shape
+                mat = mat.reshape(matshape)
+
+                # Take Inverse
+                inv = self.backend.pinv(mat)
+
+                # Convert back into a tensor
+                inv = inv.reshape(tenshape)
+                order = []
+                for i in range(nleg):
+                    order += [2*i]
+                for i in range(nleg):
+                    order += [2*i+1]
+                inv = inv.transpose(order)
+
+                # Convert back into a symtensor
+                delta = self.ten.get_irrep_map()
+                einstr = LETTERS[:nleg].upper()+LETTERS[:nleg].lower() + ',' + \
+                         LETTERS[:nleg].upper() + '->' + \
+                         LETTERS[:nleg-1].upper()+LETTERS[:nleg].lower()
+                inv = self.backend.einsum(einstr, inv, delta)
+                newten.ten.array = inv
+
+            else:
+                # Do a self-implemented pinv function to find
+                # pseudo inverse without using dense tensors
+
+                # Take the conjugate (in case complex)
+                a = self.conj()
+
+                # Do the SVD of the tensor
+                U,S,V = a.svd(nleg_2,
+                              truncate_mbd=None,
+                              return_ent=False,
+                              return_wgt=False)
+                
+                # Determine the cutoff value
+                cutoff = rcond * S.max()
+
+                # Invert S
+                if S.is_ctf:
+                    tmpS = S.ten.array.copy().to_nparray()
+                large = tmpS > cutoff
+                tmpS = np.divide(1., tmpS, where=large, out=tmpS)
+                tmpS[~large] = 0
+                if S.is_ctf:
+                    tmpS = ctf.from_nparray(tmpS)
+                S.ten.array = tmpS
+
+                # Contract to get the inverse
+                einstr = LETTERS[:nleg_2+1] + ',' + \
+                         LETTERS[nleg_2:nleg_2+2] + '->' + \
+                         LETTERS[:nleg_2]+LETTERS[nleg_2+1]
+                inv = einsum(einstr,U,S)
+                einstr = LETTERS[:nleg_2+1] + ',' + \
+                         LETTERS[nleg_2:nleg+1] + '->' + \
+                         LETTERS[:nleg_2]+LETTERS[nleg_2+1:nleg+1]
+                inv = einsum(einstr,inv,V)
+                newten.ten.array = inv.ten.array
 
         # Return result
         return newten

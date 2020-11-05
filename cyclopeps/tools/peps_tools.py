@@ -990,11 +990,11 @@ def thermal_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=flo
         if y == 0:    Znd = 1
         if y == Ny-1: Znu = 1
         # Resize D->Dnew so Dnew*Zn = D
-        Dl /= Znl
-        Dr /= Znr
-        Dd /= Znd
-        Du /= Znu
-        d  /= dZn
+        Dl = int(Dl/Znl)
+        Dr = int(Dr/Znr)
+        Dd = int(Dd/Znd)
+        Du = int(Du/Znu)
+        d  = int(d/dZn)
 
         # Create sym argument
         sym = ['+++---',
@@ -1092,11 +1092,11 @@ def rand_peps_tensor(Nx,Ny,x,y,d,D,Zn=None,dZn=None,backend='numpy',dtype=float_
         if y == 0:    Znd = 1
         if y == Ny-1: Znu = 1
         # Resize D->Dnew so Dnew*Zn = D
-        Dl /= Znl
-        Dr /= Znr
-        Dd /= Znd
-        Du /= Znu
-        d  /= dZn
+        Dl = int(Dl/Znl)
+        Dr = int(Dr/Znr)
+        Dd = int(Dd/Znd)
+        Du = int(Du/Znu)
+        d  = int(d/dZn)
 
         # Create sym argument
         sym = ['+++--',
@@ -1566,7 +1566,7 @@ def thermal_lambda_tensor(D,Zn=None,backend='numpy',dtype=float_,in_mem=True):
     sym = None
     if Zn is not None:
         sym = ['+-',[range(Zn)]*2,0,Zn]
-        D /= Zn
+        D = int(D/Zn)
 
     # Create empty tensor
     l = zeros((D,D),
@@ -1621,7 +1621,7 @@ def rand_lambda_tensor(D,Zn=None,backend='numpy',dtype=float_,in_mem=True):
     sym = None
     if Zn is not None:
         sym = ['+-',[range(Zn)]*2,0,Zn]
-        D /= Zn
+        D = int(D/Zn)
 
     # Create empty tensor
     l = zeros((D,D),
@@ -2982,7 +2982,7 @@ def pos_sqrt_vec(vec):
 def make_N_positive(N,hermitian=True,positive=True,reduced=True):
     """
     """
-
+    hermitian,positive=False,False
     # Get a hermitian approximation of the environment
     if hermitian:
         if reduced:
@@ -5082,7 +5082,8 @@ class PEPS:
                     #print('Saving PEPS Failed... Attempt ({}/5)'.format(i))
                     pass
         else:
-            print('Didnt save peps...')
+            pass
+            #print('Didnt save peps...')
             #raise NotImplementedError()
 
     def load_tensors(self,fname):
